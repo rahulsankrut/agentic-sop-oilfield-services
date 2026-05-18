@@ -1,36 +1,48 @@
-"""Capacity Orchestrator Agent — skeleton (TASK-01 placeholder).
+"""Capacity Orchestrator Agent — the lead architect for capacity gap resolution.
 
-Minimal scaffold to verify the Agent Engine deployment pipeline. The real
-agent is built in TASK-02 (prompts, skills, tools, A2A wiring, in-process
-Plan Evaluator) following the marathon planner pattern from
-next-26-keynotes/devkey/demo-2.
+Replaces the TASK-01 placeholder with the full skeleton. Wires config + prompts
++ tools + the auto_save_memories Memory Bank callback, output_schema=SourcingPlan.
+Real domain skills and MCP tools land in TASK-03/TASK-04.
 """
 
 import os
 
 import vertexai
 from google.adk.agents import LlmAgent
+from google.genai.types import GenerateContentConfig, ThinkingConfig
 
-PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
-LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
-MODEL = os.environ.get("ORCHESTRATOR_MODEL", "gemini-2.5-flash")
+from src.schemas import SourcingPlan
+from src.utils.global_gemini import GlobalGemini
 
-if PROJECT_ID:
-    vertexai.init(project=PROJECT_ID, location=LOCATION)
+from ..services.memory_manager import auto_save_memories
+from .config import AGENT_DESCRIPTION, AGENT_NAME, MODEL_NAME
+from .prompts import INSTRUCTION
+from .tools import get_tools
 
-# DEMO NARRATION: "This is the Capacity Orchestrator Agent — built on ADK,
-# deployed on Agent Engine. In production it orchestrates SAP, Maximo, FDP,
-# and InTouch queries to resolve oilfield capacity gaps. In this placeholder
-# it confirms the deployment pipeline is wired end-to-end before TASK-02
-# turns it into the real Persona 3 lead agent."
+# Initialize Vertex AI for Agent Engine / Memory Bank infra (regional —
+# us-central1). Model calls route to 'global' via GlobalGemini, so Memory
+# Bank stays in us-central1.
+project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
+location = os.environ.get("AGENT_ENGINE_LOCATION") or os.environ.get(
+    "GOOGLE_CLOUD_LOCATION", "us-central1"
+)
+if project_id:
+    vertexai.init(project=project_id, location=location)
+
+
+# DEMO NARRATION: "This is the Capacity Orchestrator — built on ADK, hosted
+# on Agent Runtime. It's the lead agent that decomposes capacity-gap queries,
+# coordinates with the Plan Evaluator (in-process AgentTool) and Procurement
+# Gate (via A2A), and produces a SourcingPlan grounded in Knowledge Catalog."
 root_agent = LlmAgent(
-    name="orchestrator_agent",
-    model=MODEL,
-    description="Capacity Orchestrator Agent (skeleton)",
-    instruction=(
-        "You are a placeholder agent for the Oilfield Services Domain Pack. "
-        "When asked anything, respond with: 'Orchestrator skeleton deployed "
-        "successfully. TASK-01 complete. Ready for TASK-02 agent build.'"
+    name=AGENT_NAME,
+    model=GlobalGemini(model=MODEL_NAME),
+    description=AGENT_DESCRIPTION,
+    static_instruction=INSTRUCTION,
+    tools=get_tools(),
+    output_schema=SourcingPlan,
+    generate_content_config=GenerateContentConfig(
+        thinking_config=ThinkingConfig(thinking_budget=2048),
     ),
-    tools=[],
+    after_agent_callback=auto_save_memories,
 )
