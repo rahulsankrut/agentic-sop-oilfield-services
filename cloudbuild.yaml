@@ -1,0 +1,48 @@
+# Cloud Build configuration for the Capacity Orchestrator Agent (Cloud Run).
+#
+# Builds the Docker image, pushes to Artifact Registry, and updates the
+# Cloud Run service. Wired up in TASK-13 (full deployment). TASK-01 deploys
+# the placeholder Orchestrator to Agent Engine via `adk deploy agent_engine`,
+# so this file is staged but not yet invoked.
+#
+# Pattern mirrors next-26-keynotes/devkey/demo-2/cloudbuild.yaml.
+
+substitutions:
+  _REGION: us-central1
+  _REPO: orchestrator-agent
+  _IMAGE: orchestrator-agent
+  _SERVICE: orchestrator-agent
+
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:latest'
+      - '-f'
+      - 'src/orchestrator_agent/Dockerfile'
+      - '.'
+
+  # Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:latest'
+
+  # Update the Cloud Run service to point at the new image.
+  # (Initial service creation handled by terraform after image exists in AR —
+  # see CLAUDE.md "Image must exist in Artifact Registry before terraform apply".)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'services'
+      - 'update'
+      - '${_SERVICE}'
+      - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:latest'
+      - '--region=${_REGION}'
+      - '--quiet'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

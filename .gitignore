@@ -1,0 +1,37 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Environment
+.env
+.env.local
+
+# Node / Canvas
+node_modules/
+.next/
+
+# Terraform
+.terraform/
+terraform.tfstate*
+*.tfvars
+!terraform.tfvars.example
+
+# Logs and OS
+*.log
+.DS_Store
+
+# Editor / tooling
+.idea/
+.vscode/
+.claude/
+
+# uv (reference repo only — we use poetry; keep here for clean reference clones)
+.uv/

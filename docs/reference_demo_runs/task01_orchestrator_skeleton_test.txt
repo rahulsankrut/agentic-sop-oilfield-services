@@ -1,0 +1,7 @@
+name: 6182242171437973504
+resource_name: projects/552994256750/locations/us-central1/reasoningEngines/6182242171437973504
+
+---sending test prompt---
+Prompt: What is your status?
+---response stream---
+Orchestrator skeleton deployed successfully. TASK-01 complete. Ready for TASK-02 agent build.

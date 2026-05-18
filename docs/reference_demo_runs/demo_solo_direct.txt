@@ -1,0 +1,55 @@
+POST https://orchestrator-agent-5udif2v3cq-uc.a.run.app
+Prompt: Plan a scenic marathon in Las Vegas for March 2026 with 15,000 participants. The route should pass by the Strip, Fremont Street, and the Arts District. Include a charity component benefiting local schools.
+---
+HTTP 200 in 230.8s
+---response---
+{
+  "id": "696148fc-dd2e-4778-ad6e-1233cef12272",
+  "jsonrpc": "2.0",
+  "result": {
+    "contextId": "8c4c3e9c-9e09-4035-9944-53b0d44f228b",
+    "history": [
+      {
+        "contextId": "8c4c3e9c-9e09-4035-9944-53b0d44f228b",
+        "kind": "message",
+        "messageId": "696148fc-dd2e-4778-ad6e-1233cef12272",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Plan a scenic marathon in Las Vegas for March 2026 with 15,000 participants. The route should pass by the Strip, Fremont Street, and the Arts District. Include a charity component benefiting local schools."
+          }
+        ],
+        "role": "user",
+        "taskId": "f8157fe3-862e-4e7b-a748-efbf1d90f67a"
+      },
+      {
+        "kind": "message",
+        "messageId": "1d263a02-88fd-4c24-bf01-6e1855fb2e2b",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Planning marathon..."
+          }
+        ],
+        "role": "agent"
+      }
+    ],
+    "id": "f8157fe3-862e-4e7b-a748-efbf1d90f67a",
+    "kind": "task",
+    "status": {
+      "message": {
+        "kind": "message",
+        "messageId": "c413a1bf-cca1-4cff-92fd-3aa87bf883e3",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Planning failed: Tool 'simulator_agent' not found.\nAvailable tools: list_skills, load_skill, load_skill_resource, run_skill_script, plan_marathon_route, evaluator_agent\n\nPossible causes:\n  1. LLM hallucinated the function name - review agent instruction clarity\n  2. Tool not registered - verify agent.tools list\n  3. Name mismatch - check for typos\n\nSuggested fixes:\n  - Review agent instruction to ensure tool usage is clear\n  - Verify tool is included in agent.tools list\n  - Check for typos in function name"
+          }
+        ],
+        "role": "agent"
+      },
+      "state": "failed",
+      "timestamp": "2026-05-18T01:59:27.953748+00:00"
+    }
+  }
+}
