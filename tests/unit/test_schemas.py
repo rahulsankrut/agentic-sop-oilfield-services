@@ -86,7 +86,7 @@ def _plan() -> SourcingPlan:
             rationale="No safety blockers identified.",
         ),
         PlanEvaluation(
-            request_id=uuid4(),
+            request_id=str(uuid4()),
             overall_score=0.91,
             criterion_scores=[
                 CriterionScore(
@@ -100,7 +100,7 @@ def _plan() -> SourcingPlan:
             revision_recommended=False,
         ),
         ProcurementApproval(
-            request_id=uuid4(),
+            request_id=str(uuid4()),
             approved=True,
             blockers=[],
             audit_trail_url="https://example.invalid/audit/123",
@@ -116,7 +116,7 @@ def _plan() -> SourcingPlan:
             submitted_at=_now(),
         ),
         ForecastRationale(
-            override_id=uuid4(),
+            override_id=str(uuid4()),
             rationale_tags=["rig_count_decline", "operator_delay"],
             freeform_text="Three operators delaying programs.",
             confidence=0.85,
@@ -129,7 +129,7 @@ def _plan() -> SourcingPlan:
             confidence=0.8,
         ),
         BufferOptimization(
-            request_id=uuid4(),
+            request_id=str(uuid4()),
             basin="Permian",
             risk_tolerance=0.7,
             current_buffer_days=14.0,
@@ -140,7 +140,7 @@ def _plan() -> SourcingPlan:
         ),
         CanvasEventEnvelope(
             event_type="sourcing_recommendation",
-            request_id=uuid4(),
+            request_id=str(uuid4()),
             timestamp=_now(),
             payload={"foo": "bar"},
         ),

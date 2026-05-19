@@ -42,6 +42,9 @@ root_agent = LlmAgent(
     tools=get_tools(),
     output_schema=SourcingPlan,
     generate_content_config=GenerateContentConfig(
+        # temperature=0 — minimize hallucination; the Orchestrator must follow
+        # the workflow precisely and only emit tool-returned values.
+        temperature=0.0,
         thinking_config=ThinkingConfig(thinking_budget=2048),
     ),
     after_agent_callback=auto_save_memories,

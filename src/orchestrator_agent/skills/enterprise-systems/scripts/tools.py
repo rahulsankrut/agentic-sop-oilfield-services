@@ -7,6 +7,7 @@ from src.utils.synthetic_data import (
     load_intouch_index,
     load_maximo_inventory,
     load_sap_workforce,
+    normalize_customer_id,
 )
 
 
@@ -43,9 +44,13 @@ def query_sap_workforce(basin: str) -> dict:
 def query_fdp_customer_config(customer_id: str, canonical_id: str) -> dict:
     """Return the customer's FDP config for a given canonical asset.
 
+    Accepts ``customer_id`` as either the slug ("gulf-petroleum") or the
+    display name ("Gulf Petroleum"); normalizes before lookup.
+
     Returns ``{approved: bool, substitution_accepted: dict, notes: str|None}``
     or an empty dict if the customer has no entry for this asset.
     """
+    customer_id = normalize_customer_id(customer_id)
     customers = load_fdp_configurations()
     by_asset = customers.get(customer_id, {})
     if canonical_id not in by_asset:

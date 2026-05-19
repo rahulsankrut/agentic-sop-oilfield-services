@@ -25,6 +25,8 @@ from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools.preload_memory_tool import PreloadMemoryTool
 from google.adk.tools.skill_toolset import SkillToolset
 
+from src.utils.skill_tools import load_skill_function_tools
+
 from ..plan_evaluator.agent import root_agent as plan_evaluator_agent
 from .auth import GoogleAuthRefresh
 
@@ -176,11 +178,18 @@ def get_tools() -> list:
     """
     skills = _load_skills()
     skill_toolset = SkillToolset(skills=skills) if skills else None
-    logger.info("Loaded %d skills for Orchestrator", len(skills))
+    skills_dir = pathlib.Path(__file__).parent.parent / "skills"
+    skill_function_tools = load_skill_function_tools(skills_dir)
+    logger.info(
+        "Loaded %d skills, %d direct function tools for Orchestrator",
+        len(skills),
+        len(skill_function_tools),
+    )
 
     tools: list = [PreloadMemoryTool()]
     if skill_toolset is not None:
         tools.append(skill_toolset)
+    tools.extend(skill_function_tools)
     tools.append(create_plan_evaluator_tool())
 
     if os.environ.get("PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME"):

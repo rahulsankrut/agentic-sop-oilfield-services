@@ -84,6 +84,27 @@ def get_canonical_asset(canonical_id: str) -> dict | None:
     return next((a for a in load_canonical_assets() if a["canonical_id"] == canonical_id), None)
 
 
+def normalize_customer_id(raw: str) -> str:
+    """Accept either a slug or a display name and return the canonical slug.
+
+    Planners (and the LLM) type "Gulf Petroleum", "Gulf Petroleum Services",
+    or "gulf-petroleum" interchangeably. All map to the same record.
+    """
+    if not raw:
+        return ""
+    needle = raw.lower().strip()
+    for c in load_customers():
+        if needle == c["customer_id"]:
+            return c["customer_id"]
+        name_lc = c["name"].lower()
+        if needle == name_lc or needle in name_lc or name_lc in needle:
+            return c["customer_id"]
+    return raw  # unknown — pass through so caller can fail explicitly
+
+
 def get_customer(customer_id: str) -> dict | None:
-    """Lookup a customer by id."""
-    return next((c for c in load_customers() if c["customer_id"] == customer_id), None)
+    """Lookup a customer by id, accepting display names too."""
+    return next(
+        (c for c in load_customers() if c["customer_id"] == normalize_customer_id(customer_id)),
+        None,
+    )

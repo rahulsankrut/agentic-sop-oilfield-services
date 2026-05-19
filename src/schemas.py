@@ -20,9 +20,21 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from pydantic import BaseModel, Field
+
+
+def _new_uuid_str() -> str:
+    """UUIDv4 as a string.
+
+    Why string and not ``uuid.UUID``: the deployed ADK runtime serializes
+    the agent's structured output via stdlib ``json.dumps``, which raises
+    ``TypeError: Object of type UUID is not JSON serializable``. Plain
+    strings round-trip cleanly through every Pydantic + JSON path.
+    """
+    return str(uuid4())
+
 
 # ============================================================================
 # Geographic and identity primitives
@@ -76,7 +88,7 @@ class SourcingOption(BaseModel):
 class SourcingPlan(BaseModel):
     """The Capacity Orchestrator's sourcing recommendation."""
 
-    request_id: UUID = Field(default_factory=uuid4)
+    request_id: str = Field(default_factory=_new_uuid_str)
     requested_asset: str  # what the planner asked for
     target_location: GeoPoint  # where they need it
     deadline: datetime
@@ -110,7 +122,7 @@ class CriterionScore(BaseModel):
 class PlanEvaluation(BaseModel):
     """Plan Evaluator's evaluation of a SourcingPlan."""
 
-    request_id: UUID
+    request_id: str
     overall_score: float  # weighted, 0.0 to 1.0
     criterion_scores: list[CriterionScore]
     findings: list[str] = Field(default_factory=list)
@@ -125,7 +137,7 @@ class PlanEvaluation(BaseModel):
 class ProcurementApproval(BaseModel):
     """Procurement Approval Agent's decision on a SourcingPlan."""
 
-    request_id: UUID
+    request_id: str
     approved: bool
     blockers: list[str] = Field(default_factory=list)
     audit_trail_url: str | None = None
@@ -148,7 +160,7 @@ class ForecastOverride(BaseModel):
 
 
 class ForecastRationale(BaseModel):
-    override_id: UUID
+    override_id: str
     rationale_tags: list[str]  # e.g. ["rig_count_decline", "operator_delay"]
     freeform_text: str
     confidence: float
@@ -172,7 +184,7 @@ class StartDateDistribution(BaseModel):
 class BufferOptimization(BaseModel):
     """Capacity Planning Agent's buffer recommendation for a fleet."""
 
-    request_id: UUID
+    request_id: str
     basin: str
     risk_tolerance: float  # 0.0 to 1.0
     current_buffer_days: float
@@ -191,6 +203,6 @@ class CanvasEventEnvelope(BaseModel):
     """Wraps any agent event for transmission to the Operations Canvas."""
 
     event_type: str
-    request_id: UUID
+    request_id: str
     timestamp: datetime
     payload: dict

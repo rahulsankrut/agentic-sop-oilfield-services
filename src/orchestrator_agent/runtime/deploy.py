@@ -36,9 +36,7 @@ def _env_vars(agent_engine_id: str, location: str) -> dict[str, str]:
         "AGENT_ENGINE_ID": agent_engine_id,
         "AGENT_ENGINE_LOCATION": location,
         "GOOGLE_GENAI_USE_VERTEXAI": "true",
-        "ORCHESTRATOR_MODEL": os.environ.get(
-            "ORCHESTRATOR_MODEL", "gemini-3.1-pro-preview"
-        ),
+        "ORCHESTRATOR_MODEL": os.environ.get("ORCHESTRATOR_MODEL", "gemini-3.1-pro-preview"),
     }
     for var in (
         "PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME",

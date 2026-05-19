@@ -21,6 +21,7 @@ from google.genai.types import GenerateContentConfig, ThinkingConfig
 
 from src.schemas import PlanEvaluation
 from src.utils.global_gemini import GlobalGemini
+from src.utils.skill_tools import load_skill_function_tools
 
 from .prompts import INSTRUCTION
 
@@ -39,6 +40,7 @@ _skills = (
     else []
 )
 _skill_toolset = SkillToolset(skills=_skills) if _skills else None
+_skill_function_tools = load_skill_function_tools(_SKILLS_DIR)
 
 # Initialize Vertex AI for Agent Engine / Memory Bank infra (us-central1).
 # Model calls route to 'global' via GlobalGemini — Memory Bank stays regional.
@@ -83,5 +85,7 @@ root_agent = LlmAgent(
         thinking_config=ThinkingConfig(thinking_budget=1024),
     ),
     include_contents="none",
-    tools=[PreloadMemoryTool()] + ([_skill_toolset] if _skill_toolset else []),
+    tools=[PreloadMemoryTool()]
+    + ([_skill_toolset] if _skill_toolset else [])
+    + _skill_function_tools,
 )

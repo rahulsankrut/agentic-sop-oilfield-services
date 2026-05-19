@@ -13,27 +13,34 @@ from google.adk.skills import load_skill_from_dir
 from google.adk.tools.preload_memory_tool import PreloadMemoryTool
 from google.adk.tools.skill_toolset import SkillToolset
 
+from src.utils.skill_tools import load_skill_function_tools
+
 logger = logging.getLogger(__name__)
+
+_SKILLS_DIR = pathlib.Path(__file__).parent.parent / "skills"
 
 
 def _load_skills() -> list:
-    skills_dir = pathlib.Path(__file__).parent.parent / "skills"
-    if not skills_dir.exists():
+    if not _SKILLS_DIR.exists():
         return []
     return [
         load_skill_from_dir(d)
-        for d in sorted(skills_dir.iterdir())
+        for d in sorted(_SKILLS_DIR.iterdir())
         if d.is_dir() and not d.name.startswith("_") and (d / "SKILL.md").exists()
     ]
 
 
 def get_tools() -> list:
-    """Capacity Planning tool list: SkillToolset + PreloadMemoryTool."""
+    """Capacity Planning tool list: PreloadMemoryTool + SkillToolset + per-function tools."""
     skills = _load_skills()
     skill_toolset = SkillToolset(skills=skills) if skills else None
-    logger.info("Loaded %d skills for Capacity Planning Agent", len(skills))
+    fn_tools = load_skill_function_tools(_SKILLS_DIR)
+    logger.info(
+        "Capacity Planning: %d skills, %d direct function tools", len(skills), len(fn_tools)
+    )
 
     tools: list = [PreloadMemoryTool()]
     if skill_toolset is not None:
         tools.append(skill_toolset)
+    tools.extend(fn_tools)
     return tools

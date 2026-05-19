@@ -8,6 +8,7 @@ from src.utils.synthetic_data import (
     load_cross_system_aliases,
     load_customers,
     load_functional_equivalences,
+    normalize_customer_id,
 )
 
 
@@ -42,8 +43,8 @@ def resolve_canonical_asset(
     if local_identifier in assets_by_id:
         canonical_id = local_identifier
     else:
-        # Search alias maps
         canonical_id = None
+        # Search alias maps (exact)
         for cid, alias in aliases.items():
             if local_identifier in (
                 alias.get("sap_material_number"),
@@ -52,6 +53,15 @@ def resolve_canonical_asset(
             ):
                 canonical_id = cid
                 break
+        # Search by canonical_label, case-insensitive substring. Planners type
+        # "Tool X" or "Tool X variant", not "TX-001".
+        if canonical_id is None:
+            needle = local_identifier.lower().strip()
+            for asset in assets_by_id.values():
+                label = asset["canonical_label"].lower()
+                if label == needle or label in needle or needle in label:
+                    canonical_id = asset["canonical_id"]
+                    break
         if canonical_id is None:
             raise ValueError(f"No canonical asset found for identifier: {local_identifier}")
 
@@ -111,6 +121,7 @@ def score_equivalence_confidence(
     entry); or ``base_confidence * 0.3`` if the customer's
     ``substitution_restrictions`` list contains the substitute.
     """
+    customer_id = normalize_customer_id(customer_id)
     equivalences = load_functional_equivalences()
     customers_by_id = {c["customer_id"]: c for c in load_customers()}
 

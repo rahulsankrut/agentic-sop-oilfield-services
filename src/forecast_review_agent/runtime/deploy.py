@@ -57,9 +57,7 @@ def deploy_forecast_review() -> str:
                 "Captures rationale tags from basin-leader forecast overrides; "
                 "writes back to BigQuery for the next model retrain."
             ),
-            "context_spec": {
-                "memory_bank_config": {"customization_configs": [memory_config]}
-            },
+            "context_spec": {"memory_bank_config": {"customization_configs": [memory_config]}},
         }
     )
     resource_name = created.api_resource.name

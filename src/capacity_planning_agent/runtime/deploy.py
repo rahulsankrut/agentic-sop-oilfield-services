@@ -53,9 +53,7 @@ def deploy_capacity_planning() -> str:
                 "Risk-calibrated buffer recommendations grounded in per-basin "
                 "actual-vs-requested start-date variance."
             ),
-            "context_spec": {
-                "memory_bank_config": {"customization_configs": [memory_config]}
-            },
+            "context_spec": {"memory_bank_config": {"customization_configs": [memory_config]}},
         }
     )
     resource_name = created.api_resource.name
