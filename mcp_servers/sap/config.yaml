@@ -1,0 +1,61 @@
+# genai-toolbox configuration for the SAP MCP server.
+#
+# This config declares one HTTP source (the synthetic FastAPI backend) and
+# the tools to expose over MCP. The toolbox binary loads this file and runs
+# as an MCP server speaking either stdio or HTTP/SSE (toolbox default).
+#
+# Run locally:
+#   toolbox --tools-file=mcp_servers/sap/config.yaml --port=8101
+#
+# Required env vars at runtime:
+#   SAP_BACKEND_URL — base URL of the FastAPI backend (e.g. http://localhost:8001
+#   or the Cloud Run service URL).
+
+sources:
+  sap_synthetic:
+    kind: http
+    baseUrl: ${SAP_BACKEND_URL}
+    timeout: 5s
+    headers:
+      Content-Type: application/json
+
+tools:
+  sap_workforce_by_basin:
+    kind: http
+    source: sap_synthetic
+    description: |
+      Return SAP-tracked workforce availability counts for a basin.
+      Inputs: basin slug (e.g. "permian", "west_africa", "north_sea",
+      "gulf_of_mexico", "bohai", "south_china_sea", "asia_pacific").
+      Returns: crew_count_available, specialist_count_available,
+      on_call_count. Unknown basins return all zeros.
+      Use this when the planner needs to know how many crews and specialists
+      SAP shows as available in a basin before committing a sourcing plan.
+    method: POST
+    path: /sap/workforce/by_basin
+    bodyParams:
+      - name: basin
+        type: string
+        description: Basin slug (e.g. "permian", "west_africa").
+
+  sap_resolve_material_number:
+    kind: http
+    source: sap_synthetic
+    description: |
+      Resolve a SAP material number (e.g. "MAT-67890") to the canonical
+      asset record. Returns canonical_id, canonical_label, category,
+      subcategory, manufacturer, plant, and storage_location.
+      Use this when the planner has a SAP material number and needs to
+      bridge into the canonical taxonomy used by Maximo / FDP / Knowledge
+      Catalog.
+    method: GET
+    path: /sap/material/{sap_material_number}
+    pathParams:
+      - name: sap_material_number
+        type: string
+        description: SAP material number (e.g. "MAT-67890").
+
+toolsets:
+  sap_oilfield:
+    - sap_workforce_by_basin
+    - sap_resolve_material_number

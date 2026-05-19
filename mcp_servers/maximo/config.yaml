@@ -1,0 +1,58 @@
+# genai-toolbox configuration for the Maximo MCP server.
+#
+# Run locally:
+#   toolbox --tools-file=mcp_servers/maximo/config.yaml --port=8102
+#
+# Required env vars:
+#   MAXIMO_BACKEND_URL — base URL of the FastAPI backend.
+
+sources:
+  maximo_synthetic:
+    kind: http
+    baseUrl: ${MAXIMO_BACKEND_URL}
+    timeout: 5s
+    headers:
+      Content-Type: application/json
+
+tools:
+  maximo_query_availability:
+    kind: http
+    source: maximo_synthetic
+    description: |
+      List Maximo-tracked equipment instances matching a canonical asset id,
+      optionally filtered by region. Returns the instances with location,
+      status (available / in_use / in_repair / available_after_recert),
+      certification_hours_remaining, and workforce_attached.
+      Use this when the planner needs to know where physical units of an
+      asset sit and which are available.
+    method: POST
+    path: /maximo/availability
+    bodyParams:
+      - name: canonical_id
+        type: string
+        description: Canonical asset id (e.g. "TX-001").
+      - name: region_filter
+        type: string
+        required: false
+        description: Optional region slug (e.g. "west_africa", "north_america").
+
+  maximo_get_equipment_instance:
+    kind: http
+    source: maximo_synthetic
+    description: |
+      Fetch the full Maximo equipment-instance record by its instance id
+      (e.g. "TX-007-LGS-001"). Returns the same fields as
+      `maximo_query_availability` but for a single unit.
+      Use this once a planner has narrowed the choice to a specific
+      instance and wants to confirm its current status before committing.
+    method: GET
+    path: /maximo/equipment/{equipment_instance_id}
+    pathParams:
+      - name: equipment_instance_id
+        type: string
+        description: Maximo equipment instance id (e.g. "TX-007-LGS-001").
+
+toolsets:
+  maximo_oilfield:
+    - maximo_query_availability
+    - maximo_get_equipment_instance

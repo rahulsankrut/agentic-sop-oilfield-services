@@ -1,0 +1,55 @@
+# Declarative Cloud Run service spec for the SAP MCP server.
+#
+# This file is documentation-by-config — the canonical apply path is the
+# Cloud Build flow in `mcp_servers/sap/cloudbuild.yaml`, which calls
+# `gcloud run deploy`. Use this YAML for reference, or apply directly with:
+#
+#   gcloud run services replace infra/cloud_run/sap.yaml --region us-central1
+#
+# substitute ${PROJECT_ID} before running.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: sap-mcp-server
+  labels:
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: agentic-sop-oilfield-services
+    mcp.server: sap
+  annotations:
+    run.googleapis.com/ingress: internal-and-cloud-load-balancing
+    run.googleapis.com/description: |
+      Synthetic SAP S/4HANA MCP server. Fronts the FastAPI mock with the
+      genai-toolbox MCP protocol layer. Registered with Agent Registry as
+      "sap-mcp-server"; invoked via Agent Gateway with Model Armor scan.
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/cpu-throttling: "true"
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      serviceAccountName: sap-mcp-sa@${PROJECT_ID}.iam.gserviceaccount.com
+      timeoutSeconds: 60
+      containerConcurrency: 80
+      containers:
+        - name: sap-mcp-server
+          image: us-central1-docker.pkg.dev/${PROJECT_ID}/mcp-servers/sap-mcp-server:latest
+          ports:
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: SAP_BACKEND_URL
+              value: http://127.0.0.1:8001
+            - name: DATA_DIR
+              value: /data
+            - name: LATENCY_MIN_MS
+              value: "50"
+            - name: LATENCY_MAX_MS
+              value: "200"
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi

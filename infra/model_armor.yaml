@@ -1,0 +1,111 @@
+# Model Armor template + attachment for the MCP servers.
+#
+# Two pieces:
+#   1. The `oilfield-services-mcp-template` Model Armor template (defines
+#      what to inspect and what to block).
+#   2. The attachment that applies the template to every registered MCP
+#      server (delegated to Agent Gateway at runtime).
+#
+# DEMO NARRATION (Persona 6 / Ayesha the audit director): "Show me an
+# example of a blocked attack. — Sure. Model Armor's prompt-injection
+# filter caught and blocked this incoming MCP call to the SAP server
+# yesterday. You can see the original payload, the detected technique
+# (prompt-injection, confidence HIGH), the source agent identity, and the
+# fact that nothing ever reached the backend."
+#
+# Apply path (verify against current Model Armor CLI):
+#   make enable-model-armor
+#   # which runs:
+#   #   gcloud model-armor templates import \
+#   #     oilfield-services-mcp-template \
+#   #     --source=infra/model_armor.yaml \
+#   #     --location=$GOOGLE_CLOUD_LOCATION
+#
+# Substitute ${PROJECT} and ${LOCATION} before applying.
+
+apiVersion: modelarmor.googleapis.com/v1
+kind: Template
+metadata:
+  name: oilfield-services-mcp-template
+  description: |
+    Model Armor template applied to all four MCP servers registered with
+    Agent Registry. Blocks prompt injection and sensitive-data leaks;
+    inspects everything else.
+  labels:
+    managed-by: agentic-sop-oilfield-services
+    task: TASK-05
+
+# `projects/${PROJECT}/locations/${LOCATION}/templates/oilfield-services-mcp-template`
+# is the canonical resource path once applied.
+
+spec:
+  # ---------------------------------------------------------------------------
+  # Filter settings.
+  # ---------------------------------------------------------------------------
+  filters:
+    # Block on prompt injection attempts with HIGH or MEDIUM confidence.
+    promptInjectionAndJailbreak:
+      enforcement: INSPECT_AND_BLOCK
+      confidenceLevels:
+        - HIGH
+        - MEDIUM
+      # Apply to BOTH the prompt going TO the tool AND the response coming
+      # back. A compromised backend that tried to inject into the agent's
+      # context (e.g. a poisoned material-master description) would be
+      # caught on the response leg.
+      direction: BOTH
+
+    # Block on sensitive-data leaks (PII, secrets, customer identifiers
+    # leaving the trusted boundary). Use Sensitive Data Protection's
+    # `basic` profile — covers credit cards, SSNs, generic credentials.
+    sensitiveDataProtection:
+      enforcement: INSPECT_AND_BLOCK
+      profile: basic
+      direction: RESPONSE
+      # Inspect the response only. The PROMPT can contain a customer id
+      # (it's the legitimate query); the RESPONSE shouldn't contain
+      # un-redacted PII unless the agent explicitly asked for it.
+
+    # Responsible AI filters at default sensitivity. Block hate / harassment
+    # / dangerous content on responses (defense in depth — the backends are
+    # synthetic, but a compromised real-system response shouldn't be able to
+    # smuggle slurs through an MCP tool).
+    responsibleAi:
+      enforcement: INSPECT_AND_BLOCK
+      direction: RESPONSE
+      categories:
+        - HATE_SPEECH
+        - HARASSMENT
+        - DANGEROUS_CONTENT
+        - SEXUALLY_EXPLICIT
+
+    # Malicious URL detection. SAP / Maximo response payloads should not
+    # contain URLs that get auto-followed; if they do, flag them.
+    maliciousUriFilterSettings:
+      enforcement: INSPECT_AND_BLOCK
+      direction: RESPONSE
+
+  # ---------------------------------------------------------------------------
+  # Audit logging.
+  # ---------------------------------------------------------------------------
+  audit:
+    # Log EVERY scan (allowed and blocked) for the audit director's
+    # demo moment. Cloud Logging carries the structured scan record.
+    logAllScans: true
+    logBlockedScans: true
+    logSensitiveValues: false  # don't echo the offending payload
+
+# ---------------------------------------------------------------------------
+# Attachment to the four registered MCP servers.
+#
+# Once the template is created, the Agent Gateway floor settings reference
+# this template for every registered MCP server. The `make enable-model-armor`
+# target sets `agentplatform.googleapis.com/floor_settings/mcp_armor_template`
+# to this template's resource path at the project level — covering all
+# four servers in one shot.
+# ---------------------------------------------------------------------------
+attachments:
+  - mcpServer: projects/${PROJECT}/locations/${LOCATION}/mcpServers/sap-mcp-server
+  - mcpServer: projects/${PROJECT}/locations/${LOCATION}/mcpServers/maximo-mcp-server
+  - mcpServer: projects/${PROJECT}/locations/${LOCATION}/mcpServers/fdp-mcp-server
+  - mcpServer: projects/${PROJECT}/locations/${LOCATION}/mcpServers/knowledge-catalog-mcp

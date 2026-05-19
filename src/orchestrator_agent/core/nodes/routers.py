@@ -1,0 +1,114 @@
+"""Routing functions for the Capacity Orchestrator Workflow.
+
+A router returns ``Event(route="...", output=...)`` — the route key dispatches
+to the next node via the workflow's edge dictionary, the payload is forwarded
+to that node as its ``node_input``.
+
+Three routers:
+- ``route_on_availability``: direct hit vs. equivalence search
+- ``route_on_evaluation_score``: accept / revise / exhausted (cap at 2 retries)
+- ``route_on_procurement_threshold``: auto-approve under $500K vs. gate above
+"""
+
+from __future__ import annotations
+
+from google.adk import Event
+
+# Route keys live in module scope so the agent.py edge dict and the routers
+# stay in sync without string-literal drift.
+DIRECT_AVAILABLE = "DIRECT_AVAILABLE"
+NEEDS_EQUIVALENCE = "NEEDS_EQUIVALENCE"
+
+# PROCEED covers both ACCEPTED (score >= threshold) and EXHAUSTED (out of
+# retries) — ADK 2.0 Workflow rejects multiple route keys pointing at the
+# same destination node ("duplicate edge"). The semantic distinction is
+# preserved via the Event.message + the iteration_count + accepted_reason
+# fields in the forwarded payload, so the Cloud Trace still shows whether
+# we accepted or exhausted; we just don't fork the graph for it.
+PROCEED = "PROCEED"
+REVISE = "REVISE"
+# Legacy aliases retained for backward-compatibility with any test that
+# imports them. New code should use PROCEED.
+ACCEPTED = PROCEED
+EXHAUSTED = PROCEED
+
+AUTO_APPROVE = "AUTO_APPROVE"
+REQUIRES_APPROVAL = "REQUIRES_APPROVAL"
+
+# Threshold constants — encoded here so audit can review them next to the
+# branching code (not embedded inside a prompt).
+SCORE_THRESHOLD = 0.85
+MAX_REVISION_ITERATIONS = 2
+PROCUREMENT_USD_THRESHOLD = 500_000
+
+
+# DEMO NARRATION: "First routing decision. If direct availability exists, we
+# take the fast path — build a plan with the existing asset. If not, we go
+# into the equivalence pathway, where the agent reasons about functional
+# substitutes. This is a deterministic check, not an LLM judgment."
+def route_on_availability(node_input: dict) -> Event:
+    """Route based on whether direct asset availability was found."""
+    route = DIRECT_AVAILABLE if node_input.get("direct_available") else NEEDS_EQUIVALENCE
+    return Event(
+        message=f"Routing on availability: {route}",
+        route=route,
+        output=node_input,
+    )
+
+
+# DEMO NARRATION: "After the Plan Evaluator scores the plan, we check the
+# threshold. Score of 0.85 or higher: we proceed. Below: we send the plan back
+# to be revised. Maximum of two revision loops to avoid runaway iteration.
+# This is the kind of control structure that's hard to enforce in a pure LLM
+# agent — here it's just a Python conditional."
+def route_on_evaluation_score(node_input: dict) -> Event:
+    """Route based on the Plan Evaluator's score.
+
+    Expects ``node_input`` to carry:
+    - ``evaluation``: ``PlanEvaluation`` dict from the Plan Evaluator node
+    - ``iteration_count`` (optional): how many revise loops we've taken
+    """
+    evaluation = node_input.get("evaluation") or {}
+    overall_score = float(evaluation.get("overall_score", 0.0))
+    iteration = int(node_input.get("iteration_count", 0))
+
+    if overall_score >= SCORE_THRESHOLD:
+        route = PROCEED
+        forward = {**node_input, "accepted_reason": "score_above_threshold"}
+    elif iteration >= MAX_REVISION_ITERATIONS:
+        route = PROCEED
+        forward = {**node_input, "accepted_reason": "revision_exhausted"}
+    else:
+        route = REVISE
+        forward = {**node_input, "iteration_count": iteration + 1}
+
+    return Event(
+        message=(
+            f"Routing on evaluation: score={overall_score:.2f} iteration={iteration} → {route}"
+        ),
+        route=route,
+        output=forward,
+    )
+
+
+# DEMO NARRATION: "Final routing — does this plan need procurement approval?
+# Above $500K or any non-trivial blocker, yes. Below that threshold the OCC
+# planner can self-approve. This threshold is policy, not LLM judgment — it
+# lives right here in the workflow next to the audit log."
+def route_on_procurement_threshold(node_input: dict) -> Event:
+    """Route based on whether procurement approval is required."""
+    plan = node_input.get("plan") or {}
+    primary = (plan.get("primary_option") or {}) if isinstance(plan, dict) else {}
+    cost = int(primary.get("estimated_cost_usd", 0) or 0)
+    blockers = list(primary.get("blockers", []) or [])
+
+    if cost > PROCUREMENT_USD_THRESHOLD or blockers:
+        route = REQUIRES_APPROVAL
+    else:
+        route = AUTO_APPROVE
+
+    return Event(
+        message=(f"Routing on procurement: cost=${cost:,} blockers={len(blockers)} → {route}"),
+        route=route,
+        output=node_input,
+    )

@@ -72,7 +72,7 @@ def deploy_forecast_review() -> str:
             "staging_bucket": staging_bucket,
             "requirements": [
                 "google-cloud-aiplatform[agent_engines,adk,evaluation]>=1.121.0",
-                "google-adk==1.33.0",
+                "google-adk>=2.0.0,<2.1",
                 "a2a-sdk>=0.3.9,<1.0",
                 "pydantic>=2.12.0",
                 "python-dotenv>=1.0.0",

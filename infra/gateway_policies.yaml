@@ -1,0 +1,95 @@
+# Agent Gateway authorization policies for the Agentic S&OP demo.
+#
+# Two policies, declarative:
+#   1. `orchestrator_full_mcp_access`
+#      The Capacity Orchestrator's service account gets `mcp.tools.call`
+#      on every registered MCP server. Read-and-write; this agent owns
+#      the workflow.
+#
+#   2. `plan_evaluator_readonly_kc`
+#      The Plan Evaluator's service account gets `mcp.tools.call` only
+#      on the read-only Knowledge Catalog tools (`lookup_context`,
+#      `search_entries`). It must not be able to hit SAP / Maximo / FDP
+#      directly — those calls flow through the Orchestrator.
+#
+# DEMO NARRATION: "Notice the grain. The Orchestrator can call every MCP
+# tool. The Plan Evaluator can ONLY call two read-only Knowledge Catalog
+# tools. That's IAM at the tool level — not the service level, not the
+# server level, the *tool* level. Audit reads this and the procurement
+# director nods."
+#
+# Apply path (verify against current Agent Gateway CLI surface):
+#   make apply-gateway-policies
+#   # which runs:
+#   #   gcloud agent-platform gateway-policies apply \
+#   #     --policy-file=infra/gateway_policies.yaml \
+#   #     --project=$GOOGLE_CLOUD_PROJECT \
+#   #     --location=$GOOGLE_CLOUD_LOCATION
+#
+# Substitute ${PROJECT} and ${LOCATION} before applying — `envsubst` works,
+# the Makefile target wires this up.
+
+apiVersion: agentplatform.googleapis.com/v1beta1
+kind: GatewayPolicyBundle
+metadata:
+  name: oilfield-services-mcp-policies
+  labels:
+    managed-by: agentic-sop-oilfield-services
+    task: TASK-05
+
+spec:
+  defaultBehavior: DENY  # default-deny — unregistered tools blocked
+
+  policies:
+    # -----------------------------------------------------------------------
+    # Policy 1: Orchestrator gets full MCP access.
+    # -----------------------------------------------------------------------
+    - name: orchestrator_full_mcp_access
+      description: |
+        Capacity Orchestrator agent SA can invoke any tool on any of the four
+        registered MCP servers. The Orchestrator drives the cargo-plane
+        workflow and needs SAP / Maximo / FDP / Knowledge Catalog access.
+      principals:
+        - type: serviceAccount
+          identifier: serviceAccount:orchestrator-agent-sa@${PROJECT}.iam.gserviceaccount.com
+      permissions:
+        - mcp.tools.call
+        - mcp.tools.list
+        - mcp.servers.discover
+      resources:
+        - projects/${PROJECT}/locations/${LOCATION}/mcpServers/sap-mcp-server/tools/*
+        - projects/${PROJECT}/locations/${LOCATION}/mcpServers/maximo-mcp-server/tools/*
+        - projects/${PROJECT}/locations/${LOCATION}/mcpServers/fdp-mcp-server/tools/*
+        - projects/${PROJECT}/locations/${LOCATION}/mcpServers/knowledge-catalog-mcp/tools/*
+      effect: ALLOW
+
+    # -----------------------------------------------------------------------
+    # Policy 2: Plan Evaluator — read-only Knowledge Catalog only.
+    # -----------------------------------------------------------------------
+    - name: plan_evaluator_readonly_kc
+      description: |
+        The Plan Evaluator agent grounds rationale checks against Knowledge
+        Catalog. It must never hit SAP / Maximo / FDP — those reads belong
+        to the Orchestrator's workflow nodes.
+      principals:
+        - type: serviceAccount
+          identifier: serviceAccount:plan-evaluator-sa@${PROJECT}.iam.gserviceaccount.com
+      permissions:
+        - mcp.tools.call
+      resources:
+        - projects/${PROJECT}/locations/${LOCATION}/mcpServers/knowledge-catalog-mcp/tools/lookup_context
+        - projects/${PROJECT}/locations/${LOCATION}/mcpServers/knowledge-catalog-mcp/tools/search_entries
+      effect: ALLOW
+
+  # ---------------------------------------------------------------------------
+  # Audit + Model Armor wiring
+  # ---------------------------------------------------------------------------
+  #
+  # Model Armor template is declared separately in `infra/model_armor.yaml`
+  # and attached to all four registered MCP servers. Gateway picks up the
+  # association via the Model Armor floor settings at project level — no
+  # per-policy wiring needed here.
+  audit:
+    logAllToolCalls: true
+    sink: cloud-logging
+    logSensitiveValues: false

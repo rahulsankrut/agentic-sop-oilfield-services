@@ -1,0 +1,44 @@
+# genai-toolbox configuration for the FDP MCP server.
+#
+# Run locally:
+#   toolbox --tools-file=mcp_servers/fdp/config.yaml --port=8103
+#
+# Required env vars:
+#   FDP_BACKEND_URL — base URL of the FastAPI backend.
+
+sources:
+  fdp_synthetic:
+    kind: http
+    baseUrl: ${FDP_BACKEND_URL}
+    timeout: 5s
+    headers:
+      Content-Type: application/json
+
+tools:
+  fdp_get_customer_config:
+    kind: http
+    source: fdp_synthetic
+    description: |
+      Return a customer's FDP configuration for a canonical asset.
+      Inputs:
+        customer_id     — slug ("gulf-petroleum") or display name ("Gulf Petroleum").
+        canonical_id    — canonical asset id (e.g. "TX-001").
+      Returns:
+        found, approved, substitution_accepted (dict keyed by the substitute
+        canonical-id segment uppercased), notes.
+      Use this BEFORE recommending any substitution: an "approved" base
+      asset whose `substitution_accepted` map says the substitute is False
+      means the planner must NOT offer it without procurement approval.
+    method: POST
+    path: /fdp/customer_config
+    bodyParams:
+      - name: customer_id
+        type: string
+        description: Customer slug or display name.
+      - name: canonical_id
+        type: string
+        description: Canonical asset id.
+
+toolsets:
+  fdp_oilfield:
+    - fdp_get_customer_config

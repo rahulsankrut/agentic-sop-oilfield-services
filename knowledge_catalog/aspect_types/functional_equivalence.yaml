@@ -1,0 +1,63 @@
+# Aspect Type: oilfield.functional_equivalence
+#
+# Functional equivalence relationships between canonical assets. Captures
+# which assets can substitute for one another, with confidence score and
+# rationale citation (typically an InTouch spec reference), plus
+# customer-specific overrides where a customer rejects an otherwise-valid
+# substitute.
+
+name: oilfield-functional-equivalence
+display_name: Oilfield Functional Equivalence
+description: |
+  Functional equivalence relationships between canonical assets. Captures
+  which assets can substitute for one another, with confidence score and
+  rationale citation, plus customer-specific overrides where a customer
+  rejects an otherwise-valid substitute.
+
+metadata_template:
+  type: record
+  name: functional_equivalence
+  record_fields:
+    - name: equivalent_canonical_ids
+      type: array
+      annotations:
+        description: |
+          Zero or more functionally equivalent canonical assets. Each entry
+          carries its own confidence, rationale source, and optional
+          per-customer compatibility overrides.
+      array_items:
+        type: record
+        record_fields:
+          - name: canonical_id
+            type: string
+            annotations:
+              description: Canonical id of the equivalent asset.
+          - name: confidence
+            type: double
+            annotations:
+              description: Confidence score 0..1 that substitution is safe.
+          - name: rationale_source
+            type: string
+            annotations:
+              description: |
+                Citation supporting the equivalence (InTouch spec section,
+                OEM bulletin, etc.).
+          - name: customer_overrides
+            type: array
+            annotations:
+              description: |
+                Customer-specific overrides where named customers reject
+                this substitution or assign a different confidence.
+            array_items:
+              type: record
+              record_fields:
+                - name: customer_id
+                  type: string
+                  annotations:
+                    description: Customer slug from data/customers.json.
+                - name: override_confidence
+                  type: double
+                  annotations:
+                    description: |
+                      Confidence score this specific customer attaches to
+                      the substitution (typically lower; 0 means rejected).

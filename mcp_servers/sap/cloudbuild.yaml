@@ -1,0 +1,93 @@
+# Cloud Build config: build + push + deploy the SAP MCP server.
+#
+# Build context is the REPO ROOT (not mcp_servers/sap/) so the synthetic
+# `data/` directory can be baked into the image at build time. We stage
+# `data/` next to the Dockerfile in a Cloud Build workspace step, then
+# delegate to the per-server Dockerfile unchanged.
+#
+# Submit from repo root:
+#   gcloud builds submit --config mcp_servers/sap/cloudbuild.yaml
+#
+# Substitutions can be overridden with `--substitutions=_REGION=...,_REPO=...`.
+#
+# CLAUDE.md gotchas honored:
+#   - Image is pushed to Artifact Registry BEFORE the Cloud Run service is
+#     created the first time. Use `cloudbuild_bootstrap.yaml` for the initial
+#     image push (steps 1+2 only), then terraform/console creates the service
+#     + service account, then this file handles subsequent rolling deploys.
+#   - Python 3.10 base for parity with the Reasoning Engine runtime (the
+#     Dockerfile already pins this).
+
+substitutions:
+  _REGION: us-central1
+  _REPO: mcp-servers
+  _IMAGE: sap-mcp-server
+  _SERVICE: sap-mcp-server
+  _SERVICE_ACCOUNT: sap-mcp-sa
+
+steps:
+  # Step 1 — stage repo `data/` inside the per-server build context so the
+  # Dockerfile's COPY semantics don't have to change. The synthetic FastAPI
+  # backend reads JSON from DATA_DIR=/data at runtime; we bake it in here.
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        cp -R data mcp_servers/sap/data
+        ls mcp_servers/sap/data | head -5
+
+  # Step 2 — build. Note: Dockerfile path is relative to the build context
+  # (mcp_servers/sap), which now contains the staged `data/`.
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:latest'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:$BUILD_ID'
+      - '-f'
+      - 'mcp_servers/sap/Dockerfile'
+      - 'mcp_servers/sap'
+
+  # Step 3 — push both tags.
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}'
+
+  # Step 4 — deploy to Cloud Run. `--no-allow-unauthenticated` enforces the
+  # default-deny posture; only callers with `roles/run.invoker` on this
+  # service (in practice: Agent Gateway's runtime SA, plus the per-agent SAs
+  # for local-dev passthrough) can hit it.
+  #
+  # DEMO NARRATION moment: this is the Cloud Run service that Agent Gateway
+  # routes to after Model Armor scan and IAM check. Direct hits from the
+  # internet (or even from the Orchestrator's SA) without Gateway in the
+  # path would still need the `roles/run.invoker` IAM binding.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE}'
+      - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:$BUILD_ID'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--no-allow-unauthenticated'
+      - '--service-account=${_SERVICE_ACCOUNT}@${PROJECT_ID}.iam.gserviceaccount.com'
+      - '--port=8080'
+      - '--cpu=1'
+      - '--memory=512Mi'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--quiet'
+
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:latest'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:$BUILD_ID'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

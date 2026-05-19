@@ -9,8 +9,8 @@ packages = [{include = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-google-cloud-aiplatform = { extras = ["agent_engines", "adk", "evaluation"], version = ">=1.121.0,<2.0.0" }
-google-adk = ">=1.25.0,<2.0.0"
+google-cloud-aiplatform = { extras = ["agent_engines", "evaluation"], version = ">=1.121.0,<2.0.0" }
+google-adk = ">=2.0.0b1,<2.1"
 google-genai = ">=1.5.0"
 # a2a-sdk 1.0.x removed ClientEvent which google-adk still imports — pin <1.0. See CLAUDE.md.
 a2a-sdk = ">=0.3.9,<1.0"
@@ -22,6 +22,9 @@ python-dotenv = ">=1.0.0"
 pyyaml = ">=6.0"
 google-auth = ">=2.0.0"
 pandas = ">=2.0.0"
+# Knowledge Catalog (TASK-06). 2.0+ exposes CatalogServiceClient with
+# Aspect Types / Entry Types / Entries APIs. Used by knowledge_catalog/setup.py.
+google-cloud-dataplex = ">=2.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0"

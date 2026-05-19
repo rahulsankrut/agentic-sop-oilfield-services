@@ -10,6 +10,8 @@
 .PHONY: deploy-all-agents
 .PHONY: deploy teardown
 .PHONY: demo-cargo-plane demo-forecast demo-fleet-buffer demo-health
+.PHONY: deploy-mcp-sap deploy-mcp-maximo deploy-mcp-fdp deploy-mcp-servers
+.PHONY: register-mcp-servers apply-gateway-policies enable-model-armor
 .PHONY: clean
 
 help:
@@ -114,3 +116,66 @@ clean:
 	find . -type d -name __pycache__ -not -path "./venv/*" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -not -path "./venv/*" -delete 2>/dev/null || true
 	@echo "Cleaned local caches (venv/ preserved)"
+
+# ---------------------------------------------------------------------------
+# TASK-05 — MCP servers via Agent Registry + Agent Gateway
+# ---------------------------------------------------------------------------
+#
+# Production rollout sequence (run these from the repo root, with the venv
+# active and gcloud authenticated to the target project):
+#
+#   1. make deploy-mcp-servers      — build + deploy SAP, Maximo, FDP to Cloud Run
+#   2. make register-mcp-servers    — register all four MCP servers (incl. KC) with Agent Registry
+#   3. make apply-gateway-policies  — push Agent Gateway authorization policies
+#   4. make enable-model-armor      — create + attach the Model Armor template
+#
+# Each target is idempotent — re-running is safe.
+#
+# Required env vars (the .env file produced by terraform / earlier tasks):
+#   GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION,
+#   SAP_MCP_URL, MAXIMO_MCP_URL, FDP_MCP_URL  (set after deploy-mcp-servers)
+
+GCLOUD_REGION ?= us-central1
+
+deploy-mcp-sap:
+	gcloud builds submit --config mcp_servers/sap/cloudbuild.yaml --substitutions=_REGION=$(GCLOUD_REGION) .
+
+deploy-mcp-maximo:
+	gcloud builds submit --config mcp_servers/maximo/cloudbuild.yaml --substitutions=_REGION=$(GCLOUD_REGION) .
+
+deploy-mcp-fdp:
+	gcloud builds submit --config mcp_servers/fdp/cloudbuild.yaml --substitutions=_REGION=$(GCLOUD_REGION) .
+
+deploy-mcp-servers: deploy-mcp-sap deploy-mcp-maximo deploy-mcp-fdp
+	@echo ""
+	@echo "========================================="
+	@echo " All three MCP servers built + deployed."
+	@echo " Next: capture URLs into .env, then run:"
+	@echo "   make register-mcp-servers"
+	@echo "========================================="
+
+register-mcp-servers:
+	poetry run python scripts/register_mcp_servers.py
+
+# Agent Gateway policies are applied via the `gcloud agent-platform` CLI
+# (in Preview as of 2026-05). If the CLI surface lands under a different
+# verb name, update here. For now we shell out with envsubst to resolve
+# ${PROJECT} / ${LOCATION} placeholders in the YAML.
+apply-gateway-policies:
+	@if [ -z "$$GOOGLE_CLOUD_PROJECT" ]; then echo "GOOGLE_CLOUD_PROJECT is required"; exit 1; fi
+	@PROJECT=$$GOOGLE_CLOUD_PROJECT LOCATION=$${GOOGLE_CLOUD_LOCATION:-$(GCLOUD_REGION)} \
+		envsubst < infra/gateway_policies.yaml > /tmp/gateway_policies.resolved.yaml
+	gcloud agent-platform gateway-policies apply \
+		--policy-file=/tmp/gateway_policies.resolved.yaml \
+		--project=$$GOOGLE_CLOUD_PROJECT \
+		--location=$${GOOGLE_CLOUD_LOCATION:-$(GCLOUD_REGION)}
+
+# Model Armor template import + attach.
+enable-model-armor:
+	@if [ -z "$$GOOGLE_CLOUD_PROJECT" ]; then echo "GOOGLE_CLOUD_PROJECT is required"; exit 1; fi
+	@PROJECT=$$GOOGLE_CLOUD_PROJECT LOCATION=$${GOOGLE_CLOUD_LOCATION:-$(GCLOUD_REGION)} \
+		envsubst < infra/model_armor.yaml > /tmp/model_armor.resolved.yaml
+	gcloud model-armor templates import oilfield-services-mcp-template \
+		--source=/tmp/model_armor.resolved.yaml \
+		--project=$$GOOGLE_CLOUD_PROJECT \
+		--location=$${GOOGLE_CLOUD_LOCATION:-$(GCLOUD_REGION)}

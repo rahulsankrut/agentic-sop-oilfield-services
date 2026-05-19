@@ -1,0 +1,80 @@
+# Aspect Type: oilfield.asset_specification
+#
+# Schema definition for physical and operational specifications of a canonical
+# oilfield asset. Captures equipment-class-level properties that drive
+# substitution, procurement, and operational decisions.
+#
+# This file is the source of truth for the Aspect Type schema. The Dataplex
+# AspectType proto's `metadata_template` is constructed from this YAML at
+# setup time by knowledge_catalog/setup.py.
+
+name: oilfield-asset-specification
+display_name: Oilfield Asset Specification
+description: |
+  Physical and operational specifications of a canonical oilfield asset.
+  Captures the equipment-class-level properties that drive substitution,
+  procurement, and operational decisions.
+
+metadata_template:
+  type: record
+  name: asset_specification
+  record_fields:
+    - name: category
+      type: enum
+      annotations:
+        description: Top-level functional category of the asset.
+      enum_values:
+        - name: downhole_tool
+        - name: completions
+        - name: surface_equipment
+        - name: wireline_tool
+        - name: sensing
+        - name: artificial_lift
+        - name: drilling_tool
+        - name: mwd_lwd
+        - name: mud_motor
+
+    - name: subcategory
+      type: string
+      annotations:
+        description: |
+          Refined classification within the category (e.g. drilling_motor,
+          mwd_lwd, flow_control, hydraulic_fracturing, coiled_tubing).
+
+    - name: operating_temp_max_c
+      type: integer
+      annotations:
+        description: Maximum operating temperature in degrees Celsius. Nullable.
+
+    - name: operating_pressure_max_psi
+      type: integer
+      annotations:
+        description: Maximum operating pressure in PSI. Nullable.
+
+    - name: outer_diameter_in
+      type: double
+      annotations:
+        description: Outer diameter in inches (downhole tools). Nullable.
+
+    - name: horsepower
+      type: integer
+      annotations:
+        description: Horsepower rating (surface equipment). Nullable.
+
+    - name: max_pressure_psi
+      type: integer
+      annotations:
+        description: |
+          Max pressure rating in PSI for surface equipment (frac/cementing
+          pumps). Nullable. Distinct from operating_pressure_max_psi which
+          applies to downhole tools.
+
+    - name: manufacturer
+      type: string
+      annotations:
+        description: OEM identifier (e.g. OEM-A, OEM-B). Customer-agnostic.
+
+    - name: introduced_year
+      type: integer
+      annotations:
+        description: Year the equipment generation was introduced to market.

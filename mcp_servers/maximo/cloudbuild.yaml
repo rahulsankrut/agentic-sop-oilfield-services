@@ -1,0 +1,66 @@
+# Cloud Build config: build + push + deploy the Maximo MCP server.
+#
+# See mcp_servers/sap/cloudbuild.yaml for full documentation — the only
+# differences here are the image / service / SA names.
+#
+# Submit from repo root:
+#   gcloud builds submit --config mcp_servers/maximo/cloudbuild.yaml
+
+substitutions:
+  _REGION: us-central1
+  _REPO: mcp-servers
+  _IMAGE: maximo-mcp-server
+  _SERVICE: maximo-mcp-server
+  _SERVICE_ACCOUNT: maximo-mcp-sa
+
+steps:
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        cp -R data mcp_servers/maximo/data
+        ls mcp_servers/maximo/data | head -5
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:latest'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:$BUILD_ID'
+      - '-f'
+      - 'mcp_servers/maximo/Dockerfile'
+      - 'mcp_servers/maximo'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE}'
+      - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:$BUILD_ID'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--no-allow-unauthenticated'
+      - '--service-account=${_SERVICE_ACCOUNT}@${PROJECT_ID}.iam.gserviceaccount.com'
+      - '--port=8080'
+      - '--cpu=1'
+      - '--memory=512Mi'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--quiet'
+
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:latest'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:$BUILD_ID'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -99,6 +99,63 @@ class SourcingPlan(BaseModel):
 
 
 # ============================================================================
+# Capacity Orchestrator Workflow plumbing (TASK-04)
+# ============================================================================
+
+
+class CapacityGapRequest(BaseModel):
+    """Structured form of a planner's capacity-gap query.
+
+    Produced by the first node in the Capacity Orchestrator Workflow
+    (``parse_capacity_gap_request``). Flows through every subsequent node so
+    downstream code never has to re-parse the raw query string.
+
+    The optional fields (``canonical_asset_id``, ``target_region``,
+    ``customer_id``) are filled in by later nodes (``resolve_canonical_asset``
+    and the parallel system queries) — they're None on first parse.
+    """
+
+    raw_query: str
+    requested_asset: str
+    target_location: GeoPoint
+    deadline: datetime
+    customer_id: str | None = None
+    canonical_asset_id: str | None = None
+    target_region: str | None = None
+
+
+class SystemQueryResults(BaseModel):
+    """Aggregated results from parallel enterprise-system queries.
+
+    The four fields correspond to the four MCP queries fanned out from
+    ``parallel_system_queries``. Typed as ``dict | None`` for now (TASK-04);
+    TASK-05 wires real MCP responses and may tighten the shape into per-system
+    schemas. ``None`` means the query failed or returned empty.
+    """
+
+    maximo: dict | None = None
+    sap: dict | None = None
+    fdp: dict | None = None
+    intouch: dict | None = None
+
+
+class EquivalentAssetCandidate(BaseModel):
+    """Structured output of the ``equivalence_lookup`` LLM Workflow node.
+
+    The LLM is asked to pick ONE functional equivalent for a canonical asset
+    given a customer context, and to ground its choice in a Knowledge Catalog
+    spec reference.
+    """
+
+    canonical_id: str  # e.g. "TX-007" — the chosen substitute's canonical id
+    canonical_label: str  # human-readable label, for UI / narration
+    confidence: float = Field(ge=0.0, le=1.0)
+    rationale_source: str  # spec / InTouch reference grounding the choice
+    rationale_summary: str  # 1-2 sentence justification
+    equipment_instance_id: str | None = None  # if the LLM identified a concrete instance
+
+
+# ============================================================================
 # Plan Evaluator output (Persona 3 — Plan Evaluator sub-agent)
 # ============================================================================
 

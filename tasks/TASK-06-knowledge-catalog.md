@@ -12,23 +12,27 @@
 
 Knowledge Catalog (the rebrand of Dataplex Universal Catalog as of April 10, 2026; API names remain `dataplex.*`) is where our canonical asset model lives in production. Until now, our `data/canonical_assets.json` and `data/cross_system_aliases.json` files have served as the substrate. In this task we move that content into actual Knowledge Catalog Entries, defined by custom Aspect Types we author for the oilfield services domain.
 
-This is the moment **Issue 4 dissolves visibly in the demo**. When Maria clicks "why does the agent think these are equivalent?" during the cargo-plane scenario, the Knowledge Catalog drawer expands to show the canonical Tool X entity with all its cross-system aliases — SAP material number, Maximo equipment ID, FDP config ID, InTouch spec references — unified into one Entry with structured Aspects. The agent never reasons against the chaos of system-specific identifiers; it reasons against canonical entities. That's the platform story.
+**Architectural note: Knowledge Catalog has a managed remote MCP server.** The endpoint is `https://dataplex.googleapis.com/mcp` (Preview), hosted and operated by Google Cloud. It is auto-enabled when the Dataplex API is enabled. We do not deploy or host any Knowledge Catalog MCP infrastructure ourselves — TASK-05 already registered this managed endpoint with Agent Registry. This task is purely about populating the catalog with our domain content so the prebuilt MCP tools return useful results when the Orchestrator's `equivalence_lookup_agent` queries them.
 
-This task does not write the synthetic data — TASK-03 already produced that. This task moves the data from JSON files into a real Knowledge Catalog, defines the Aspect Types that give it shape, and verifies the prebuilt MCP tools (wired in TASK-05) can query it.
+This is the moment **Issue 4 dissolves visibly in the demo**. When Maria clicks "why does the agent think these are equivalent?" during the cargo-plane scenario, the Knowledge Catalog drawer expands to show the canonical Tool X entity with all its cross-system aliases — SAP material number, Maximo equipment ID, FDP config ID, InTouch spec references — unified into one Entry with structured Aspects. The agent never reasons against the chaos of system-specific identifiers; it reasons against canonical entities served by a Google-managed MCP server.
+
+This task does not write the synthetic data — TASK-03 already produced that. This task moves the data from JSON files into a real Knowledge Catalog, defines the Aspect Types that give it shape, and verifies the managed MCP server's prebuilt tools can query it through Agent Gateway.
 
 ---
 
 ## Inputs
 
-- TASK-05 complete (Knowledge Catalog MCP working with empty catalog)
+- TASK-05 complete (Knowledge Catalog MCP registered with Agent Registry, Agent Gateway policies configured)
 - Synthetic data from TASK-03:
   - `data/canonical_assets.json`
   - `data/cross_system_aliases.json`
   - `data/functional_equivalences.json`
   - `data/customers.json`
-- Dataplex API enabled in the project (TASK-01 prerequisite)
+- Dataplex API enabled in the project (TASK-01 prerequisite) — this also enables the managed MCP server
 - Knowledge Catalog docs: `https://docs.cloud.google.com/dataplex/docs/catalog-overview`
-- Metadata import docs: `https://docs.cloud.google.com/dataplex/docs/ingest-custom-sources`
+- Metadata import: `https://docs.cloud.google.com/dataplex/docs/ingest-custom-sources`
+- **Managed remote MCP server**: `https://docs.cloud.google.com/dataplex/docs/use-remote-mcp`
+- **MCP reference (available tools)**: `https://docs.cloud.google.com/dataplex/docs/reference/mcp`
 
 ---
 
@@ -369,46 +373,63 @@ After running, verify via the Knowledge Catalog console:
 
 ### Step 5 — Refactor the orchestrator's equivalence lookup
 
-The `equivalence_lookup_agent` LLM node (built in TASK-04) currently queries synthetic data through the `asset-equivalence` skill. Now it queries Knowledge Catalog through the prebuilt MCP tools.
+The `equivalence_lookup_agent` LLM node (built in TASK-04) currently queries synthetic data through the `asset-equivalence` skill. Now it queries Knowledge Catalog through the managed remote MCP server, routed via Agent Gateway (wired in TASK-05).
 
 Update `src/orchestrator_agent/core/nodes/equivalence_lookup.py`:
 
 ```python
 """LLM node: reason about functional equivalence using Knowledge Catalog MCP."""
 
+import os
+
 from google.adk import Agent
 from google.adk.tools.mcp import MCPClient
 
 from ....schemas import EquivalentAssetCandidate
 
-# Knowledge Catalog MCP client — prebuilt tools from genai-toolbox
-kc_mcp = MCPClient(server_url="http://localhost:8100")
+# Agent Gateway routes to the managed Knowledge Catalog MCP server
+# at https://dataplex.googleapis.com/mcp. The server is operated by Google Cloud,
+# auto-enabled with the Dataplex API. Authentication is OAuth 2.0 with IAM,
+# using the Orchestrator's Agent Identity. Required roles on the agent's
+# service account: roles/mcp.toolUser + roles/dataplex.catalogAdmin (or
+# roles/dataplex.catalogViewer for read-only access via the
+# dataplex.readonly OAuth scope).
+gateway = MCPClient(
+    server_url=os.environ["AGENT_GATEWAY_ENDPOINT"],
+    auth="agent-identity",
+)
 
 
 # DEMO NARRATION: "This is where Issue 4 dissolves visibly. The equivalence
-# agent is calling Knowledge Catalog's lookup_context — a prebuilt MCP tool
-# that ships with the platform. We didn't build that. The catalog returns
+# agent is calling Knowledge Catalog through Agent Gateway. The MCP server
+# itself is managed by Google Cloud — we don't host it, we don't run it.
+# When the Dataplex API is enabled, the remote MCP server at
+# dataplex.googleapis.com/mcp is enabled automatically. The catalog returns
 # the canonical Tool X entry with all its aliases — SAP material number,
 # Maximo equipment ID, FDP config ID — and the functional equivalence Aspect
 # listing Tool X-V7 as a substitute per InTouch spec §3.2. One call. One
-# canonical entity. No taxonomic chaos."
+# canonical entity. No taxonomic chaos. No infrastructure we own."
 equivalence_lookup_agent = Agent(
     name="equivalence_lookup",
     model="gemini-3-1-pro-preview",
     instruction="""You determine the best functional equivalent for a canonical
 asset using Knowledge Catalog.
 
-1. Call lookup_context with the canonical_id of the requested asset.
-2. Review the functional_equivalence aspect data.
-3. For each candidate, check the customer_compatibility_overrides for the
-   specific customer.
+1. Use the Knowledge Catalog search/lookup tools to find the canonical entry
+   for the requested asset.
+2. Review the functional_equivalence aspect data on the entry.
+3. For each candidate equivalent, check customer_compatibility_overrides for
+   the specific customer.
 4. Return the highest-confidence equivalent that the customer accepts.
 
 Return a structured EquivalentAssetCandidate.""",
     output_schema=EquivalentAssetCandidate,
     tools=[
-        kc_mcp.tool("lookup_context"),
-        kc_mcp.tool("search_entries"),
+        # Managed Knowledge Catalog MCP tools via Agent Gateway.
+        # See https://docs.cloud.google.com/dataplex/docs/reference/mcp
+        # for the full tool surface.
+        gateway.tool(server="knowledge-catalog-mcp", tool="lookup_entry"),
+        gateway.tool(server="knowledge-catalog-mcp", tool="search_entries"),
     ],
 )
 ```
@@ -417,18 +438,27 @@ Return a structured EquivalentAssetCandidate.""",
 
 ```python
 async def test_cargo_plane_uses_knowledge_catalog():
-    """Cargo-plane scenario should call Knowledge Catalog's prebuilt MCP tools."""
+    """Cargo-plane scenario should call Knowledge Catalog's managed MCP server through Agent Gateway."""
     response = await root_agent.run_async(user_input="...", session_id="test-kc")
     plan = SourcingPlan.model_validate(response.output)
 
-    # Verify trace shows Knowledge Catalog MCP calls
+    # Verify trace shows Knowledge Catalog MCP calls via Agent Gateway
     trace = response.cloud_trace
-    kc_spans = [s for s in trace.spans if "lookup_context" in s.name or "search_entries" in s.name]
+    kc_spans = [
+        s for s in trace.spans
+        if "knowledge-catalog-mcp" in s.name
+        or "dataplex.googleapis.com/mcp" in s.attributes.get("upstream_url", "")
+    ]
     assert len(kc_spans) >= 1, "Expected at least one Knowledge Catalog MCP call"
 
+    # Verify the call routed through Agent Gateway (not direct)
+    gateway_spans = [s for s in trace.spans if "agent_gateway" in s.name]
+    assert any("knowledge-catalog-mcp" in s.attributes.get("target", "") for s in gateway_spans)
+
     # Verify the canonical entity was retrieved with all aliases
-    lookup_span = next(s for s in kc_spans if "lookup_context" in s.name)
-    response_data = lookup_span.attributes.get("response_body")
+    lookup_spans = [s for s in kc_spans if "lookup_entry" in s.name or "lookup_context" in s.name]
+    assert len(lookup_spans) >= 1
+    response_data = lookup_spans[0].attributes.get("response_body", "")
     assert "sap_material_number" in response_data
     assert "maximo_equipment_id" in response_data
 
@@ -508,15 +538,19 @@ git push
 
 **Idempotency.** The setup script must handle re-runs. Use try-except patterns to either get-and-update or create. Without idempotency, every run during development pollutes the catalog with duplicates.
 
-**Permissions.** The script needs `roles/dataplex.editor` (or finer-grained admin roles) on the project. The agent at runtime needs `roles/dataplex.catalogViewer` to call the prebuilt MCP tools.
+**Permissions for the setup script vs. for the agent.** The ingestion script needs `roles/dataplex.editor` (or `roles/dataplex.catalogAdmin`) to write Entries and Aspect Types. The Orchestrator agent at runtime needs `roles/mcp.toolUser` + `roles/dataplex.catalogViewer` (or `catalogAdmin` for write access) to call the managed MCP server.
+
+**OAuth scope mismatch on the agent.** The managed Knowledge Catalog MCP server enforces OAuth scopes: `dataplex.readonly` for read-only access, `dataplex.read-write` for modification. If the Orchestrator's Agent Identity is configured with only `dataplex.readonly` and a tool call tries to write, it fails. For the cargo-plane scenario (read-only equivalence lookup), `dataplex.readonly` is sufficient.
 
 **Long latency on first ingestion.** Creating 100+ entries with multiple aspects each takes time (each is an API call). The script should print progress so a developer can tell it's making forward progress.
 
 **Symmetric equivalence relationships.** If `TX-001 ≡ TX-007`, both directions need to be queryable. The `build_equivalences_by_canonical_id` function above handles this — each equivalence row produces two index entries.
 
-**Knowledge Catalog regions.** Knowledge Catalog is regional. Ensure `GOOGLE_CLOUD_LOCATION` is `us-central1` consistently, or all queries from agents in other regions fail.
+**Knowledge Catalog regions vs. the global MCP endpoint.** Knowledge Catalog Entries are regional. The MCP server endpoint (`dataplex.googleapis.com/mcp`) is global. If your Entries are in `us-central1` and your agent runs in `us-east1`, the MCP server can still reach them — but Cloud Trace will show cross-region calls. Keep Entries in the same region as the agent for cleanest traces.
 
-**DATAPLEX_PROJECT env var on the MCP toolbox.** From TASK-05: the prebuilt dataplex toolbox reads `DATAPLEX_PROJECT`. If it's set to a different project than where Knowledge Catalog content lives, `lookup_context` returns empty results. Cross-check both project IDs match.
+**Model Armor scope on the managed endpoint.** Model Armor for the Knowledge Catalog MCP is configured via project-level floor settings (`--add-integrated-services=GOOGLE_MCP_SERVER`), not per-server policies. This was set up in TASK-05; verify it's still in place by checking `gcloud model-armor floorsettings describe`.
+
+**Pre-GA caveat.** The managed Knowledge Catalog MCP server is in Preview. API surface and tool names may change before GA. Treat the tool names (`lookup_entry`, `search_entries`, etc.) as the current best names; verify against `https://docs.cloud.google.com/dataplex/docs/reference/mcp` at execution time.
 
 ---
 
@@ -526,8 +560,10 @@ git push
 - Manage entries and aspects: `https://docs.cloud.google.com/dataplex/docs/enrich-entries-metadata`
 - Custom source ingestion: `https://docs.cloud.google.com/dataplex/docs/ingest-custom-sources`
 - Dataplex Python client: `https://cloud.google.com/python/docs/reference/dataplex/latest`
-- Prebuilt MCP tools: `https://docs.cloud.google.com/dataplex/docs/pre-built-tools-with-mcp-toolbox`
+- **Managed remote MCP server**: `https://docs.cloud.google.com/dataplex/docs/use-remote-mcp`
+- **MCP tool reference**: `https://docs.cloud.google.com/dataplex/docs/reference/mcp`
+- Local MCP Toolbox (for development with Gemini CLI / Claude Code): `https://docs.cloud.google.com/dataplex/docs/pre-built-tools-with-mcp-toolbox`
 
 ---
 
-*When TASK-06 is complete, the cargo-plane scenario runs entirely on real platform components — Workflow on Agent Runtime, MCP servers via genai-toolbox, real Knowledge Catalog with custom Aspect Types. The next batch of tasks moves to Memory Bank, the Operations Canvas frontend, and governance.*
+*When TASK-06 is complete, the cargo-plane scenario runs entirely on real platform components: ADK 2.0 Workflow on Agent Runtime, custom MCP servers governed by Agent Registry and Agent Gateway, real Knowledge Catalog content served via Google's managed MCP endpoint. The next batch of tasks moves to Memory Bank, the Operations Canvas frontend, and governance.*

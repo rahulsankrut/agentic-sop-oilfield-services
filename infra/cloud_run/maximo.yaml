@@ -1,0 +1,47 @@
+# Declarative Cloud Run service spec for the Maximo MCP server.
+# See infra/cloud_run/sap.yaml for full annotations.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: maximo-mcp-server
+  labels:
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: agentic-sop-oilfield-services
+    mcp.server: maximo
+  annotations:
+    run.googleapis.com/ingress: internal-and-cloud-load-balancing
+    run.googleapis.com/description: |
+      Synthetic IBM Maximo MCP server. Registered with Agent Registry as
+      "maximo-mcp-server"; invoked via Agent Gateway with Model Armor scan.
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/cpu-throttling: "true"
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      serviceAccountName: maximo-mcp-sa@${PROJECT_ID}.iam.gserviceaccount.com
+      timeoutSeconds: 60
+      containerConcurrency: 80
+      containers:
+        - name: maximo-mcp-server
+          image: us-central1-docker.pkg.dev/${PROJECT_ID}/mcp-servers/maximo-mcp-server:latest
+          ports:
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: MAXIMO_BACKEND_URL
+              value: http://127.0.0.1:8002
+            - name: DATA_DIR
+              value: /data
+            - name: LATENCY_MIN_MS
+              value: "50"
+            - name: LATENCY_MAX_MS
+              value: "200"
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi

@@ -1,0 +1,40 @@
+# Aspect Type: oilfield.cross_system_aliases
+#
+# Maps SAP material number, Maximo equipment ID, FDP config ID, and InTouch
+# spec references to a single canonical Entry. This is the resolution point
+# for Issue 4 — taxonomic chaos across enterprise systems.
+
+name: oilfield-cross-system-aliases
+display_name: Oilfield Cross-System Aliases
+description: |
+  Cross-system identifiers for a canonical asset. Maps SAP, Maximo, FDP, and
+  InTouch references to a single canonical Entry. Resolves Issue 4 —
+  taxonomic chaos across enterprise systems.
+
+metadata_template:
+  type: record
+  name: cross_system_aliases
+  record_fields:
+    - name: sap_material_number
+      type: string
+      annotations:
+        description: SAP material master number (MAT-*). Nullable.
+
+    - name: maximo_equipment_id
+      type: string
+      annotations:
+        description: Maximo equipment master id (EQ-*). Nullable.
+
+    - name: fdp_config_id
+      type: string
+      annotations:
+        description: Field Data Platform configuration id. Nullable.
+
+    - name: intouch_spec_refs
+      type: array
+      annotations:
+        description: |
+          InTouch spec / compatibility document references that authorize
+          this canonical entity (zero or more).
+      array_items:
+        type: string
