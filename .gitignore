@@ -35,3 +35,4 @@ terraform.tfstate*
 
 # uv (reference repo only — we use poetry; keep here for clean reference clones)
 .uv/
+venv-deploy/

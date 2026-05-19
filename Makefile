@@ -49,22 +49,29 @@ lint:
 # Order is enforced by deploy-all-agents: Procurement Gate first (so the
 # Orchestrator can wire PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME), then the
 # Gemini-Enterprise-facing agents, then the Orchestrator last.
+#
+# Deploys run from venv-deploy/ (Python 3.12), NOT venv/ (3.14). The
+# deployed Reasoning Engine container is Python 3.10 and can't unpickle
+# Python 3.13+ code objects (CLAUDE.md gotcha). Create venv-deploy/ once
+# with `/usr/local/bin/python3.12 -m venv venv-deploy && source
+# venv-deploy/bin/activate && pip install poetry && poetry install`.
+#
+# Programmatic deploys (NOT adk CLI) so we can pass extra_packages — the
+# agent code imports src.schemas / src.utils which adk CLI doesn't stage.
+
+DEPLOY_PYTHON := venv-deploy/bin/python
 
 deploy-procurement-gate:
-	poetry run python -m src.procurement_approval_agent.runtime.deploy
-
-# Programmatic deploys (NOT the adk CLI) so we can pass extra_packages —
-# the agent code imports from src.schemas / src.utils, which the CLI doesn't
-# stage. Each runtime/deploy.py uses vertexai.Client.agent_engines directly.
+	$(DEPLOY_PYTHON) -m src.procurement_approval_agent.runtime.deploy
 
 deploy-forecast-review:
-	poetry run python -m src.forecast_review_agent.runtime.deploy
+	$(DEPLOY_PYTHON) -m src.forecast_review_agent.runtime.deploy
 
 deploy-capacity-planning:
-	poetry run python -m src.capacity_planning_agent.runtime.deploy
+	$(DEPLOY_PYTHON) -m src.capacity_planning_agent.runtime.deploy
 
 deploy-orchestrator:
-	poetry run python -m src.orchestrator_agent.runtime.deploy
+	$(DEPLOY_PYTHON) -m src.orchestrator_agent.runtime.deploy
 
 # Alias kept for TASK-01 backward compatibility
 deploy-orchestrator-skeleton: deploy-orchestrator
