@@ -26,6 +26,31 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
+def _env_vars(agent_engine_id: str, location: str) -> dict[str, str]:
+    """Build env_vars baked into the deployed Orchestrator runtime.
+
+    Includes every sibling-agent resource name so tools.py can wire the
+    A2A RemoteA2aAgent at startup. Empty/unset names are skipped.
+    """
+    out: dict[str, str] = {
+        "AGENT_ENGINE_ID": agent_engine_id,
+        "AGENT_ENGINE_LOCATION": location,
+        "GOOGLE_GENAI_USE_VERTEXAI": "true",
+        "ORCHESTRATOR_MODEL": os.environ.get(
+            "ORCHESTRATOR_MODEL", "gemini-3.1-pro-preview"
+        ),
+    }
+    for var in (
+        "PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME",
+        "FORECAST_REVIEW_AGENT_RESOURCE_NAME",
+        "CAPACITY_PLANNING_AGENT_RESOURCE_NAME",
+    ):
+        value = os.environ.get(var)
+        if value:
+            out[var] = value
+    return out
+
+
 def deploy_orchestrator() -> str:
     """Deploy the Orchestrator's root_agent to Agent Engine.
 
@@ -78,20 +103,13 @@ def deploy_orchestrator() -> str:
             "staging_bucket": staging_bucket,
             "requirements": [
                 "google-cloud-aiplatform[agent_engines,adk,evaluation]>=1.121.0",
-                "google-adk>=1.25.0",
+                "google-adk==1.33.0",
                 "a2a-sdk>=0.3.9,<1.0",
                 "pydantic>=2.12.0",
                 "python-dotenv>=1.0.0",
             ],
             "extra_packages": ["src/orchestrator_agent", "src/utils", "src/schemas.py"],
-            "env_vars": {
-                "AGENT_ENGINE_ID": agent_engine_id,
-                "AGENT_ENGINE_LOCATION": location,
-                "GOOGLE_GENAI_USE_VERTEXAI": "true",
-                "ORCHESTRATOR_MODEL": os.environ.get(
-                    "ORCHESTRATOR_MODEL", "gemini-3.1-pro-preview"
-                ),
-            },
+            "env_vars": _env_vars(agent_engine_id, location),
         },
     )
 

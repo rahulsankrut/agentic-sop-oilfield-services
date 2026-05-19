@@ -19,7 +19,7 @@ to ``LlmAgent(output_schema=...)``):
 from __future__ import annotations
 
 from datetime import datetime
-from enum import StrEnum
+from enum import Enum
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
@@ -91,7 +91,10 @@ class SourcingPlan(BaseModel):
 # ============================================================================
 
 
-class Severity(StrEnum):
+# NOTE: deliberately (str, Enum) — the deployed Vertex AI Reasoning Engine
+# runtime is Python 3.10, where `enum.StrEnum` does not exist. The behaviour
+# is identical for JSON serialization.
+class Severity(str, Enum):  # noqa: UP042 — see comment above
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"

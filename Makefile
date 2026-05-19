@@ -53,23 +53,18 @@ lint:
 deploy-procurement-gate:
 	poetry run python -m src.procurement_approval_agent.runtime.deploy
 
+# Programmatic deploys (NOT the adk CLI) so we can pass extra_packages —
+# the agent code imports from src.schemas / src.utils, which the CLI doesn't
+# stage. Each runtime/deploy.py uses vertexai.Client.agent_engines directly.
+
 deploy-forecast-review:
-	poetry run adk deploy agent_engine \
-		--env_file src/forecast_review_agent/.env \
-		--region=$${GOOGLE_CLOUD_LOCATION:-us-central1} \
-		src/forecast_review_agent
+	poetry run python -m src.forecast_review_agent.runtime.deploy
 
 deploy-capacity-planning:
-	poetry run adk deploy agent_engine \
-		--env_file src/capacity_planning_agent/.env \
-		--region=$${GOOGLE_CLOUD_LOCATION:-us-central1} \
-		src/capacity_planning_agent
+	poetry run python -m src.capacity_planning_agent.runtime.deploy
 
 deploy-orchestrator:
-	poetry run adk deploy agent_engine \
-		--env_file src/orchestrator_agent/.env \
-		--region=$${GOOGLE_CLOUD_LOCATION:-us-central1} \
-		src/orchestrator_agent
+	poetry run python -m src.orchestrator_agent.runtime.deploy
 
 # Alias kept for TASK-01 backward compatibility
 deploy-orchestrator-skeleton: deploy-orchestrator

@@ -75,3 +75,23 @@ def test_patched_messagetojson_passes_through_protobuf():
     parsed = json.loads(out)
     assert parsed["name"] == "example.proto"
     assert parsed["syntax"] == "proto3"
+
+
+def test_patched_messagetodict_handles_pydantic():
+    """`MessageToDict` (used in `_create_config`) must also accept Pydantic."""
+    patch_message_to_json_for_pydantic()
+
+    card = _make_card("plain_messagetodict")
+    out = json_format.MessageToDict(card)
+    assert out["name"] == "plain_messagetodict"
+    assert out["version"] == "0.1.0"
+
+
+def test_patched_messagetodict_passes_through_protobuf():
+    """Real protobuf messages still use the original `MessageToDict`."""
+    patch_message_to_json_for_pydantic()
+
+    proto_msg = descriptor_pb2.FileDescriptorProto(name="example.proto", syntax="proto3")
+    out = json_format.MessageToDict(proto_msg)
+    assert out["name"] == "example.proto"
+    assert out["syntax"] == "proto3"

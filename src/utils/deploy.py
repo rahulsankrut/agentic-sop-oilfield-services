@@ -43,29 +43,43 @@ logger = logging.getLogger(__name__)
 
 
 def patch_message_to_json_for_pydantic() -> None:
-    """Patch `google.protobuf.json_format.MessageToJson` to accept Pydantic.
+    """Patch `google.protobuf.json_format.{MessageToJson,MessageToDict}` for Pydantic.
 
-    Idempotent — safe to call multiple times. After patching, calls to
-    `MessageToJson(<pydantic_model>)` return the model's `model_dump_json()`
-    output; calls on protobuf messages are unchanged.
+    The vertexai SDK calls both ``MessageToJson`` (in
+    ``_agent_engines_utils._generate_class_methods_spec_or_raise``) and
+    ``MessageToDict`` (in ``agent_engines._create_config``) on the agent's
+    ``agent_card`` attribute. Both blow up when the card is an ``a2a-sdk``
+    0.x Pydantic model. We patch both with a single shim that feature-
+    detects Pydantic v2 and routes through ``model_dump_json`` /
+    ``model_dump`` respectively.
+
+    Idempotent — safe to call multiple times.
     """
-    original = _json_format.MessageToJson
-    if getattr(original, "_patched_for_pydantic", False):
+    original_to_json = _json_format.MessageToJson
+    original_to_dict = _json_format.MessageToDict
+    if getattr(original_to_json, "_patched_for_pydantic", False):
         return
 
-    def patched(message: Any, *args: Any, **kwargs: Any) -> str:
-        # Pydantic v2 models expose `model_dump_json`; protobuf messages
-        # expose `DESCRIPTOR`. Disambiguate by feature-detection so we
-        # don't reflect on a2a-sdk types directly here.
+    def patched_to_json(message: Any, *args: Any, **kwargs: Any) -> str:
         if hasattr(message, "model_dump_json") and not hasattr(message, "DESCRIPTOR"):
             return message.model_dump_json()
-        return original(message, *args, **kwargs)
+        return original_to_json(message, *args, **kwargs)
 
-    patched._patched_for_pydantic = True  # type: ignore[attr-defined]
-    _json_format.MessageToJson = patched
+    def patched_to_dict(message: Any, *args: Any, **kwargs: Any) -> dict:
+        if hasattr(message, "model_dump") and not hasattr(message, "DESCRIPTOR"):
+            # exclude_none=True matches protobuf's "omit empty" default; the
+            # Agent Engine API rejects null fields it doesn't expect.
+            return message.model_dump(mode="json", exclude_none=True)
+        return original_to_dict(message, *args, **kwargs)
+
+    patched_to_json._patched_for_pydantic = True  # type: ignore[attr-defined]
+    patched_to_dict._patched_for_pydantic = True  # type: ignore[attr-defined]
+    _json_format.MessageToJson = patched_to_json
+    _json_format.MessageToDict = patched_to_dict
     logger.info(
-        "Patched google.protobuf.json_format.MessageToJson to handle Pydantic models "
-        "(workaround for vertexai/_genai/_agent_engines_utils.py:636 + a2a-sdk 0.x)"
+        "Patched google.protobuf.json_format.{MessageToJson,MessageToDict} to handle "
+        "Pydantic models (workaround for vertexai/_genai/_agent_engines_utils.py:636 + "
+        "_genai/agent_engines.py:2505 + a2a-sdk 0.x)"
     )
 
 
