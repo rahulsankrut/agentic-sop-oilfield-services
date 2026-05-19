@@ -67,7 +67,13 @@ The demo is reusable across multiple oilfield services majors. Synthetic data mu
 
 Customer-specific content (logos, terminology, scenarios, hero locations) lives in `customer.yaml`. Changing customers means editing one config file plus a few asset files, not changing code. Build with this constraint from the start.
 
-### 5. Platform-visibility narration cues in code comments
+### 5. Workflow agents for deterministic flow, LlmAgent for reasoning
+
+ADK 2.0 introduces `Workflow` agents — explicit graphs of nodes where each node is either an LLM agent, a deterministic function, a tool call, or a sub-workflow. This is the architectural target for the **Capacity Orchestrator** and **Capacity Planning Agent**. Single-purpose reasoning agents (Plan Evaluator, Forecast Review Agent, Procurement Approval Agent) remain `LlmAgent`s. The principle: LLM reasoning happens at decision nodes; deterministic code handles routing, parallel dispatch, threshold checks, and structured-data shaping.
+
+This makes agent execution traces predictable, debuggable, and defensible to procurement audit — three things that matter for enterprise buyers. It is also a core piece of the Gemini Enterprise Agent Platform story Google leads with at Next '26: control, predictability, reliability.
+
+### 6. Platform-visibility narration cues in code comments
 
 For every demo moment, include a `# DEMO NARRATION:` comment in the code explaining what Google Cloud product this moment showcases. This becomes the rehearsal script later.
 
@@ -197,7 +203,7 @@ agentic-sop-oilfield-services/
 
 - **Python 3.11+**
 - **uv** as the package manager (matches the reference demo)
-- **Google ADK (Agent Development Kit)** — latest stable version
+- **Google ADK (Agent Development Kit) 2.0 Beta** — `google-adk>=2.0.0b1,<2.1` installed with `--pre` flag. Workflow agents, deterministic graph routing, and AI-at-decision-points patterns are the architectural target. Existing LlmAgent code from TASK-01–03 remains forward-compatible.
 - **Gemini 3.1 Pro** for the Orchestrator (reasoning depth matters)
 - **Gemini 3 Flash** for sub-agents where speed matters more than depth
 - **Pydantic 2.x** for schemas
@@ -232,20 +238,21 @@ These are the task specs in `tasks/`. Execute in order. Each task has prerequisi
 |---|---|---|---|
 | 01 | Environment setup and reference repo fork | 1-2 days | Backend |
 | 02 | Agent skeletons (rename, deploy bare scaffold) | 3-5 days | Backend |
-| 03 | Build the six ADK Skills | 5-7 days | Backend |
-| 04 | Mocked MCP servers (SAP, Maximo, FDP) | 3-5 days | Backend |
-| 05 | Knowledge Catalog setup with canonical asset taxonomy | 3-5 days | Backend |
-| 06 | Memory Bank profiles and persona context | 2-3 days | Backend |
-| 07 | Operations Canvas scaffold and Global Asset View | 5-7 days | Frontend |
-| 08 | Operations Canvas Fleet Utilization View | 3-5 days | Frontend |
-| 09 | WebSocket integration: agent events → canvas | 3-5 days | Both |
-| 10 | Governance configuration (Identity, Gateway, Model Armor) | 2-3 days | Backend |
-| 11 | Demo storyboard wiring and rehearsal mode | 3-5 days | Both |
-| 12 | Customer skin templating and `customer.yaml` system | 2-3 days | Both |
-| 13 | Terraform end-to-end deployment | 3-5 days | Backend |
-| 14 | Internal review, polish, fail-safe modes | 5-7 days | Both |
+| 03 | Build the seven ADK Skills | 5-7 days | Backend |
+| **04** | **ADK 2.0 migration + Capacity Orchestrator Workflow refactor** | **5-7 days** | **Backend** |
+| 05 | MCP servers via genai-toolbox (SAP, Maximo, FDP mocks + Knowledge Catalog MCP wiring) | 3-5 days | Backend |
+| 06 | Knowledge Catalog setup with custom Aspect Types and canonical Entries | 3-5 days | Backend |
+| 07 | Memory Bank profiles and persona context | 2-3 days | Backend |
+| 08 | Operations Canvas scaffold and Global Asset View | 5-7 days | Frontend |
+| 09 | Operations Canvas Fleet Utilization View | 3-5 days | Frontend |
+| 10 | WebSocket integration: agent events → canvas | 3-5 days | Both |
+| 11 | Governance configuration (Identity, Gateway, Model Armor) | 2-3 days | Backend |
+| 12 | Demo storyboard wiring and rehearsal mode | 3-5 days | Both |
+| 13 | Customer skin templating and `customer.yaml` system | 2-3 days | Both |
+| 14 | Terraform end-to-end deployment (or agents-cli adoption) | 3-5 days | Backend |
+| 15 | Internal review, polish, fail-safe modes | 5-7 days | Both |
 
-The initial drop covers tasks 01-03. Subsequent specs will be issued as the build progresses.
+The initial drop covered tasks 01-03. The current drop covers tasks 04-06 (the ADK 2.0 migration with Workflow refactor, plus MCP servers and Knowledge Catalog setup). Subsequent specs will be issued as the build progresses.
 
 ---
 
