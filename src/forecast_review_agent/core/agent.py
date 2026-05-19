@@ -13,7 +13,6 @@ import os
 
 import vertexai
 from google.adk.agents import LlmAgent
-from google.adk.tools.preload_memory_tool import PreloadMemoryTool
 from google.genai.types import GenerateContentConfig, ThinkingConfig
 
 from src.schemas import ForecastRationale
@@ -22,6 +21,7 @@ from src.utils.global_gemini import GlobalGemini
 from ..services.memory_manager import auto_save_memories
 from .config import AGENT_DESCRIPTION, AGENT_NAME, MODEL_NAME
 from .prompts import INSTRUCTION
+from .tools import get_tools
 
 project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
 location = os.environ.get("AGENT_ENGINE_LOCATION") or os.environ.get(
@@ -45,5 +45,5 @@ root_agent = LlmAgent(
         thinking_config=ThinkingConfig(thinking_budget=1024),
     ),
     after_agent_callback=auto_save_memories,
-    tools=[PreloadMemoryTool()],
+    tools=get_tools(),
 )

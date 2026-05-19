@@ -1,0 +1,9 @@
+[
+  {"customer_id":"gulf-petroleum","name":"Gulf Petroleum Services","regions":["west_africa","gulf_of_mexico"],"substitution_restrictions":[],"authorization_tier_default":"standard"},
+  {"customer_id":"north-atlantic-resources","name":"North Atlantic Resources","regions":["north_sea"],"substitution_restrictions":["WIRE-120"],"authorization_tier_default":"strict"},
+  {"customer_id":"bohai-energy","name":"Bohai Energy","regions":["bohai","south_china_sea"],"substitution_restrictions":["RIG-LWP-B"],"authorization_tier_default":"standard"},
+  {"customer_id":"permian-fields","name":"Permian Fields Co","regions":["permian","midland"],"substitution_restrictions":[],"authorization_tier_default":"standard"},
+  {"customer_id":"north-shelf-energy","name":"North Shelf Energy","regions":["north_sea","barents_sea"],"substitution_restrictions":[],"authorization_tier_default":"standard"},
+  {"customer_id":"deepwater-ventures","name":"Deepwater Ventures","regions":["gulf_of_mexico","west_africa","brazil"],"substitution_restrictions":[],"authorization_tier_default":"strict"},
+  {"customer_id":"asia-pacific-ops","name":"Asia Pacific Operators","regions":["south_china_sea","timor_sea","australia_north_west_shelf"],"substitution_restrictions":[],"authorization_tier_default":"standard"}
+]

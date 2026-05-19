@@ -1,0 +1,8 @@
+[
+  {"customer_id":"gulf-petroleum","asset_class":"downhole_tool","requested_date":"2025-Q1","actual_start_offset_days":11,"on_time":false},
+  {"customer_id":"gulf-petroleum","asset_class":"downhole_tool","requested_date":"2025-Q2","actual_start_offset_days":3,"on_time":false},
+  {"customer_id":"gulf-petroleum","asset_class":"downhole_tool","requested_date":"2025-Q3","actual_start_offset_days":18,"on_time":false},
+  {"customer_id":"gulf-petroleum","asset_class":"downhole_tool","requested_date":"2025-Q4","actual_start_offset_days":6,"on_time":false},
+  {"customer_id":"gulf-petroleum","asset_class":"downhole_tool","requested_date":"2026-Q1","actual_start_offset_days":2,"on_time":true},
+  {"customer_id":"gulf-petroleum","asset_class":"downhole_tool","requested_date":"2026-Q2","actual_start_offset_days":9,"on_time":false}
+]

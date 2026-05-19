@@ -1,0 +1,14 @@
+[
+  {"canonical_id_a":"TX-001","canonical_id_b":"TX-007","confidence":0.92,"rationale_source":"InTouch spec-3.2-2024 §3.2","customer_compatibility_overrides":[]},
+  {"canonical_id_a":"MWD-300","canonical_id_b":"MWD-310","confidence":0.88,"rationale_source":"InTouch spec-mwd-1.1 §2.1","customer_compatibility_overrides":[]},
+  {"canonical_id_a":"DM-805","canonical_id_b":"DM-810","confidence":0.90,"rationale_source":"InTouch spec-dm-1.1 §1.4","customer_compatibility_overrides":[]},
+  {"canonical_id_a":"WIRE-100","canonical_id_b":"WIRE-120","confidence":0.85,"rationale_source":"InTouch spec-wl-1.2 §3.0","customer_compatibility_overrides":[{"customer_id":"north-atlantic-resources","override_confidence":0.45}]},
+  {"canonical_id_a":"CMP-500","canonical_id_b":"CMP-510","confidence":0.94,"rationale_source":"InTouch spec-cmp-1.1 §1.0","customer_compatibility_overrides":[]},
+  {"canonical_id_a":"FRAC-PUMP-A","canonical_id_b":"FRAC-PUMP-B","confidence":0.78,"rationale_source":"OEM-E technical bulletin 2023-04","customer_compatibility_overrides":[]},
+  {"canonical_id_a":"CT-500","canonical_id_b":"CT-520","confidence":0.82,"rationale_source":"InTouch spec-ct-1.2 §2.0","customer_compatibility_overrides":[]},
+  {"canonical_id_a":"RIG-LWP-A","canonical_id_b":"RIG-LWP-B","confidence":0.72,"rationale_source":"OEM-G compatibility note","customer_compatibility_overrides":[{"customer_id":"bohai-energy","override_confidence":0.35}]},
+  {"canonical_id_a":"PUMP-CMT-A","canonical_id_b":"PUMP-CMT-B","confidence":0.86,"rationale_source":"InTouch spec-cmt-1.1 §2.5","customer_compatibility_overrides":[]},
+  {"canonical_id_a":"ESP-450","canonical_id_b":"ESP-460","confidence":0.81,"rationale_source":"OEM-I HT upgrade brief","customer_compatibility_overrides":[]},
+  {"canonical_id_a":"SAFE-VAL-1","canonical_id_b":"SAFE-VAL-2","confidence":0.89,"rationale_source":"InTouch spec-sv-1.1 §1.0","customer_compatibility_overrides":[]},
+  {"canonical_id_a":"LWD-420","canonical_id_b":"MWD-310","confidence":0.65,"rationale_source":"Partial overlap — see InTouch spec-lwd-2.0 §4.1","customer_compatibility_overrides":[]}
+]

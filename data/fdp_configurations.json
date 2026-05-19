@@ -1,0 +1,9 @@
+{
+  "gulf-petroleum":{"TX-001":{"approved":true,"v7_substitution_accepted":true,"notes":"V7 explicitly approved 2024-Q3 after qualification trial"},"MWD-300":{"approved":true,"v310_substitution_accepted":true},"DM-805":{"approved":true,"v810_substitution_accepted":true}},
+  "north-atlantic-resources":{"WIRE-100":{"approved":true,"v120_substitution_accepted":false,"notes":"Customer-specific RM constraint: HT variant blocked"},"TX-001":{"approved":true,"v7_substitution_accepted":true}},
+  "bohai-energy":{"RIG-LWP-A":{"approved":true,"lwp_b_substitution_accepted":false,"notes":"Mast height regulation in operating block restricts B"},"TX-001":{"approved":true,"v7_substitution_accepted":true}},
+  "permian-fields":{"FRAC-PUMP-A":{"approved":true,"frac_b_substitution_accepted":true},"MWD-300":{"approved":true,"v310_substitution_accepted":true}},
+  "north-shelf-energy":{"WIRE-100":{"approved":true,"v120_substitution_accepted":true}},
+  "deepwater-ventures":{"TX-001":{"approved":true,"v7_substitution_accepted":true},"ESP-450":{"approved":true,"v460_substitution_accepted":true}},
+  "asia-pacific-ops":{"CT-500":{"approved":true,"v520_substitution_accepted":true}}
+}

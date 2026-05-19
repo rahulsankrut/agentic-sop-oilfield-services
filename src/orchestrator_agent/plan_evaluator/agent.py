@@ -10,16 +10,35 @@ Skeleton for TASK-02: the prompt instructs the model to return
 """
 
 import os
+import pathlib
 
 import vertexai
 from google.adk.agents import LlmAgent
+from google.adk.skills import load_skill_from_dir
 from google.adk.tools.preload_memory_tool import PreloadMemoryTool
+from google.adk.tools.skill_toolset import SkillToolset
 from google.genai.types import GenerateContentConfig, ThinkingConfig
 
 from src.schemas import PlanEvaluation
 from src.utils.global_gemini import GlobalGemini
 
 from .prompts import INSTRUCTION
+
+# Lazy-load the plan-evaluation skill from this package's skills/ dir.
+_SKILLS_DIR = pathlib.Path(__file__).parent / "skills"
+_skills = (
+    [
+        load_skill_from_dir(d)
+        for d in sorted(_SKILLS_DIR.iterdir())
+        if _SKILLS_DIR.exists()
+        and d.is_dir()
+        and not d.name.startswith("_")
+        and (d / "SKILL.md").exists()
+    ]
+    if _SKILLS_DIR.exists()
+    else []
+)
+_skill_toolset = SkillToolset(skills=_skills) if _skills else None
 
 # Initialize Vertex AI for Agent Engine / Memory Bank infra (us-central1).
 # Model calls route to 'global' via GlobalGemini — Memory Bank stays regional.
@@ -64,5 +83,5 @@ root_agent = LlmAgent(
         thinking_config=ThinkingConfig(thinking_budget=1024),
     ),
     include_contents="none",
-    tools=[PreloadMemoryTool()],
+    tools=[PreloadMemoryTool()] + ([_skill_toolset] if _skill_toolset else []),
 )
