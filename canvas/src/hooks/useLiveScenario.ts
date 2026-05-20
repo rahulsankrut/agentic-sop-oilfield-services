@@ -24,6 +24,20 @@ import type { ScenarioState } from "@/data/demoScenarios";
 // ---------------------------------------------------------------------------
 
 /**
+ * Replace the entry in `list` with the same `id` as `item`, or append
+ * `item` if no match. Used so the same canvas event firing more than
+ * once (re-emit from a different node, replay loop, Live→Static→Live
+ * toggle) doesn't produce React duplicate-key warnings.
+ */
+function upsertById<T extends { id: string }>(list: readonly T[], item: T): T[] {
+  const idx = list.findIndex((x) => x.id === item.id);
+  if (idx < 0) return [...list, item];
+  const next = list.slice();
+  next[idx] = item;
+  return next;
+}
+
+/**
  * Apply one canvas event to the current `ScenarioState`. Unknown event
  * types pass through unchanged — the canvas tolerates unknown events so
  * that backend additions don't break already-deployed canvases.
@@ -47,18 +61,14 @@ export function eventReducer(
         ...state,
         mapCenter: [event.location.longitude, event.location.latitude],
         mapZoom: 4,
-        assets: [
-          ...state.assets,
-          {
-            id: "capacity-gap",
-            location: [event.location.longitude, event.location.latitude],
-            state: "blocked",
-            label:
-              event.location.label ?? `Gap: ${event.canonical_asset_id}`,
-            pulse: true,
-            size: "lg",
-          },
-        ],
+        assets: upsertById(state.assets, {
+          id: "capacity-gap",
+          location: [event.location.longitude, event.location.latitude],
+          state: "blocked",
+          label: event.location.label ?? `Gap: ${event.canonical_asset_id}`,
+          pulse: true,
+          size: "lg",
+        }),
       };
 
     case "mcp.call.started":
@@ -85,24 +95,15 @@ export function eventReducer(
     case "route.doomed_proposed":
       return {
         ...state,
-        arcs: [
-          ...state.arcs,
-          {
-            id: "doomed",
-            from: [
-              event.from_location.longitude,
-              event.from_location.latitude,
-            ],
-            to: [
-              event.to_location.longitude,
-              event.to_location.latitude,
-            ],
-            color: "#6b7280",
-            dashed: true,
-            animateDraw: true,
-            opacity: 0.7,
-          },
-        ],
+        arcs: upsertById(state.arcs, {
+          id: "doomed",
+          from: [event.from_location.longitude, event.from_location.latitude],
+          to: [event.to_location.longitude, event.to_location.latitude],
+          color: "#6b7280",
+          dashed: true,
+          animateDraw: true,
+          opacity: 0.7,
+        }),
         costBanner: {
           ...state.costBanner,
           visible: true,
@@ -127,45 +128,32 @@ export function eventReducer(
     case "equivalence.found":
       return {
         ...state,
-        assets: [
-          ...state.assets,
-          {
-            id: `equivalent-${event.equivalent_asset.canonical_id}`,
-            location: [
-              event.location.longitude,
-              event.location.latitude,
-            ],
-            state: "available",
-            label: event.equivalent_asset.label,
-            pulse: true,
-            size: "lg",
-          },
-        ],
+        assets: upsertById(state.assets, {
+          id: `equivalent-${event.equivalent_asset.canonical_id}`,
+          location: [event.location.longitude, event.location.latitude],
+          state: "available",
+          label: event.equivalent_asset.label,
+          pulse: true,
+          size: "lg",
+        }),
       };
 
-    case "route.recommended":
+    case "route.recommended": {
+      // Fade the doomed arc (if present) first, then upsert the recommended arc.
+      const fadedArcs = state.arcs.map((a) =>
+        a.id === "doomed" ? { ...a, opacity: 0.2, animateDraw: false } : a,
+      );
       return {
         ...state,
-        arcs: [
-          ...state.arcs.map((a) =>
-            a.id === "doomed" ? { ...a, opacity: 0.2, animateDraw: false } : a,
-          ),
-          {
-            id: "recommended",
-            from: [
-              event.from_location.longitude,
-              event.from_location.latitude,
-            ],
-            to: [
-              event.to_location.longitude,
-              event.to_location.latitude,
-            ],
-            color: "#10b981",
-            dashed: false,
-            animateDraw: true,
-            opacity: 1,
-          },
-        ],
+        arcs: upsertById(fadedArcs, {
+          id: "recommended",
+          from: [event.from_location.longitude, event.from_location.latitude],
+          to: [event.to_location.longitude, event.to_location.latitude],
+          color: "#10b981",
+          dashed: false,
+          animateDraw: true,
+          opacity: 1,
+        }),
         costBanner: {
           visible: true,
           doomed: state.costBanner.doomed,
@@ -173,6 +161,7 @@ export function eventReducer(
           avoided: event.avoided_cost_usd,
         },
       };
+    }
 
     case "forecast.loaded":
       return {
