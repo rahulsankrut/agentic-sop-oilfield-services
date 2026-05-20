@@ -32,7 +32,16 @@ const auth = new GoogleAuth({
 
 interface ProxyRequestBody {
   streamUrl: string;
-  sessionId: string;
+  /**
+   * Optional. When omitted (or empty), AdkApp auto-creates a fresh
+   * session per stream. Pre-seeded session IDs require the seeding
+   * script to use the same ``app_name`` the deployed AdkApp uses
+   * (which is the numeric engine id from
+   * ``GOOGLE_CLOUD_AGENT_ENGINE_ID``). Until TASK-07's seeder is
+   * updated to match, the canvas leaves this blank and accepts a
+   * fresh session per Live-mode trigger.
+   */
+  sessionId?: string;
   userId: string;
   userMessage: string;
 }
@@ -45,9 +54,9 @@ export async function POST(req: Request): Promise<Response> {
     return new Response("Invalid JSON body", { status: 400 });
   }
 
-  if (!body.streamUrl || !body.sessionId || !body.userId || !body.userMessage) {
+  if (!body.streamUrl || !body.userId || !body.userMessage) {
     return new Response(
-      "Missing required field: streamUrl, sessionId, userId, userMessage",
+      "Missing required field: streamUrl, userId, userMessage",
       { status: 400 },
     );
   }
@@ -91,7 +100,10 @@ export async function POST(req: Request): Promise<Response> {
       input: {
         message: { role: "user", parts: [{ text: body.userMessage }] },
         user_id: body.userId,
-        session_id: body.sessionId,
+        // session_id intentionally omitted when empty/missing — AdkApp
+        // auto-creates a fresh session. Passing a non-existent ID
+        // raises SessionNotFoundError and closes the stream.
+        ...(body.sessionId ? { session_id: body.sessionId } : {}),
       },
     }),
   });

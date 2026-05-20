@@ -32,7 +32,12 @@ import { cargoPlaneBeats } from "@/data/demoScenarios";
 
 type Mode = "static" | "live" | "replay";
 
-const MARIA_SESSION_ID = "demo-maria-cargo-plane-v1";
+// Deliberately empty: the deployed AdkApp uses ``GOOGLE_CLOUD_AGENT_ENGINE_ID``
+// as its ``app_name``, which doesn't match the seeded session's app_name in
+// TASK-07 (``capacity_orchestrator_agent``). Until the seeder is reconciled,
+// the canvas lets the runtime auto-create a fresh session per Live trigger.
+// ``preload_memory`` still hits Maria's seeded memories via ``user_id``.
+const MARIA_SESSION_ID = "";
 const MARIA_USER_ID = "maria-occ-planner-west-africa";
 const MARIA_PROMPT =
   "I need a Tool X variant in Luanda by Friday — what are my options?";
