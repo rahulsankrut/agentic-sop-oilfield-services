@@ -79,7 +79,10 @@ export interface ScenarioState {
   activeMcpCalls?: Array<{ server: string; tool: string; startedAt: string }>;
   showTimeline?: boolean;
   timeline?: unknown[];
+  /** Buffer-planning view (Persona 2, TASK-09): which buffer option is active. */
   bufferOption?: "conservative" | "balanced" | "aggressive";
+  /** Buffer-planning view: optional week label to highlight with a reference line. */
+  highlightWeek?: string;
   drawerOpen?: boolean;
 }
 
