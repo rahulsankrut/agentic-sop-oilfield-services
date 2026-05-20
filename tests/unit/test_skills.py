@@ -16,7 +16,7 @@ import pytest
 
 ASSET_EQUIV = (
     importlib.import_module(
-        "src.orchestrator_agent.skills.asset-equivalence.scripts.tools".replace("-", "_")
+        "agents.orchestrator_agent.skills.asset-equivalence.scripts.tools".replace("-", "_")
     )
     if False
     else None
@@ -37,18 +37,18 @@ def _load_skill_tools(skill_path: str):
 
 
 # Load each skill's tools module once
-asset_equiv = _load_skill_tools("src/orchestrator_agent/skills/asset-equivalence/scripts/tools.py")
-sourcing = _load_skill_tools("src/orchestrator_agent/skills/sourcing-logistics/scripts/tools.py")
-enterprise = _load_skill_tools("src/orchestrator_agent/skills/enterprise-systems/scripts/tools.py")
+asset_equiv = _load_skill_tools("agents/orchestrator_agent/skills/asset-equivalence/scripts/tools.py")
+sourcing = _load_skill_tools("agents/orchestrator_agent/skills/sourcing-logistics/scripts/tools.py")
+enterprise = _load_skill_tools("agents/orchestrator_agent/skills/enterprise-systems/scripts/tools.py")
 plan_eval = _load_skill_tools(
     "src/orchestrator_agent/plan_evaluator/skills/plan-evaluation/scripts/tools.py"
 )
 procurement = _load_skill_tools(
-    "src/procurement_approval_agent/skills/procurement-prerequisites/scripts/tools.py"
+    "agents/procurement_approval_agent/skills/procurement-prerequisites/scripts/tools.py"
 )
-forecast = _load_skill_tools("src/forecast_review_agent/skills/forecast-rationale/scripts/tools.py")
+forecast = _load_skill_tools("agents/forecast_review_agent/skills/forecast-rationale/scripts/tools.py")
 scheduling = _load_skill_tools(
-    "src/capacity_planning_agent/skills/scheduling-probability/scripts/tools.py"
+    "agents/capacity_planning_agent/skills/scheduling-probability/scripts/tools.py"
 )
 
 

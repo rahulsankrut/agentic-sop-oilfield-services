@@ -49,8 +49,8 @@ def _patch_orchestrator_model() -> None:
     """Re-bind ``root_agent.model`` to a regional model for stable iteration."""
     test_model = os.environ.get("LOCAL_MODEL", "gemini-2.5-pro")
     test_location = os.environ.get("LOCAL_MODEL_LOCATION", "us-central1")
-    from src.orchestrator_agent.core.agent import root_agent
-    from src.utils.global_gemini import GlobalGemini
+    from agents.orchestrator_agent.core.agent import root_agent
+    from agents.utils.global_gemini import GlobalGemini
 
     root_agent.model = GlobalGemini(model=test_model, location=test_location)
     print(f"[local-test] model={test_model} location={test_location}", flush=True)
@@ -62,8 +62,8 @@ async def main(prompt: str) -> None:
     from google.adk.runners import InMemoryRunner
     from google.genai import types
 
-    from src.orchestrator_agent import root_agent
-    from src.schemas import SourcingPlan
+    from agents.orchestrator_agent import root_agent
+    from agents.schemas import SourcingPlan
 
     runner = InMemoryRunner(agent=root_agent, app_name="local-orchestrator")
     session = runner.session_service.create_session_sync(

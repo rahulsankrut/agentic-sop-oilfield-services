@@ -27,7 +27,7 @@ import pytest
 import vertexai
 from vertexai import agent_engines
 
-from src.schemas import SourcingPlan
+from agents.schemas import SourcingPlan
 
 CARGO_PLANE_PROMPT = (
     "I need a Tool X variant on site in Luanda, Angola by Friday. "

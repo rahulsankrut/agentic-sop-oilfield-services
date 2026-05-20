@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 from google.adk.models.google_llm import Gemini
 
-from src.utils.global_gemini import GlobalGemini
+from agents.utils.global_gemini import GlobalGemini
 
 
 def test_globalgemini_is_a_gemini_subclass():

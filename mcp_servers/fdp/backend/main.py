@@ -58,7 +58,7 @@ def _normalize_customer_id(raw: str) -> str:
     """Slug-or-display-name → canonical slug.
 
     Re-implements the `normalize_customer_id` helper from
-    `src/utils/synthetic_data.py` so this MCP server has no dependency
+    `agents/utils/synthetic_data.py` so this MCP server has no dependency
     on the orchestrator-side `src/` package.
     """
     if not raw:

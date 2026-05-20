@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.utils.prompt_builder import PromptBuilder
+from agents.utils.prompt_builder import PromptBuilder
 
 
 def _make_builder() -> PromptBuilder:

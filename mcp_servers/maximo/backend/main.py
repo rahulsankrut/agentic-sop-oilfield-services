@@ -126,7 +126,7 @@ async def availability(req: AvailabilityRequest) -> AvailabilityResponse:
     """List Maximo-tracked equipment instances of a canonical asset.
 
     Mirrors `query_maximo_availability` in
-    `src/orchestrator_agent/skills/enterprise-systems/scripts/tools.py`.
+    `agents/orchestrator_agent/skills/enterprise-systems/scripts/tools.py`.
     """
     await _simulate_latency()
     rows = [row for row in _maximo_inventory() if row["canonical_id"] == req.canonical_id]

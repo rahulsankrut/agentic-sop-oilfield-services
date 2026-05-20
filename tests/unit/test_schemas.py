@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import pytest
 
-from src.schemas import (
+from agents.schemas import (
     AssetIdentifier,
     BufferOptimization,
     CanvasEventEnvelope,

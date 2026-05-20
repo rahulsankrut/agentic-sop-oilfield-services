@@ -5,7 +5,7 @@ description = "Agentic S&OP demo for oilfield services on Gemini Enterprise + Ge
 authors = ["Rahul Kasanagottu"]
 readme = "README.md"
 license = "Apache-2.0"
-packages = [{include = "src"}]
+packages = [{include = "agents"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"

@@ -140,7 +140,7 @@ async def workforce_by_basin(req: WorkforceByBasinRequest) -> WorkforceByBasinRe
     """Return workforce availability counts for a basin.
 
     Mirrors `query_sap_workforce` in
-    `src/orchestrator_agent/skills/enterprise-systems/scripts/tools.py`.
+    `agents/orchestrator_agent/skills/enterprise-systems/scripts/tools.py`.
     Unknown basins return all-zeros (matches the in-memory tool behavior).
     """
     await _simulate_latency()

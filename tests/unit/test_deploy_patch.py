@@ -16,7 +16,7 @@ import pytest
 from a2a.types import AgentCapabilities, AgentCard
 from google.protobuf import descriptor_pb2, json_format
 
-from src.utils.deploy import patch_message_to_json_for_pydantic
+from agents.utils.deploy import patch_message_to_json_for_pydantic
 
 
 def _make_card(name: str = "test_agent") -> AgentCard:

@@ -48,8 +48,8 @@ test:
 	poetry run pytest tests/
 
 lint:
-	poetry run ruff check src/ tests/
-	poetry run ruff format --check src/ tests/
+	poetry run ruff check agents/ tests/
+	poetry run ruff format --check agents/ tests/
 
 # Per-agent deploy targets (TASK-02)
 # Order is enforced by deploy-all-agents: Procurement Gate first (so the
@@ -66,21 +66,21 @@ lint:
 #   source venv-deploy-310/bin/activate && pip install poetry && poetry install
 #
 # Programmatic deploys (NOT adk CLI) so we can pass extra_packages — the
-# agent code imports src.schemas / src.utils which adk CLI doesn't stage.
+# agent code imports agents.schemas / agents.utils which adk CLI doesn't stage.
 
 DEPLOY_PYTHON := venv-deploy-310/bin/python
 
 deploy-procurement-gate:
-	$(DEPLOY_PYTHON) -m src.procurement_approval_agent.runtime.deploy
+	$(DEPLOY_PYTHON) -m agents.procurement_approval_agent.runtime.deploy
 
 deploy-forecast-review:
-	$(DEPLOY_PYTHON) -m src.forecast_review_agent.runtime.deploy
+	$(DEPLOY_PYTHON) -m agents.forecast_review_agent.runtime.deploy
 
 deploy-capacity-planning:
-	$(DEPLOY_PYTHON) -m src.capacity_planning_agent.runtime.deploy
+	$(DEPLOY_PYTHON) -m agents.capacity_planning_agent.runtime.deploy
 
 deploy-orchestrator:
-	$(DEPLOY_PYTHON) -m src.orchestrator_agent.runtime.deploy
+	$(DEPLOY_PYTHON) -m agents.orchestrator_agent.runtime.deploy
 
 # Alias kept for TASK-01 backward compatibility
 deploy-orchestrator-skeleton: deploy-orchestrator

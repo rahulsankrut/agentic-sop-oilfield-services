@@ -30,7 +30,7 @@ import pytest
 import vertexai
 from vertexai import agent_engines
 
-from src.schemas import PlanEvaluation, ProcurementApproval, SourcingPlan
+from agents.schemas import PlanEvaluation, ProcurementApproval, SourcingPlan
 
 CARGO_PLANE_PROMPT = (
     "I need a Tool X variant on site in Luanda by Friday. "
@@ -99,7 +99,7 @@ def test_procurement_approval_was_obtained(deployed_orchestrator):
     assert plan.primary_option.estimated_cost_usd < 500_000, (
         "Smoke test only validates the under-threshold approval path. "
         "If the LLM generated an over-threshold plan, re-prompt or fix the "
-        "skeleton prompt in src/orchestrator_agent/core/prompts.py."
+        "skeleton prompt in agents/orchestrator_agent/prompts.py."
     )
 
 
