@@ -10,11 +10,13 @@ from __future__ import annotations
 import os
 
 from google.adk import Agent
+from google.adk.tools import preload_memory
 from google.genai.types import GenerateContentConfig, ThinkingConfig
 
 from src.schemas import SourcingPlan
 from src.utils.global_gemini import GlobalGemini
 
+from ...services.memory_manager import auto_save_memories
 from ..prompts import SOURCING_LOGISTICS_INSTRUCTION
 
 _MODEL_NAME = os.getenv("SOURCING_LOGISTICS_MODEL", "gemini-3.1-pro-preview")
@@ -33,6 +35,8 @@ sourcing_logistics_agent = Agent(
     ),
     instruction=SOURCING_LOGISTICS_INSTRUCTION,
     output_schema=SourcingPlan,
+    tools=[preload_memory],
+    after_agent_callback=auto_save_memories,
     generate_content_config=GenerateContentConfig(
         temperature=0.0,
         thinking_config=ThinkingConfig(thinking_budget=1024),

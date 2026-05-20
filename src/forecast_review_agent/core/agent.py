@@ -13,6 +13,7 @@ import os
 
 import vertexai
 from google.adk.agents import LlmAgent
+from google.adk.tools import preload_memory
 from google.genai.types import GenerateContentConfig, ThinkingConfig
 
 from src.schemas import ForecastRationale
@@ -45,5 +46,5 @@ root_agent = LlmAgent(
         thinking_config=ThinkingConfig(thinking_budget=1024),
     ),
     after_agent_callback=auto_save_memories,
-    tools=get_tools(),
+    tools=[*get_tools(), preload_memory],
 )

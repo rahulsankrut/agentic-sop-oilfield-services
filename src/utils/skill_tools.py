@@ -21,11 +21,13 @@ Use it from each agent's ``core/tools.py``::
     def get_tools() -> list:
         skills_dir = pathlib.Path(__file__).parent.parent / "skills"
         return [
-            PreloadMemoryTool(),
             SkillToolset(skills=[...]),
             *load_skill_function_tools(skills_dir),
             ...  # AgentTool wrappers, A2A tools, etc.
         ]
+
+``preload_memory`` is added at the ``LlmAgent`` level in each agent's
+``core/agent.py``, not in ``get_tools()``.
 """
 
 from __future__ import annotations

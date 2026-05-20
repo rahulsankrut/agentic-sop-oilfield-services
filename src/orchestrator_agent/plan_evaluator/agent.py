@@ -15,7 +15,7 @@ import pathlib
 import vertexai
 from google.adk.agents import LlmAgent
 from google.adk.skills import load_skill_from_dir
-from google.adk.tools.preload_memory_tool import PreloadMemoryTool
+from google.adk.tools import preload_memory
 from google.adk.tools.skill_toolset import SkillToolset
 from google.genai.types import GenerateContentConfig, ThinkingConfig
 
@@ -23,6 +23,7 @@ from src.schemas import PlanEvaluation
 from src.utils.global_gemini import GlobalGemini
 from src.utils.skill_tools import load_skill_function_tools
 
+from ..services.memory_manager import auto_save_memories
 from .prompts import INSTRUCTION
 
 # Lazy-load the plan-evaluation skill from this package's skills/ dir.
@@ -85,7 +86,8 @@ root_agent = LlmAgent(
         thinking_config=ThinkingConfig(thinking_budget=1024),
     ),
     include_contents="none",
-    tools=[PreloadMemoryTool()]
+    after_agent_callback=auto_save_memories,
+    tools=[preload_memory]
     + ([_skill_toolset] if _skill_toolset else [])
     + _skill_function_tools,
 )
