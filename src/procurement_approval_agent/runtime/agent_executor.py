@@ -3,6 +3,7 @@
 Handles A2A protocol execution for the Procurement Approval Agent.
 """
 
+import logging
 import os
 
 import vertexai
@@ -17,6 +18,8 @@ from google.genai import types
 
 from ..services.memory_manager import create_memory_service
 from ..services.session_manager import SessionManager, create_session_service
+
+logger = logging.getLogger(__name__)
 
 
 class ProcurementApprovalExecutor(AgentExecutor):
@@ -124,7 +127,7 @@ class ProcurementApprovalExecutor(AgentExecutor):
 
             session_id = await self.session_manager.get_or_create_session(
                 context_id=context.context_id,
-                app_name=self.runner.app_name,
+                app_name=getattr(self.runner, "app_name", "procurement_approval_agent"),
                 user_id=user_id,
             )
 
@@ -147,10 +150,7 @@ class ProcurementApprovalExecutor(AgentExecutor):
                         response_text += part.thought
 
                 if response_text:
-                    print(
-                        f"[DEBUG] ProcurementApprovalExecutor: Captured "
-                        f"response text (len={len(response_text)})"
-                    )
+                    logger.debug("Captured response text (len=%d)", len(response_text))
                     await updater.add_artifact(
                         [TextPart(text=response_text)],
                         name="result",  # Use 'result' for standard tool satisfaction

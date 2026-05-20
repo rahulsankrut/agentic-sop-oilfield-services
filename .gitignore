@@ -35,4 +35,6 @@ terraform.tfstate*
 
 # uv (reference repo only — we use poetry; keep here for clean reference clones)
 .uv/
-venv-deploy/
+
+# Deploy venv (Python 3.10, matches Reasoning Engine runtime — see Makefile)
+venv-deploy-310/

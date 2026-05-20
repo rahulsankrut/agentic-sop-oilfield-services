@@ -5,10 +5,13 @@ agent learns which prerequisite failures are recurring. Mirrors the marathon
 simulator's auto_save_memories pattern, with topics rewritten for procurement.
 """
 
+import logging
 import os
 from typing import TYPE_CHECKING
 
 from google.adk.memory import VertexAiMemoryBankService
+
+logger = logging.getLogger(__name__)
 from vertexai._genai.types import (
     MemoryBankCustomizationConfig,
 )
@@ -98,4 +101,4 @@ async def auto_save_memories(callback_context: "CallbackContext") -> None:
         )
         await memory_service.add_session_to_memory(callback_context._invocation_context.session)
     except Exception as e:
-        print(f"Warning: Failed to save memories: {e}")
+        logger.warning("Failed to save memories: %s", e)

@@ -30,8 +30,12 @@ def deploy_capacity_planning() -> str:
     if not all([project_id, staging_bucket]):
         raise ValueError("Set GOOGLE_CLOUD_PROJECT and BUCKET_URI in .env file")
 
+    from vertexai.preview.reasoning_engines import AdkApp
+
     from ..core.agent import root_agent
     from ..services.memory_manager import create_capacity_planning_memory_topics
+
+    adk_app = AdkApp(agent=root_agent, app_name="capacity_planning_agent", enable_tracing=False)
 
     print("=" * 60)
     print("Deploying Capacity Planning Agent to Vertex AI Agent Engine")
@@ -63,13 +67,13 @@ def deploy_capacity_planning() -> str:
     print("\nStep 2: Uploading agent code + dependencies...")
     client.agent_engines.update(
         name=resource_name,
-        agent=root_agent,
+        agent=adk_app,
         config={
             "staging_bucket": staging_bucket,
             "requirements": [
-                "google-cloud-aiplatform[agent_engines,adk,evaluation]>=1.121.0",
+                "google-cloud-aiplatform[agent_engines,evaluation]>=1.121.0",
                 "google-adk>=2.0.0,<2.1",
-                "a2a-sdk>=0.3.9,<1.0",
+                "a2a-sdk[http-server]>=0.3.9,<1.0",
                 "pydantic>=2.12.0",
                 "python-dotenv>=1.0.0",
             ],

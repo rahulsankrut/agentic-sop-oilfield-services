@@ -79,11 +79,6 @@ def load_start_date_variance(basin: str) -> list[dict]:
     return _load_json(f"start_date_variance/{basin}.json")
 
 
-def get_canonical_asset(canonical_id: str) -> dict | None:
-    """Lookup a single canonical asset, or None if not found."""
-    return next((a for a in load_canonical_assets() if a["canonical_id"] == canonical_id), None)
-
-
 def normalize_customer_id(raw: str) -> str:
     """Accept either a slug or a display name and return the canonical slug.
 

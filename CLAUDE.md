@@ -26,6 +26,11 @@ Operating instructions for Claude Code on this repo. Always loaded into context.
 - Don't reorder or skip steps within a TASK.
 - For genuine spec ambiguity, **stop and ask** before guessing.
 
+## Confidence and ambiguity (added 2026-05-20)
+- **During build**: if you have a question — about an API surface, a config field, a naming convention, a deploy step, anything — **ask** before assuming. A 30-second clarification beats a 20-minute deploy cycle on a wrong hypothesis.
+- **During debugging**: if you are not confident about the cause of a failure, **read the documentation or look at sample code first**. Don't guess at fixes. Verified examples to consult, in order: `~/.claude/references/*.md` (cross-project knowledge), `/tmp/next-26-keynotes/devkey/demo-2/` (canonical demo-2 reference), `~/Desktop/agents/*/` (sibling agent projects), then official Google Cloud docs. Use `inspect.getsource(...)` on installed SDK code when docs are silent.
+- Symptom of getting this wrong: cycling through redeploys ("maybe it's X… maybe Y… maybe Z") instead of reading the runtime logs + the SDK source first. If you're on the second retry without new information, stop and read.
+
 ## Boundaries (hard)
 - Don't invent platform features, APIs, or library functions. If unsure, check `github.com/GoogleCloudPlatform/next-26-keynotes/devkey/demo-2` first; then ask.
 - Don't deviate from the locked tech stack in SPECS.md.

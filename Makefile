@@ -52,16 +52,19 @@ lint:
 # Orchestrator can wire PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME), then the
 # Gemini-Enterprise-facing agents, then the Orchestrator last.
 #
-# Deploys run from venv-deploy/ (Python 3.12), NOT venv/ (3.14). The
-# deployed Reasoning Engine container is Python 3.10 and can't unpickle
-# Python 3.13+ code objects (CLAUDE.md gotcha). Create venv-deploy/ once
-# with `/usr/local/bin/python3.12 -m venv venv-deploy && source
-# venv-deploy/bin/activate && pip install poetry && poetry install`.
+# Deploys run from venv-deploy-310/ (Python 3.10), NOT venv/ (3.14). The
+# deployed Reasoning Engine container is Python 3.10 and matching the local
+# Python eliminates the pickle-arg-count mismatch (CLAUDE.md gotcha). The
+# `python_version` AgentEngineConfig field is silently ignored by the API
+# as of 2026-05-20, so the local Python must match the runtime. Bootstrap:
+#   brew install python@3.10
+#   /opt/homebrew/bin/python3.10 -m venv venv-deploy-310
+#   source venv-deploy-310/bin/activate && pip install poetry && poetry install
 #
 # Programmatic deploys (NOT adk CLI) so we can pass extra_packages — the
 # agent code imports src.schemas / src.utils which adk CLI doesn't stage.
 
-DEPLOY_PYTHON := venv-deploy/bin/python
+DEPLOY_PYTHON := venv-deploy-310/bin/python
 
 deploy-procurement-gate:
 	$(DEPLOY_PYTHON) -m src.procurement_approval_agent.runtime.deploy

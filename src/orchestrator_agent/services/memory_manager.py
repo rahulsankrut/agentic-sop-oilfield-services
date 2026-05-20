@@ -12,10 +12,13 @@ module reads AGENT_ENGINE_LOCATION (or GOOGLE_CLOUD_LOCATION as fallback)
 to construct the Memory Bank service with the right region.
 """
 
+import logging
 import os
 from typing import TYPE_CHECKING
 
 from google.adk.memory import VertexAiMemoryBankService
+
+logger = logging.getLogger(__name__)
 from vertexai._genai.types import (
     MemoryBankCustomizationConfig,
 )
@@ -164,4 +167,4 @@ async def auto_save_memories(callback_context: "CallbackContext") -> None:
         # DEMO NARRATION: "Memory Bank failures don't block the agent's response —
         # we log and proceed. The full enterprise mode has Cloud Trace + alerting
         # wired up so SRE sees these errors."
-        print(f"Warning: Failed to save memories: {e}")
+        logger.warning("Failed to save memories: %s", e)

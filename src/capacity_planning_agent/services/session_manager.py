@@ -1,4 +1,4 @@
-"""Session Manager for Marathon Planner Agent.
+"""Session Manager for Capacity Planning Agent.
 
 Manages session lifecycle with TTL-based caching for A2A context mapping.
 """
