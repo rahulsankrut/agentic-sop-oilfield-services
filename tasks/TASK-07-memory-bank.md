@@ -23,7 +23,7 @@
 
 Memory Bank is Gemini Enterprise Agent Platform's managed cross-session memory infrastructure. Two primitives matter for this build:
 
-- **Memory topics** — semantic categories declared at deploy time on the Agent Engine resource. Each topic has a `label` + a `description` that tells Memory Bank's extractor what to capture from session transcripts. Topics for the Orchestrator already exist in `services/memory_manager.py`: `sourcing_history`, `planner_preferences`, `equivalence_patterns`. Other agents declare their own (forecast_review's `rationale_tags` + `leader_profiles`, capacity_planning's `risk_tolerance` + `buffer_outcomes`, etc.).
+- **Memory topics** — semantic categories declared at deploy time on the Agent Engine resource. Each topic has a `label` + a `description` that tells Memory Bank's extractor what to capture from session transcripts. Topics for the Orchestrator already exist in `services/memory_manager.py`: `sourcing_history`, `planner_preferences`, `equivalence_patterns`. Other agents declare their own (forecast_review's `rationale_patterns` + `leader_profiles`, capacity_planning's `risk_tolerance` + `buffer_outcomes`, etc.).
 - **Memories** — individual structured records keyed by `user_id` and attached to a topic. Written automatically by the `auto_save_memories` after-agent callback (extracted by Memory Bank from the session transcript) OR explicitly via direct API calls.
 
 For the demo we **seed memories per persona** under the appropriate topics so that, on first turn of any scenario, the agent already knows the user's region, customer portfolio, risk tolerance, and recent decisions. We also **pre-create deterministic Sessions** so a scenario run is reproducible across rehearsals.
@@ -74,8 +74,8 @@ Every agent already has a `services/memory_manager.py` that declares its topics 
 ```bash
 grep -l "MemoryBankCustomizationConfig\|MemoryTopic" src/*/services/memory_manager.py
 # src/orchestrator_agent/services/memory_manager.py     — sourcing_history, planner_preferences, equivalence_patterns
-# src/procurement_approval_agent/services/memory_manager.py — approval_decisions, blocker_patterns
-# src/forecast_review_agent/services/memory_manager.py  — rationale_tags, leader_profiles
+# src/procurement_approval_agent/services/memory_manager.py — approval_history, blocker_patterns
+# src/forecast_review_agent/services/memory_manager.py  — rationale_patterns, leader_profiles
 # src/capacity_planning_agent/services/memory_manager.py — risk_tolerance, buffer_outcomes
 ```
 
@@ -97,9 +97,9 @@ attached to that agent's Agent Engine resource at deploy time via
 | Orchestrator | `sourcing_history` | Asset + basin + savings + approval outcome per sourcing decision |
 | Orchestrator | `planner_preferences` | Per-planner basin, authorization tier, default transit modes |
 | Orchestrator | `equivalence_patterns` | Canonical asset → variant substitutions with spec refs |
-| Procurement | `approval_decisions` | Tier + amount + outcome per approval |
+| Procurement | `approval_history` | Tier + amount + outcome per approval |
 | Procurement | `blocker_patterns` | Recurring blocker types per customer / basin |
-| Forecast Review | `rationale_tags` | Tags extracted from basin-leader overrides |
+| Forecast Review | `rationale_patterns` | Tags extracted from basin-leader overrides |
 | Forecast Review | `leader_profiles` | Per-leader override patterns + signal strength |
 | Capacity Planning | `risk_tolerance` | Per-planner buffer / late-start cost tradeoff |
 | Capacity Planning | `buffer_outcomes` | Realized vs. recommended buffer per scenario |
@@ -241,7 +241,7 @@ DAVID_MEMORIES: list[Memory] = [
     },
     {
         "user_id": "david-basin-leader-west-africa",
-        "topic": "rationale_tags",
+        "topic": "rationale_patterns",
         "content": (
             "Tag: geological_survey_delay. Frequency: high (3 overrides in last "
             "2 quarters). Predictive of: 14-day average shift in actual start "
@@ -309,9 +309,9 @@ TOPIC_TO_AGENT_ENV: dict[str, str] = {
     "sourcing_history": "ORCHESTRATOR_AGENT_ENGINE_ID",
     "planner_preferences": "ORCHESTRATOR_AGENT_ENGINE_ID",
     "equivalence_patterns": "ORCHESTRATOR_AGENT_ENGINE_ID",
-    "approval_decisions": "PROCUREMENT_APPROVAL_AGENT_ENGINE_ID",
+    "approval_history": "PROCUREMENT_APPROVAL_AGENT_ENGINE_ID",
     "blocker_patterns": "PROCUREMENT_APPROVAL_AGENT_ENGINE_ID",
-    "rationale_tags": "FORECAST_REVIEW_AGENT_ENGINE_ID",
+    "rationale_patterns": "FORECAST_REVIEW_AGENT_ENGINE_ID",
     "leader_profiles": "FORECAST_REVIEW_AGENT_ENGINE_ID",
     "risk_tolerance": "CAPACITY_PLANNING_AGENT_ENGINE_ID",
     "buffer_outcomes": "CAPACITY_PLANNING_AGENT_ENGINE_ID",
