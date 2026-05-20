@@ -1,0 +1,218 @@
+{
+  "_comment": "Hand-authored canvas event recording for the Persona 3 cargo-plane scenario. Mirrors the 8-beat static storyboard at realistic agent-execution timings (~16s total). Used by useReplayScenario as the demo-day safety net when Live mode is unavailable. Regenerate from a real workflow trace via `make record-canonical-cargo-plane-events` once that target exists.",
+  "scenario": "cargo-plane",
+  "duration_ms": 16000,
+  "events": [
+    {
+      "delayMsFromStart": 0,
+      "event": {
+        "event_id": "rec-001",
+        "timestamp": "2026-05-20T12:00:00.000Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "workflow.started",
+        "scenario": "cargo-plane",
+        "user_id": "maria-occ-planner-west-africa",
+        "initial_context": {}
+      }
+    },
+    {
+      "delayMsFromStart": 1500,
+      "event": {
+        "event_id": "rec-002",
+        "timestamp": "2026-05-20T12:00:01.500Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "capacity.gap_detected",
+        "location": { "latitude": -8.8383, "longitude": 13.2343, "label": "Luanda, Angola" },
+        "canonical_asset_id": "TX-001",
+        "deadline": "2026-05-22"
+      }
+    },
+    {
+      "delayMsFromStart": 3000,
+      "event": {
+        "event_id": "rec-003",
+        "timestamp": "2026-05-20T12:00:03.000Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "mcp.call.started",
+        "server": "sap-mcp-server",
+        "tool": "sap_resolve_material_number",
+        "via_gateway": true
+      }
+    },
+    {
+      "delayMsFromStart": 3100,
+      "event": {
+        "event_id": "rec-004",
+        "timestamp": "2026-05-20T12:00:03.100Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "mcp.call.started",
+        "server": "maximo-mcp-server",
+        "tool": "maximo_query_availability",
+        "via_gateway": true
+      }
+    },
+    {
+      "delayMsFromStart": 3200,
+      "event": {
+        "event_id": "rec-005",
+        "timestamp": "2026-05-20T12:00:03.200Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "mcp.call.started",
+        "server": "fdp-mcp-server",
+        "tool": "fdp_get_customer_config",
+        "via_gateway": true
+      }
+    },
+    {
+      "delayMsFromStart": 4500,
+      "event": {
+        "event_id": "rec-006",
+        "timestamp": "2026-05-20T12:00:04.500Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "mcp.call.completed",
+        "server": "sap-mcp-server",
+        "tool": "sap_resolve_material_number",
+        "duration_ms": 1480,
+        "result_summary": { "material_number": "MAT-67890" }
+      }
+    },
+    {
+      "delayMsFromStart": 4600,
+      "event": {
+        "event_id": "rec-007",
+        "timestamp": "2026-05-20T12:00:04.600Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "mcp.call.completed",
+        "server": "maximo-mcp-server",
+        "tool": "maximo_query_availability",
+        "duration_ms": 1490,
+        "result_summary": { "in_region_count": 0 }
+      }
+    },
+    {
+      "delayMsFromStart": 4700,
+      "event": {
+        "event_id": "rec-008",
+        "timestamp": "2026-05-20T12:00:04.700Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "mcp.call.completed",
+        "server": "fdp-mcp-server",
+        "tool": "fdp_get_customer_config",
+        "duration_ms": 1495,
+        "result_summary": { "substitution_allowed": true }
+      }
+    },
+    {
+      "delayMsFromStart": 6000,
+      "event": {
+        "event_id": "rec-009",
+        "timestamp": "2026-05-20T12:00:06.000Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "route.doomed_proposed",
+        "from_location": { "latitude": -12.4634, "longitude": 130.8456, "label": "Darwin, Australia" },
+        "to_location": { "latitude": -8.8383, "longitude": 13.2343, "label": "Luanda, Angola" },
+        "estimated_cost_usd": 420000,
+        "rationale": "Closest deployable Tool X is in Darwin — naive plan is a cargo charter. 13,200km, ~32hr transit."
+      }
+    },
+    {
+      "delayMsFromStart": 8000,
+      "event": {
+        "event_id": "rec-010",
+        "timestamp": "2026-05-20T12:00:08.000Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "knowledge_catalog.lookup",
+        "canonical_id": "TX-007",
+        "canonical_label": "Tool X-V7",
+        "aspects": {
+          "asset_specification": {
+            "category": "completion-phase tool",
+            "api_pressure_rating": 10000,
+            "certification_class": "API 6A"
+          },
+          "cross_system_aliases": {
+            "sap_id": "MAT-67890",
+            "maximo_id": "AST-V7-LGS-001",
+            "fdp_id": "FDP-TX007"
+          },
+          "functional_equivalence": {
+            "candidates": [
+              { "canonical_id": "TX-007", "confidence": 0.92, "rationale_source": "InTouch §3.2" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "delayMsFromStart": 9500,
+      "event": {
+        "event_id": "rec-011",
+        "timestamp": "2026-05-20T12:00:09.500Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "equivalence.found",
+        "original_asset": { "canonical_id": "TX-001", "label": "Tool X" },
+        "equivalent_asset": { "canonical_id": "TX-007", "label": "Tool X-V7" },
+        "confidence": 0.92,
+        "rationale_source": "InTouch §3.2",
+        "location": { "latitude": 6.5244, "longitude": 3.3792, "label": "Lagos, Nigeria" }
+      }
+    },
+    {
+      "delayMsFromStart": 11500,
+      "event": {
+        "event_id": "rec-012",
+        "timestamp": "2026-05-20T12:00:11.500Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "router.decision",
+        "router_name": "route_on_evaluation_score",
+        "decision": "PROCEED",
+        "rationale": "Plan Evaluator scored 0.91 ≥ 0.85 threshold. Accepting first pass; no revision needed."
+      }
+    },
+    {
+      "delayMsFromStart": 13000,
+      "event": {
+        "event_id": "rec-013",
+        "timestamp": "2026-05-20T12:00:13.000Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "route.recommended",
+        "from_location": { "latitude": 6.5244, "longitude": 3.3792, "label": "Lagos, Nigeria" },
+        "to_location": { "latitude": -8.8383, "longitude": 13.2343, "label": "Luanda, Angola" },
+        "estimated_cost_usd": 40000,
+        "avoided_cost_usd": 380000
+      }
+    },
+    {
+      "delayMsFromStart": 15500,
+      "event": {
+        "event_id": "rec-014",
+        "timestamp": "2026-05-20T12:00:15.500Z",
+        "workflow_id": "wf-recorded-cargo-plane",
+        "session_id": "demo-maria-cargo-plane-v1",
+        "type": "workflow.completed",
+        "final_output": {
+          "primary_option": {
+            "canonical_id": "TX-007",
+            "estimated_cost_usd": 40000,
+            "transit_mode": "sea_freight"
+          },
+          "avoided_cost_usd": 380000
+        },
+        "duration_ms": 15500
+      }
+    }
+  ]
+}
