@@ -12,6 +12,7 @@
 .PHONY: demo-cargo-plane demo-forecast demo-fleet-buffer demo-health
 .PHONY: deploy-mcp-sap deploy-mcp-maximo deploy-mcp-fdp deploy-mcp-servers
 .PHONY: register-mcp-servers apply-gateway-policies enable-model-armor
+.PHONY: setup-memory-bank seed-demo-sessions reset-and-seed
 .PHONY: clean
 
 help:
@@ -26,6 +27,9 @@ help:
 	@echo "  deploy-capacity-planning       Deploy Capacity Planning Agent (ADK CLI) (TASK-02)"
 	@echo "  deploy-orchestrator            Deploy Capacity Orchestrator (ADK CLI) (TASK-02)"
 	@echo "  deploy-all-agents              Deploy in dependency order: procurement → forecast/capacity → orchestrator"
+	@echo "  setup-memory-bank              Seed Memory Bank with persona starting memories (TASK-07)"
+	@echo "  seed-demo-sessions             Pre-create deterministic demo Sessions (TASK-07)"
+	@echo "  reset-and-seed                 Run setup-memory-bank + seed-demo-sessions in order"
 	@echo "  deploy                         Full deployment (TASK-13)"
 	@echo "  teardown                       Destroy all resources (TASK-13)"
 	@echo "  demo-cargo-plane               Run Persona 3 scenario (TASK-11)"
@@ -89,6 +93,23 @@ deploy-all-agents: deploy-procurement-gate deploy-forecast-review deploy-capacit
 	@echo " Orchestrator's tools wire RemoteA2aAgent against"
 	@echo " PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME)."
 	@echo "========================================="
+
+# ---------------------------------------------------------------------------
+# TASK-07 — Memory Bank seeding + deterministic demo Sessions
+# ---------------------------------------------------------------------------
+#
+# Run after `make deploy-all-agents` so the *_AGENT_RESOURCE_NAME env vars
+# are populated. Both scripts run from venv-deploy-310/ — they need
+# google-adk + Memory Bank/Sessions SDKs.
+
+setup-memory-bank:
+	$(DEPLOY_PYTHON) -m memory_bank.seed_memories
+
+seed-demo-sessions:
+	$(DEPLOY_PYTHON) -m memory_bank.seed_demo_sessions
+
+reset-and-seed: setup-memory-bank seed-demo-sessions
+	@echo "Memory Bank seeded + Sessions pre-warmed. Demo is reproducible."
 
 deploy:
 	@echo "Full deploy not yet implemented (TASK-13)"

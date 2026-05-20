@@ -57,7 +57,7 @@ The first three personas walk the S&OP cycle in order — demand sensing, demand
 - BigQuery measures (defining canonical "Permian Q4 completions revenue")
 - Forecast Review Agent (ADK agent on Agent Runtime)
 - Agent Inbox (the review surface)
-- Memory Bank with Memory Profiles (per-leader rationale capture)
+- Memory Bank (per-leader rationale capture via the Forecast Review agent's `rationale_patterns` + `leader_profiles` topics)
 - Knowledge Catalog (grounding "Permian basin" as canonical entity)
 
 **Time:** 3 minutes.
@@ -78,7 +78,7 @@ The Operations Canvas opens alongside, showing a basin-level fleet map: equipmen
 - Capacity Planning Agent (long-running, multi-week state on Agent Runtime)
 - BigQuery ML for probabilistic forecasting
 - Vertex AI Optimization (for risk-calibrated buffer allocation)
-- Memory Profile (Tomas's risk tolerance, fleet, basin defaults)
+- Memory Bank (Tomas's risk tolerance, fleet, basin defaults — seeded under the Capacity Planning agent's `risk_tolerance` + `buffer_outcomes` topics)
 - Agent Inbox for multi-week planning workflows
 - Cloud Trace (the reasoning chain behind each buffer recommendation)
 - Operations Canvas (the customer-built or partner-built visualization layer; structured agent output consumed via API)
@@ -92,6 +92,8 @@ The Operations Canvas opens alongside, showing a basin-level fleet map: equipmen
 **Surface:** Gemini Enterprise app chat interface for the conversation; Operations Canvas (global asset view) for the spatial moment. This is the demo's "wow" segment — both surfaces visible side by side.
 
 **Flow:** Maria types "I need a Tool X variant on site in Luanda by Friday. What are my options?"
+
+Before any agent reasoning is visible, the demoer pauses on the dashboard and narrates: *"Notice the dashboard didn't ask Maria where she works or what units she uses. The Capacity Orchestrator's first node called `preload_memory` — and Memory Bank, the platform's managed memory infrastructure, returned her West Africa region context, her Chevron-Lagos commit, her preference for imperial units, all under topics the Orchestrator declared at deploy time. No warm-up turns, no manual context loading. That's the managed memory layer."*
 
 The Capacity Orchestrator Agent begins reasoning in Gemini Enterprise — visible decomposition into Maximo, SAP, FDP, and InTouch queries, each running in parallel with live trace.
 
@@ -110,7 +112,7 @@ Throughout, narration ties the canvas back to the platform: "the agent is doing 
 - Procurement Approval Agent (Agent Engine, A2A)
 - Knowledge Catalog (grounding the equivalence reasoning — and where Issue 4 dissolves visibly)
 - Apigee-managed MCP servers (SAP, Maximo, FDP)
-- Memory Profile (Maria's basin, authorization tier, defaults)
+- Memory Bank (the platform's managed memory infrastructure — Maria's region, customer commits, and unit preferences preloaded via `preload_memory` under topics the Orchestrator declared at deploy time)
 - Cloud Trace (the visible reasoning chain)
 - Operations Canvas (the visualization layer consuming the platform's structured outputs)
 
@@ -244,7 +246,7 @@ A useful self-test for any moment in the demo: can the customer name the Google 
 | SAP / Maximo / FDP data being queried | MCP servers managed by Apigee |
 | The "Tool X = MAT-67890" unification | Knowledge Catalog |
 | InTouch PDFs being retrieved | Smart Storage + Object Context API |
-| Per-user personalization | Memory Bank + Memory Profiles |
+| Per-user personalization | Memory Bank topics + per-`user_id` seed memories |
 | The forecast grid | Connected Sheets + BigQuery measures |
 | The executive research | Deep Research Agent |
 | The live agent build | Agent Designer |
@@ -297,8 +299,8 @@ The pack is a Git repository, deployable to a Gemini Enterprise tenant. Customer
 - Smart Storage configured on InTouch synthetic PDF bucket with auto-extraction
 
 **Memory Bank content:**
-- Six Memory Profiles for the six demo personas
-- Pre-populated context for each persona (basin, fleet, risk tolerance, authorization)
+- Nine topics across four agents (sourcing_history, planner_preferences, equivalence_patterns, approval_history, blocker_patterns, rationale_patterns, leader_profiles, risk_tolerance, buffer_outcomes) declared at deploy time
+- Seed memories for the six demo personas keyed by `user_id`, surfaced at runtime via the `preload_memory` tool on each LlmAgent
 
 **Governance configuration:**
 - Agent Identity for every agent
