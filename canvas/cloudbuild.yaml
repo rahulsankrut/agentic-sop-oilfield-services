@@ -1,0 +1,67 @@
+# Cloud Build for the Operations Canvas (Next.js 16 → Cloud Run).
+#
+# Usage:
+#   gcloud builds submit \
+#     --config canvas/cloudbuild.yaml \
+#     --substitutions=_REGION=us-central1,_MAPBOX_TOKEN=pk.xxx... \
+#     canvas/
+#
+# Required substitutions:
+#   _REGION         GCP region (default: us-central1)
+#   _MAPBOX_TOKEN   Mapbox public token — baked into client JS at build time.
+#                   MUST be URL-restricted in the Mapbox console.
+#
+# Bootstrap before first deploy: the Cloud Run v2 service waits for a
+# healthy image to exist. Run this build first, then `terraform apply`
+# the Cloud Run resource that points at the produced image.
+
+substitutions:
+  _REGION: us-central1
+  _REPO: operations-canvas
+  _IMAGE: operations-canvas
+  _SERVICE: operations-canvas
+  _MAPBOX_TOKEN: ''
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build
+    args:
+      - build
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:${SHORT_SHA}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:latest'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_MAPBOX_TOKEN=${_MAPBOX_TOKEN}'
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-sha
+    args:
+      - push
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:${SHORT_SHA}'
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-latest
+    args:
+      - push
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:latest'
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - update
+      - '${_SERVICE}'
+      - '--region=${_REGION}'
+      - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:${SHORT_SHA}'
+      - '--quiet'
+
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:${SHORT_SHA}'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_IMAGE}:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
