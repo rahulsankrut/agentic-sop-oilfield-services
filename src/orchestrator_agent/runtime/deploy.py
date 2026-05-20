@@ -68,7 +68,7 @@ def deploy_orchestrator() -> str:
     from ..core.agent import root_agent
     from ..services.memory_manager import create_orchestrator_memory_topics
 
-    adk_app = AdkApp(agent=root_agent, app_name="capacity_orchestrator_agent", enable_tracing=False)
+    adk_app = AdkApp(agent=root_agent, enable_tracing=False)
 
     print("=" * 60)
     print("Deploying Capacity Orchestrator Agent to Vertex AI Agent Engine")

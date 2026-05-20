@@ -35,7 +35,7 @@ def deploy_capacity_planning() -> str:
     from ..core.agent import root_agent
     from ..services.memory_manager import create_capacity_planning_memory_topics
 
-    adk_app = AdkApp(agent=root_agent, app_name="capacity_planning_agent", enable_tracing=False)
+    adk_app = AdkApp(agent=root_agent, enable_tracing=False)
 
     print("=" * 60)
     print("Deploying Capacity Planning Agent to Vertex AI Agent Engine")

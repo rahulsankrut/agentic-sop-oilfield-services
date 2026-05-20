@@ -39,7 +39,7 @@ def deploy_forecast_review() -> str:
     from ..core.agent import root_agent
     from ..services.memory_manager import create_forecast_review_memory_topics
 
-    adk_app = AdkApp(agent=root_agent, app_name="forecast_review_agent", enable_tracing=False)
+    adk_app = AdkApp(agent=root_agent, enable_tracing=False)
 
     print("=" * 60)
     print("Deploying Forecast Review Agent to Vertex AI Agent Engine")
