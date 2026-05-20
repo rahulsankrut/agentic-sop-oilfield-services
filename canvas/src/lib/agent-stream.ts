@@ -1,23 +1,21 @@
 /**
  * agent-stream.ts
  *
- * Streaming client for the deployed Capacity Orchestrator's
- * ``streamQuery`` REST endpoint on Vertex AI Reasoning Engine.
+ * Browser-side streaming client for the Capacity Orchestrator.
  *
- * The endpoint accepts a POST with a chat-style payload and streams the
- * ADK ``Event`` JSON objects emitted by the underlying ``Runner.run_async``
- * loop (one JSON object per HTTP chunk, NDJSON-style). Each ADK event
- * carries the workflow node's state delta — including the
- * ``canvas_events`` list our nodes append to via
- * ``src.orchestrator_agent.events.emit``. The client drains new canvas
- * events out of each chunk and forwards them through ``onEvent``.
+ * **Hits a same-origin Next.js API route** (``/api/orchestrator/stream``)
+ * which proxies to the deployed Vertex AI ``streamQuery`` endpoint
+ * server-side. The proxy injects an ADC OAuth Bearer token so the
+ * browser never sees a Google Cloud credential. See
+ * ``src/app/api/orchestrator/stream/route.ts`` for the server side.
  *
- * The browser's built-in ``EventSource`` API can't carry an
- * ``Authorization`` Bearer header, so we use ``fetch`` +
- * ``ReadableStream`` + ``TextDecoderStream`` and parse the wire format
- * ourselves. The streamQuery endpoint emits newline-delimited JSON
- * objects (NOT the ``data:``-prefixed SSE wire format), so we split on
- * newline rather than blank-line.
+ * The proxy pipes the ADK ``Event`` JSON objects emitted by the
+ * underlying ``Runner.run_async`` loop straight through to the browser
+ * (one JSON object per line, NDJSON). Each ADK event carries the
+ * workflow node's state delta — including the ``canvas_events`` list
+ * our nodes append to via ``src.orchestrator_agent.events.emit``. The
+ * client drains new canvas events out of each chunk and forwards them
+ * through ``onEvent``.
  *
  * No reconnect logic: streamQuery is per-request (one POST → one
  * stream). The caller decides whether to fire another ``connect()``
@@ -35,17 +33,16 @@ export type ConnectionState =
 
 export interface AgentStreamOptions {
   /**
-   * The ``streamQuery`` endpoint, e.g.
-   * ``https://us-central1-aiplatform.googleapis.com/v1beta1/projects/<n>/locations/us-central1/reasoningEngines/<id>:streamQuery``
+   * The deployed Vertex AI ``streamQuery`` URL (passed through to the
+   * server-side proxy in the request body). The browser never calls it
+   * directly. Looks like
+   * ``https://us-central1-aiplatform.googleapis.com/v1beta1/projects/<n>/locations/us-central1/reasoningEngines/<id>:streamQuery``.
    */
-  url: string;
+  streamUrl: string;
+  /** Same-origin proxy path. Default: ``/api/orchestrator/stream``. */
+  proxyPath?: string;
   sessionId: string;
   userId: string;
-  /**
-   * OAuth Bearer token. The class does not refresh tokens — re-issue
-   * ``connect()`` after refreshing.
-   */
-  authToken: string;
   /** Initial user message that kicks off the workflow. */
   userMessage: string;
   /**
@@ -96,29 +93,20 @@ export class AgentStream {
     this.setState("connecting");
     this.abort = new AbortController();
 
-    // streamQuery body shape: { class_method: "async_stream_query", input: {...} }
-    // ``message`` can be a string or a Content dict; we send Content so the
-    // runtime parses parts uniformly.
+    // POST to the same-origin proxy. The proxy attaches the ADC Bearer
+    // token server-side and forwards to streamQuery.
     const body = {
-      class_method: "async_stream_query",
-      input: {
-        message: {
-          role: "user",
-          parts: [{ text: this.opts.userMessage }],
-        },
-        user_id: this.opts.userId,
-        session_id: this.opts.sessionId,
-      },
+      streamUrl: this.opts.streamUrl,
+      sessionId: this.opts.sessionId,
+      userId: this.opts.userId,
+      userMessage: this.opts.userMessage,
     };
 
     try {
-      const res = await fetch(this.opts.url, {
+      const res = await fetch(this.opts.proxyPath ?? "/api/orchestrator/stream", {
         method: "POST",
         signal: this.abort.signal,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.opts.authToken}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
 

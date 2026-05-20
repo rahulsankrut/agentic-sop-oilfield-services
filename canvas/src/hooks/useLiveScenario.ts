@@ -221,21 +221,6 @@ export interface UseLiveScenarioResult {
   connectionState: ConnectionState;
 }
 
-/**
- * Read the Bearer token from a browser cookie. Demo-only — production should
- * obtain the token via a server-side proxy or Workload Identity flow rather
- * than exposing it to JS. See TASK-10 §Common pitfalls.
- */
-function getAuthToken(): string {
-  if (typeof document === "undefined") return "";
-  const match = document.cookie
-    .split(";")
-    .map((c) => c.trim())
-    .find((c) => c.startsWith("auth_token="));
-  if (!match) return "";
-  return decodeURIComponent(match.slice("auth_token=".length));
-}
-
 export function useLiveScenario(
   opts: UseLiveScenarioOptions,
 ): UseLiveScenarioResult {
@@ -258,11 +243,10 @@ export function useLiveScenario(
     }
 
     const stream = new AgentStream({
-      url,
+      streamUrl: url,
       sessionId: opts.sessionId,
       userId: opts.userId,
       userMessage: opts.userMessage,
-      authToken: getAuthToken(),
       onEvent: (evt) => dispatch(evt),
       onStateChange: setConnectionState,
     });
