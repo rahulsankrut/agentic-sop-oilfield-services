@@ -72,7 +72,15 @@ export async function POST(req: Request): Promise<Response> {
 
   // Forward to streamQuery. The body shape is the AdkApp class_method
   // dispatch format that vertexai/_genai/reasoning_engines expects.
-  const upstream = await fetch(body.streamUrl, {
+  //
+  // The `?alt=sse` query param is REQUIRED for the endpoint to actually
+  // stream — without it Vertex AI returns a single JSON envelope and
+  // closes the connection (the SDK appends this automatically; we have
+  // to do it manually here).
+  const upstreamUrl = body.streamUrl.includes("alt=sse")
+    ? body.streamUrl
+    : body.streamUrl + (body.streamUrl.includes("?") ? "&" : "?") + "alt=sse";
+  const upstream = await fetch(upstreamUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
