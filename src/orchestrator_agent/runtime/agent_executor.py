@@ -1,10 +1,31 @@
 """A2A Agent Executor for the Capacity Orchestrator Agent.
 
-Handles A2A protocol execution. Used by both Cloud Run and Agent Engine deploys.
-Pattern preserved verbatim from the reference repo planner_agent executor.
+Bridges the A2A ``message:stream`` SSE endpoint to the underlying ADK 2.0
+Workflow. Translates each Workflow ADK ``Event`` into one or more A2A
+``Message`` events on the SSE stream so the canvas (and any other A2A
+peer) can render the live execution.
+
+Pattern is modeled on ``src/procurement_approval_agent/runtime/agent_
+executor.py`` — same lazy Runner init, same session_manager wiring — with
+an additional canvas-event drain on the ``state_delta`` stream.
+
+Canvas-event protocol contract:
+- Workflow nodes append to ``ctx.state['canvas_events']`` via
+  :func:`src.orchestrator_agent.events.emit.emit`.
+- On each ADK ``Event`` emitted by ``Runner.run_async``, we look at
+  ``event.actions.state_delta['canvas_events']`` for new entries beyond
+  the last index we forwarded, and push each new entry as a
+  ``new_agent_text_message(json.dumps(...))`` to the A2A event queue.
+- On the final ADK event, we emit a completion text message + complete
+  the A2A task with the final artifact.
 """
 
+import json
+import logging
 import os
+import uuid
+from datetime import datetime, timezone
+from typing import Any
 
 import vertexai
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -16,17 +37,27 @@ from a2a.utils.errors import ServerError
 from google.adk import Runner
 from google.genai import types
 
+from ..events.canvas_events import WorkflowStartedEvent
 from ..services.memory_manager import create_memory_service
 from ..services.session_manager import SessionManager, create_session_service
 
+logger = logging.getLogger(__name__)
 
-class OrchestratorExecutor(AgentExecutor):
-    """Execute requests via A2A protocol.
+
+def _utcnow_iso() -> str:
+    """ISO-8601 UTC timestamp matching ``BaseEvent.timestamp`` formatting."""
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+
+
+class CapacityOrchestratorExecutor(AgentExecutor):
+    """Execute orchestrator requests via A2A protocol, streaming canvas events.
 
     Features:
     - VertexAI Session Service for persistent conversation history
     - Memory Bank integration for cross-session learning
-    - TTL-based session caching to map A2A context_id to Vertex AI session_id
+    - TTL-based session caching to map A2A context_id → Vertex AI session_id
+    - Per-Workflow-event canvas-event drain that pushes the queued canvas
+      events out as A2A Messages on the SSE stream
     """
 
     def __init__(self):
@@ -60,23 +91,22 @@ class OrchestratorExecutor(AgentExecutor):
             )
             agent_engine_id = os.environ.get("AGENT_ENGINE_ID")
 
-            print(
-                f"[DEBUG] Initializing runner with project={project_id}, "
-                f"location={location}, agent_engine_id={agent_engine_id}"
+            logger.debug(
+                "Initializing runner project=%s location=%s agent_engine_id=%s",
+                project_id,
+                location,
+                agent_engine_id,
             )
 
             session_service = create_session_service(
                 project=project_id,
                 location=location,
             )
-            print(f"[DEBUG] Session service type: {type(session_service).__name__}")
 
             memory_service = create_memory_service(
                 project=project_id,
                 location=location,
             )
-            ms_type = type(memory_service).__name__ if memory_service else "None"
-            print(f"[DEBUG] Memory service: {ms_type}")
 
             from google.adk.agents.context_cache_config import ContextCacheConfig
             from google.adk.apps import App
@@ -104,8 +134,47 @@ class OrchestratorExecutor(AgentExecutor):
                 cache_ttl=3600,
             )
 
+    async def _drain_canvas_events(
+        self,
+        adk_event: Any,
+        event_queue: EventQueue,
+        last_emitted: int,
+    ) -> int:
+        """Forward newly-appended canvas events to the A2A event queue.
+
+        Returns the new value of ``last_emitted`` (i.e., total events seen).
+        """
+        try:
+            actions = getattr(adk_event, "actions", None)
+            state_delta = getattr(actions, "state_delta", None) if actions else None
+        except Exception:
+            state_delta = None
+
+        if not state_delta:
+            return last_emitted
+
+        canvas_events = state_delta.get("canvas_events") if isinstance(state_delta, dict) else None
+        if not canvas_events:
+            return last_emitted
+
+        for evt in canvas_events[last_emitted:]:
+            try:
+                payload = json.dumps(evt, default=str)
+            except Exception as exc:
+                logger.warning("Failed to JSON-encode canvas event: %s", exc)
+                continue
+            try:
+                await event_queue.enqueue_event(new_agent_text_message(text=payload))
+            except Exception as exc:
+                logger.warning("Failed to enqueue canvas event: %s", exc)
+        return len(canvas_events)
+
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
-        """Execute a request via A2A protocol."""
+        """Execute an orchestrator request via A2A protocol.
+
+        Streams canvas events as they're emitted by the underlying Workflow,
+        then completes the A2A task with the final sourcing-plan artifact.
+        """
         if self.agent is None:
             self._init_agent()
 
@@ -142,15 +211,80 @@ class OrchestratorExecutor(AgentExecutor):
                 message=new_agent_text_message("Resolving capacity gap..."),
             )
 
+            app_name = getattr(self.runner, "app_name", "capacity_orchestrator_agent")
             session_id = await self.session_manager.get_or_create_session(
                 context_id=context.context_id,
-                app_name=self.runner.app_name,
+                app_name=app_name,
                 user_id=user_id,
             )
+
+            # Seed the session with workflow_id / session_id / start time so
+            # canvas events can carry consistent identifiers and finalize()
+            # can compute duration. We do this by pushing an initial state
+            # delta carrying a WorkflowStartedEvent — the executor's drain
+            # picks it up and forwards on the SSE stream just like any
+            # other canvas event.
+            workflow_id = uuid.uuid4().hex
+            started_at = datetime.utcnow()
+            workflow_started = WorkflowStartedEvent(
+                workflow_id=workflow_id,
+                session_id=session_id,
+                # The canvas dispatches on scenario; the orchestrator only
+                # serves the cargo-plane scenario today. Buffer-planning is
+                # owned by the capacity_planning_agent.
+                scenario="cargo-plane",
+                user_id=user_id,
+                initial_context={"request_excerpt": request_data[:512]},
+            )
+
+            # Push the WorkflowStartedEvent and seed-state to session state
+            # by directly appending via the session service so the first
+            # Workflow node sees them on ctx.state.
+            try:
+                session = await self.runner.session_service.get_session(
+                    app_name=app_name,
+                    user_id=user_id,
+                    session_id=session_id,
+                )
+                if session is not None:
+                    seed_state = dict(getattr(session, "state", {}) or {})
+                    existing_events = list(seed_state.get("canvas_events", []) or [])
+                    seed_state["workflow_id"] = workflow_id
+                    seed_state["session_id"] = session_id
+                    seed_state["workflow_started_at"] = started_at.isoformat()
+                    seed_state["canvas_events"] = [
+                        *existing_events,
+                        workflow_started.model_dump(mode="json"),
+                    ]
+                    try:
+                        # Best-effort write — sessions services vary in API.
+                        # If direct mutation isn't supported the state delta
+                        # from the first node will still seed the chain via
+                        # state_delta merging.
+                        session.state.update(seed_state)
+                    except Exception:
+                        pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to seed session state for canvas events: %s", exc)
+
+            # Surface the WorkflowStartedEvent immediately so the canvas
+            # gets a clear start signal regardless of session-service quirks.
+            try:
+                await event_queue.enqueue_event(
+                    new_agent_text_message(
+                        text=json.dumps(workflow_started.model_dump(mode="json"), default=str)
+                    )
+                )
+            except Exception as exc:
+                logger.warning("Failed to enqueue WorkflowStartedEvent: %s", exc)
 
             content = types.Content(role="user", parts=[types.Part(text=request_data)])
 
             final_event = None
+            # The seeded WorkflowStartedEvent is index 0; downstream nodes
+            # append after it. last_emitted=1 means "the first event the
+            # workflow emits goes out next".
+            last_emitted = 1
             async for event in self.runner.run_async(
                 session_id=session_id,
                 user_id=user_id,
@@ -161,6 +295,9 @@ class OrchestratorExecutor(AgentExecutor):
                     context_window_compression=ContextWindowCompressionConfig(),
                 ),
             ):
+                last_emitted = await self._drain_canvas_events(
+                    event, event_queue, last_emitted
+                )
                 if event.is_final_response():
                     final_event = event
 
@@ -185,7 +322,7 @@ class OrchestratorExecutor(AgentExecutor):
                 final=True,
             )
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             await updater.update_status(
                 TaskState.failed,
                 message=new_agent_text_message(f"Resolution failed: {e!s}"),
@@ -195,3 +332,9 @@ class OrchestratorExecutor(AgentExecutor):
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         """Cancel is not supported for this agent."""
         raise ServerError(error=UnsupportedOperationError())
+
+
+# Backwards-compat alias — local_server.py / test_client.py / other
+# integrations may still import the old name. New code (deploy.py) uses
+# the canonical ``CapacityOrchestratorExecutor`` per the TASK-10 spec.
+OrchestratorExecutor = CapacityOrchestratorExecutor

@@ -41,6 +41,14 @@ metadata:
 spec:
   # ---------------------------------------------------------------------------
   # Filter settings.
+  #
+  # Four-category Model Armor template structure (verified 2026-05-20 against
+  # ~/.claude/references/gemini-enterprise-agent-platform.md §Model Armor and
+  # https://docs.cloud.google.com/security-command-center/docs/model-armor-overview):
+  #   1. Responsible AI Safety      → `responsibleAi`
+  #   2. Prompt Injection & Jailbreak → `promptInjectionAndJailbreak`
+  #   3. Sensitive Data Protection  → `sensitiveDataProtection`
+  #   4. Malicious URL Detection    → `maliciousUriFilterSettings`
   # ---------------------------------------------------------------------------
   filters:
     # Block on prompt injection attempts with HIGH or MEDIUM confidence.

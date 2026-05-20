@@ -1,6 +1,6 @@
 # Agent Gateway authorization policies for the Agentic S&OP demo.
 #
-# Two policies, declarative:
+# Three policies, declarative:
 #   1. `orchestrator_full_mcp_access`
 #      The Capacity Orchestrator's service account gets `mcp.tools.call`
 #      on every registered MCP server. Read-and-write; this agent owns
@@ -11,6 +11,17 @@
 #      on the read-only Knowledge Catalog tools (`lookup_context`,
 #      `search_entries`). It must not be able to hit SAP / Maximo / FDP
 #      directly — those calls flow through the Orchestrator.
+#      NOTE: the managed Knowledge Catalog MCP exposes `lookup_context`
+#      (NOT `lookup_entry`, which is a doc-typo in some early drafts).
+#      Verified against `src/orchestrator_agent/core/nodes/equivalence_lookup.py`
+#      which wires `tool_filter=["search_entries", "lookup_context"]`.
+#
+#   3. `orchestrator_a2a_procurement_approval`
+#      The Capacity Orchestrator calls the Procurement Approval agent
+#      over A2A (`RemoteA2aAgent` wrapped in an `AgentTool`). The Gateway
+#      treats agent-to-agent like any other registered resource, so we
+#      authorize the Orchestrator SA against the registered Procurement
+#      agent resource. Without this, the A2A handshake 403s at Gateway.
 #
 # DEMO NARRATION: "Notice the grain. The Orchestrator can call every MCP
 # tool. The Plan Evaluator can ONLY call two read-only Knowledge Catalog
@@ -79,6 +90,26 @@ spec:
       resources:
         - projects/${PROJECT}/locations/${LOCATION}/mcpServers/knowledge-catalog-mcp/tools/lookup_context
         - projects/${PROJECT}/locations/${LOCATION}/mcpServers/knowledge-catalog-mcp/tools/search_entries
+      effect: ALLOW
+
+    # -----------------------------------------------------------------------
+    # Policy 3: Orchestrator → Procurement Approval agent (A2A).
+    # -----------------------------------------------------------------------
+    - name: orchestrator_a2a_procurement_approval
+      description: |
+        The Capacity Orchestrator calls the Procurement Approval agent
+        over A2A when a plan needs a non-standard substitution approved.
+        Gateway treats the call as `agents.invoke` against the registered
+        procurement-approval-agent resource. Default-deny would block this
+        without the explicit ALLOW below.
+      principals:
+        - type: serviceAccount
+          identifier: serviceAccount:orchestrator-agent-sa@${PROJECT}.iam.gserviceaccount.com
+      permissions:
+        - agents.invoke
+        - agents.discover
+      resources:
+        - projects/${PROJECT}/locations/${LOCATION}/agents/procurement-approval-agent
       effect: ALLOW
 
   # ---------------------------------------------------------------------------

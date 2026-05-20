@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import TYPE_CHECKING, Any
 
 from google.adk import Agent
 from google.adk.tools import preload_memory
@@ -71,8 +72,15 @@ from google.genai.types import GenerateContentConfig, ThinkingConfig
 from src.schemas import EquivalentAssetCandidate
 from src.utils.global_gemini import GlobalGemini
 
+from ...events.canvas_events import (
+    EquivalentAssetFoundEvent,
+    KnowledgeCatalogLookupEvent,
+)
 from ...services.memory_manager import auto_save_memories
 from ..prompts import EQUIVALENCE_LOOKUP_INSTRUCTION
+
+if TYPE_CHECKING:
+    from google.adk.agents.callback_context import CallbackContext
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +148,93 @@ def _build_mcp_toolset() -> list:
 EQUIVALENCE_LOOKUP_USING_MCP: bool = bool(os.getenv("AGENT_GATEWAY_ENDPOINT"))
 
 
+async def _emit_equivalence_events(callback_context: "CallbackContext") -> None:
+    """Surface the equivalence decision to the canvas as two events.
+
+    Runs after the LLM produces a structured ``EquivalentAssetCandidate``.
+    We mutate ``ctx.state['canvas_events']`` directly here — the framework
+    propagates the state delta on the next emitted event. After emitting,
+    we chain to :func:`auto_save_memories` to preserve Memory Bank
+    persistence.
+    """
+    try:
+        ctx = callback_context
+        workflow_id = ""
+        session_id = ""
+        try:
+            workflow_id = ctx.state.get("workflow_id", "") or ""
+            session_id = ctx.state.get("session_id", "") or ""
+        except Exception:
+            pass
+
+        # Pull the LLM's structured output. ADK stores the most recent
+        # node output on ``ctx.output`` (Workflow API) when the agent ran
+        # as a workflow node.
+        output: Any = None
+        try:
+            output = ctx.output
+        except Exception:
+            output = None
+
+        candidate_dict: dict[str, Any] | None = None
+        if isinstance(output, dict):
+            candidate_dict = output
+        elif hasattr(output, "model_dump"):
+            try:
+                candidate_dict = output.model_dump()
+            except Exception:
+                candidate_dict = None
+
+        new_events: list[dict[str, Any]] = []
+        try:
+            existing = list(ctx.state.get("canvas_events", []) or [])
+        except Exception:
+            existing = []
+
+        if candidate_dict:
+            equiv = candidate_dict.get("equivalent_asset") or {}
+            original = candidate_dict.get("original_asset") or {}
+            kc_event = KnowledgeCatalogLookupEvent(
+                workflow_id=workflow_id,
+                session_id=session_id,
+                canonical_id=str(equiv.get("canonical_id") or original.get("canonical_id") or ""),
+                canonical_label=str(
+                    equiv.get("canonical_label") or original.get("canonical_label") or ""
+                ),
+                aspects=candidate_dict,
+            )
+            new_events.append(kc_event.model_dump(mode="json"))
+
+            location = candidate_dict.get("source_location") or {}
+            confidence = candidate_dict.get("confidence")
+            try:
+                confidence_f = float(confidence) if confidence is not None else 0.0
+            except (TypeError, ValueError):
+                confidence_f = 0.0
+            found_event = EquivalentAssetFoundEvent(
+                workflow_id=workflow_id,
+                session_id=session_id,
+                original_asset=original,
+                equivalent_asset=equiv,
+                confidence=confidence_f,
+                rationale_source=str(candidate_dict.get("rationale_source") or ""),
+                location=location if isinstance(location, dict) else {},
+            )
+            new_events.append(found_event.model_dump(mode="json"))
+
+        if new_events:
+            try:
+                ctx.state["canvas_events"] = [*existing, *new_events]
+            except Exception as exc:
+                logger.warning("Failed to write canvas_events to state: %s", exc)
+    except Exception as exc:  # noqa: BLE001
+        # Never let canvas-event emission fail the agent turn.
+        logger.warning("equivalence_lookup canvas-event emit failed: %s", exc)
+
+    # Chain to the original Memory Bank callback so persistence still runs.
+    await auto_save_memories(callback_context)
+
+
 # DEMO NARRATION: "First AI node in the workflow — and this is where Issue 4
 # dissolves visibly. The equivalence agent is calling Knowledge Catalog
 # through Agent Gateway. The MCP server itself is managed by Google Cloud —
@@ -164,7 +259,7 @@ equivalence_lookup_agent = Agent(
     instruction=EQUIVALENCE_LOOKUP_INSTRUCTION,
     output_schema=EquivalentAssetCandidate,
     tools=[*_build_mcp_toolset(), preload_memory],
-    after_agent_callback=auto_save_memories,
+    after_agent_callback=_emit_equivalence_events,
     generate_content_config=GenerateContentConfig(
         temperature=0.0,
         thinking_config=ThinkingConfig(thinking_budget=1024),

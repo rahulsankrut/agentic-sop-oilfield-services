@@ -12,7 +12,11 @@ Three routers:
 
 from __future__ import annotations
 
-from google.adk import Event
+from google.adk import Context, Event
+
+from ...events.canvas_events import RouterDecisionEvent
+from ...events.emit import emit
+
 
 # Route keys live in module scope so the agent.py edge dict and the routers
 # stay in sync without string-literal drift.
@@ -42,17 +46,42 @@ MAX_REVISION_ITERATIONS = 2
 PROCUREMENT_USD_THRESHOLD = 500_000
 
 
+def _router_state(ctx: Context, router_name: str, decision: str, rationale: str) -> dict:
+    """Build a state delta emitting one RouterDecisionEvent for the canvas."""
+    workflow_id = ""
+    session_id = ""
+    try:
+        workflow_id = ctx.state.get("workflow_id", "") or ""
+        session_id = ctx.state.get("session_id", "") or ""
+    except Exception:
+        pass
+    event = RouterDecisionEvent(
+        workflow_id=workflow_id,
+        session_id=session_id,
+        router_name=router_name,
+        decision=decision,
+        rationale=rationale,
+    )
+    return emit(ctx, event)
+
+
 # DEMO NARRATION: "First routing decision. If direct availability exists, we
 # take the fast path — build a plan with the existing asset. If not, we go
 # into the equivalence pathway, where the agent reasons about functional
 # substitutes. This is a deterministic check, not an LLM judgment."
-def route_on_availability(node_input: dict) -> Event:
+def route_on_availability(node_input: dict, ctx: Context) -> Event:
     """Route based on whether direct asset availability was found."""
     route = DIRECT_AVAILABLE if node_input.get("direct_available") else NEEDS_EQUIVALENCE
+    rationale = (
+        "Direct availability found in target region"
+        if node_input.get("direct_available")
+        else "No direct availability — proceeding to equivalence reasoning"
+    )
     return Event(
         message=f"Routing on availability: {route}",
         route=route,
         output=node_input,
+        state=_router_state(ctx, "route_on_availability", route, rationale),
     )
 
 
@@ -61,7 +90,7 @@ def route_on_availability(node_input: dict) -> Event:
 # to be revised. Maximum of two revision loops to avoid runaway iteration.
 # This is the kind of control structure that's hard to enforce in a pure LLM
 # agent — here it's just a Python conditional."
-def route_on_evaluation_score(node_input: dict) -> Event:
+def route_on_evaluation_score(node_input: dict, ctx: Context) -> Event:
     """Route based on the Plan Evaluator's score.
 
     Expects ``node_input`` to carry:
@@ -75,12 +104,15 @@ def route_on_evaluation_score(node_input: dict) -> Event:
     if overall_score >= SCORE_THRESHOLD:
         route = PROCEED
         forward = {**node_input, "accepted_reason": "score_above_threshold"}
+        rationale = f"Score {overall_score:.2f} >= threshold {SCORE_THRESHOLD}"
     elif iteration >= MAX_REVISION_ITERATIONS:
         route = PROCEED
         forward = {**node_input, "accepted_reason": "revision_exhausted"}
+        rationale = f"Iteration cap ({MAX_REVISION_ITERATIONS}) reached; accepting plan"
     else:
         route = REVISE
         forward = {**node_input, "iteration_count": iteration + 1}
+        rationale = f"Score {overall_score:.2f} below threshold; requesting revision"
 
     return Event(
         message=(
@@ -88,6 +120,7 @@ def route_on_evaluation_score(node_input: dict) -> Event:
         ),
         route=route,
         output=forward,
+        state=_router_state(ctx, "route_on_evaluation_score", route, rationale),
     )
 
 
@@ -95,7 +128,7 @@ def route_on_evaluation_score(node_input: dict) -> Event:
 # Above $500K or any non-trivial blocker, yes. Below that threshold the OCC
 # planner can self-approve. This threshold is policy, not LLM judgment — it
 # lives right here in the workflow next to the audit log."
-def route_on_procurement_threshold(node_input: dict) -> Event:
+def route_on_procurement_threshold(node_input: dict, ctx: Context) -> Event:
     """Route based on whether procurement approval is required."""
     plan = node_input.get("plan") or {}
     primary = (plan.get("primary_option") or {}) if isinstance(plan, dict) else {}
@@ -104,11 +137,19 @@ def route_on_procurement_threshold(node_input: dict) -> Event:
 
     if cost > PROCUREMENT_USD_THRESHOLD or blockers:
         route = REQUIRES_APPROVAL
+        rationale = (
+            f"Cost ${cost:,} exceeds ${PROCUREMENT_USD_THRESHOLD:,} threshold "
+            f"or {len(blockers)} blocker(s) present — procurement approval required"
+        )
     else:
         route = AUTO_APPROVE
+        rationale = (
+            f"Cost ${cost:,} under threshold and no blockers — OCC planner self-approval"
+        )
 
     return Event(
         message=(f"Routing on procurement: cost=${cost:,} blockers={len(blockers)} → {route}"),
         route=route,
         output=node_input,
+        state=_router_state(ctx, "route_on_procurement_threshold", route, rationale),
     )

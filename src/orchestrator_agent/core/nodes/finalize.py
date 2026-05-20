@@ -6,7 +6,9 @@ Last node before END. Pure-Python compute over the structured plan that
 
 from __future__ import annotations
 
-from google.adk import Event
+from datetime import datetime
+
+from google.adk import Context, Event
 
 from src.schemas import (
     AssetIdentifier,
@@ -17,6 +19,9 @@ from src.schemas import (
     SystemQueryResults,
 )
 from src.utils.skill_imports import estimate_transit
+
+from ...events.canvas_events import WorkflowCompletedEvent
+from ...events.emit import emit
 
 # Long-haul fallback hubs by region — the "what Maria would have done without
 # the agent" baselines. Hard-coded for the demo's hero scenario; production
@@ -33,15 +38,41 @@ _FALLBACK_HUBS = {
 # naive-baseline option — the cargo charter Maria would have ordered without
 # the workflow. This is the number the OCC director sees on the canvas:
 # 'saved $380K vs. baseline.' Deterministic, traceable, defensible."
-def finalize_sourcing_plan(node_input: dict) -> Event:
+def finalize_sourcing_plan(node_input: dict, ctx: Context) -> Event:
     """Compute avoided cost and produce the final SourcingPlan envelope."""
     request = CapacityGapRequest(**node_input["request"])
     results = SystemQueryResults(**node_input.get("results", {}))
     plan_dict = node_input.get("plan")
+
+    # Compute workflow duration from the seed timestamp recorded at start.
+    workflow_id = ""
+    session_id = ""
+    started_iso = ""
+    try:
+        workflow_id = ctx.state.get("workflow_id", "") or ""
+        session_id = ctx.state.get("session_id", "") or ""
+        started_iso = ctx.state.get("workflow_started_at", "") or ""
+    except Exception:
+        pass
+    duration_ms = 0
+    if started_iso:
+        try:
+            started_at = datetime.fromisoformat(started_iso)
+            duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+        except (TypeError, ValueError):
+            duration_ms = 0
+
     if not plan_dict:
+        completed = WorkflowCompletedEvent(
+            workflow_id=workflow_id,
+            session_id=session_id,
+            final_output={"request": request.model_dump(), "plan": None},
+            duration_ms=duration_ms,
+        )
         return Event(
             message="finalize_sourcing_plan: no plan to finalize",
             output={"request": request.model_dump(), "plan": None},
+            state=emit(ctx, completed),
         )
     plan = SourcingPlan(**plan_dict)
 
@@ -84,14 +115,24 @@ def finalize_sourcing_plan(node_input: dict) -> Event:
         }
     )
 
+    final_output = {
+        "request": request.model_dump(),
+        "results": results.model_dump(),
+        "plan": final.model_dump(),
+    }
+
+    completed = WorkflowCompletedEvent(
+        workflow_id=workflow_id,
+        session_id=session_id,
+        final_output=final_output,
+        duration_ms=duration_ms,
+    )
+
     return Event(
         message=(
             f"Final SourcingPlan: primary=${final.primary_option.estimated_cost_usd:,} "
             f"avoided=${final.avoided_cost_usd:,}"
         ),
-        output={
-            "request": request.model_dump(),
-            "results": results.model_dump(),
-            "plan": final.model_dump(),
-        },
+        output=final_output,
+        state=emit(ctx, completed),
     )
