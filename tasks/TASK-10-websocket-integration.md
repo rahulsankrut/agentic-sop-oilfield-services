@@ -9,6 +9,12 @@
 ---
 
 > **Spec-history note (2026-05-20):** This spec was originally titled "WebSocket integration" and assumed a `bidiInvokeReasoningEngine` WebSocket API. That assumption was wrong: Vertex AI Agent Engine streams over **Server-Sent Events (SSE)** on the A2A `message/stream` endpoint, not a separate WebSocket API. The deploy CLI flag (`--enable-streaming`) doesn't exist either — `A2aAgent` only accepts `HTTP+JSON` transport. This rewrite reflects the actual platform surface per `~/.claude/references/a2a-protocol-and-adk-integration.md` and `vertex-agent-engine-deploys.md`. Filename retained for cross-task references.
+>
+> **Architecture correction (2026-05-20, later):** An earlier version of this rewrite wrapped the **Orchestrator** in `A2aAgent` so the canvas could consume `/a2a/v1/message:stream`. That was over-engineered. `AdkApp.async_stream_query` (the body of the deployed `streamQuery` REST endpoint) already yields every ADK `Event` — including `event.actions.state_delta`, which is exactly where our `emit()` helper writes canvas events. **The Orchestrator stays `AdkApp`**; the canvas consumes `<resource>:streamQuery` directly and drains `state_delta.canvas_events` per chunk (tracking `lastEmittedCount` because our `emit()` returns the full cumulative list each turn).
+>
+> Procurement remains `A2aAgent` — that's the customer-facing **demonstration** of the A2A protocol, not an architectural requirement. The Orchestrator calls Procurement via `RemoteA2aAgent` (A2A client), which still exercises the protocol end-to-end without requiring the Orchestrator to be a server.
+>
+> `src/orchestrator_agent/runtime/agent_executor.py` is preserved but dormant — wired back in only if we ever choose to re-wrap the Orchestrator in `A2aAgent`.
 
 ---
 

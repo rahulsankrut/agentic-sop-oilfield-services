@@ -1,4 +1,18 @@
-"""A2A Agent Executor for the Capacity Orchestrator Agent.
+"""A2A Agent Executor for the Capacity Orchestrator Agent — DORMANT.
+
+**Currently unused.** The Orchestrator deploys as ``AdkApp`` (see
+``runtime/deploy.py``); the canvas consumes the deployed ``streamQuery``
+REST endpoint directly and extracts canvas events from each ADK
+``Event``'s ``actions.state_delta`` payload. No A2A wrap is needed on
+the inbound side.
+
+This executor is preserved in case we ever choose to re-wrap the
+Orchestrator in ``A2aAgent`` (e.g., for cross-agent A2A discovery or
+to demonstrate the protocol from both server and client sides). To
+reactivate: switch ``runtime/deploy.py`` back to the ``A2aAgent`` +
+``deploy_a2a_agent_engine`` pattern (matching ``src/procurement_approval
+_agent/runtime/deploy.py``) and import this executor as the
+``agent_executor_builder``.
 
 Bridges the A2A ``message:stream`` SSE endpoint to the underlying ADK 2.0
 Workflow. Translates each Workflow ADK ``Event`` into one or more A2A
