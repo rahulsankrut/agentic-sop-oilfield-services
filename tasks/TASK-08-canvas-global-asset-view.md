@@ -8,6 +8,24 @@
 
 ---
 
+> **Spec-history note (2026-05-20):** This spec originally specified
+> Mapbox GL JS 3.x for the cartographic base. The actual implementation
+> uses **Google Maps Platform via `@vis.gl/react-google-maps@^1.8`**
+> instead, to keep the canvas aligned with the rest of the Google stack
+> (single GCP billing surface, Cloud-managed Map IDs, geodesic Polylines
+> built-in). The shipped components in `canvas/src/components/canvas/`
+> are the source of truth; the Mapbox code snippets in Steps 4-7 below
+> are kept for historical context but should be read as the *previous*
+> design — the shipped code is functionally equivalent.
+>
+> Env var renamed: `NEXT_PUBLIC_MAPBOX_TOKEN` → `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
+> (plus optional `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID` for cloud-managed
+> styling). The trade-off: no true 3D globe (Google Maps is 2D Mercator);
+> the cargo-plane story works fine on 2D because the drama is the arc +
+> cost banner, not the curvature.
+
+---
+
 ## Context
 
 The Operations Canvas is a Next.js companion view that opens **inside** the Gemini Enterprise app for Personas 2 and 3. It is not a separate application; it is a Custom View embedded in the GE app shell. The customer sees one interface — GE — with the canvas appearing as a side panel when Maria or Tomas activates their scenario.

@@ -218,7 +218,7 @@ agentic-sop-oilfield-services/
 - **TypeScript 5.x**
 - **Tailwind CSS 4.x**
 - **shadcn/ui** components
-- **Mapbox GL JS 3.x** (preferred over Google Maps for vector styling control)
+- **Google Maps Platform** via `@vis.gl/react-google-maps` — aligns the canvas with the rest of the Google stack, exposes geodesic Polylines + cloud-managed Map IDs for styling, and bills against the same GCP project as Agent Engine
 - **Framer Motion** for animations
 - **Native WebSocket API** with reconnection logic for live event consumption
 

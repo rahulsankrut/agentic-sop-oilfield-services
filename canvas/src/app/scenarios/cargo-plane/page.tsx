@@ -8,9 +8,6 @@
  * back. Live mode (SSE-driven) lands in TASK-10.
  */
 
-import { useState } from "react";
-import type mapboxgl from "mapbox-gl";
-
 import { CanvasShell } from "@/components/layout/CanvasShell";
 import { GlobalMap } from "@/components/canvas/GlobalMap";
 import { AssetMarker } from "@/components/canvas/AssetMarker";
@@ -22,8 +19,6 @@ import { useKeyboardControls } from "@/hooks/useKeyboardControls";
 import { cargoPlaneBeats } from "@/data/demoScenarios";
 
 export default function CargoPlaneScenarioPage() {
-  const [map, setMap] = useState<mapboxgl.Map | null>(null);
-
   const scenario = useScenario({ beats: cargoPlaneBeats });
   const { state, currentBeat, currentBeatIndex, totalBeats } = scenario;
 
@@ -51,41 +46,32 @@ export default function CargoPlaneScenarioPage() {
       }
       canvas={
         <>
-          <GlobalMap
-            center={state.mapCenter}
-            zoom={state.mapZoom}
-            onMapReady={setMap}
-          />
+          <GlobalMap center={state.mapCenter} zoom={state.mapZoom}>
+            {state.assets.map((asset) => (
+              <AssetMarker
+                key={asset.id}
+                id={asset.id}
+                location={asset.location}
+                state={asset.state}
+                label={asset.label}
+                pulse={asset.pulse}
+                size={asset.size}
+              />
+            ))}
 
-          {/* Asset markers attach themselves to the map via the imperative
-              ref; rendering them as children of the page so React owns the
-              lifecycle. */}
-          {state.assets.map((asset) => (
-            <AssetMarker
-              key={asset.id}
-              id={asset.id}
-              location={asset.location}
-              state={asset.state}
-              label={asset.label}
-              pulse={asset.pulse}
-              size={asset.size}
-              map={map}
-            />
-          ))}
-
-          {state.arcs.map((arc) => (
-            <LogisticsArc
-              key={arc.id}
-              id={arc.id}
-              from={arc.from}
-              to={arc.to}
-              color={arc.color}
-              dashed={arc.dashed}
-              animateDraw={arc.animateDraw}
-              opacity={arc.opacity}
-              map={map}
-            />
-          ))}
+            {state.arcs.map((arc) => (
+              <LogisticsArc
+                key={arc.id}
+                id={arc.id}
+                from={arc.from}
+                to={arc.to}
+                color={arc.color}
+                dashed={arc.dashed}
+                animateDraw={arc.animateDraw}
+                opacity={arc.opacity}
+              />
+            ))}
+          </GlobalMap>
 
           <CostRollupBanner
             visible={state.costBanner.visible}

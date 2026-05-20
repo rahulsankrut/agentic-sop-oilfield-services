@@ -150,11 +150,9 @@
   }
 }
 
-/* Mapbox dark style overrides for the cartographic context */
-.mapboxgl-ctrl-attrib {
-  background: rgba(0, 0, 0, 0.6);
-  color: rgba(255, 255, 255, 0.5);
-}
-.mapboxgl-ctrl-attrib a {
-  color: rgba(255, 255, 255, 0.7);
+/* Google Maps platform — hide the default focus ring around the map
+   container so the dark style isn't broken by a white outline when the
+   demoer keyboards through the page. */
+.gm-style :focus {
+  outline: none !important;
 }

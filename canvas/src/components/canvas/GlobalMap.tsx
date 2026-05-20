@@ -1,84 +1,137 @@
 "use client";
 
+import { ReactNode, useCallback, useEffect } from "react";
+import { APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
+
 /**
- * GlobalMap — Mapbox dark globe canvas for the Persona 3 Operations Canvas.
+ * GlobalMap — Google Maps Platform canvas base.
  *
- * Renders a full-bleed 3D globe centered on West Africa for the cargo-plane
- * scenario. The map instance is published back to the parent via
- * `onMapReady` so sibling components can imperatively add markers and arcs
- * (Mapbox markers live outside React's render tree).
+ * Wrapper around ``@vis.gl/react-google-maps``'s `<Map>` with a dark
+ * cartographic style approximating the demo aesthetic. Children render
+ * inside the map provider so they can call `useMap()` and attach
+ * markers / polylines via the Maps JS API.
  *
- * Operator setup: set `NEXT_PUBLIC_MAPBOX_TOKEN` in `canvas/.env.local` (or
- * the deploy env). Without it, Mapbox returns 401 on tile requests and the
- * canvas renders blank. The token is bundled into the client JS, so it must
- * be a URL-restricted token in production (see TASK-08 Common pitfalls).
- *
- * The bang assertion below is intentional: the demo deploy always provides
- * the env var; for syntax-only checks the value is not consulted.
+ * Required env: ``NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`` (baked into client
+ * JS at build time; restrict to the canvas domain in the GCP Console).
+ * Optional: ``NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`` for cloud-managed
+ * styling (preferred over the inline ``styles`` array in production).
  */
 
-import { useEffect, useRef } from "react";
-import mapboxgl from "mapbox-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
+const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID;
 
-// DEMO NARRATION (Beat 0/8): "This is Maria's Operations Canvas. The map shows
-// every Tool X and Tool X variant across her West Africa portfolio."
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
+// Inline dark cartographic style. Mirrors the visual feel of Mapbox's
+// dark-v11 — muted blues for water, dark slate for land, dimmed labels.
+// Used when NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID is unset (dev fallback).
+const DARK_STYLES: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#11172a" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#11172a" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0a0e1a" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#3b4253" }] },
+  { featureType: "administrative.country", elementType: "geometry.stroke", stylers: [{ color: "#1f2937" }] },
+  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#1a2238" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ visibility: "off" }] },
+  { featureType: "poi", elementType: "all", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", elementType: "all", stylers: [{ visibility: "off" }] },
+];
 
-export interface GlobalMapProps {
-  /** Map center as [lng, lat]. Defaults to Africa-centered for the cargo-plane scenario. */
-  center?: [number, number];
-  /** Initial zoom level. */
+interface GlobalMapProps {
+  center?: [number, number]; // [lng, lat] — kept lng-first to match the rest of the codebase
   zoom?: number;
-  /** Callback fired once the Mapbox style finishes loading; parent uses this to attach markers/arcs. */
-  onMapReady?: (map: mapboxgl.Map) => void;
+  onMapReady?: (map: google.maps.Map) => void;
+  children?: ReactNode;
 }
 
+// DEMO NARRATION: "The canvas is a Google Maps Platform map — same
+// engine the operator sees in Google Earth, same Cloud-managed Map ID
+// the customer's own GIS team can edit. Markers and arcs are React
+// components that attach via the Maps JS API."
 export function GlobalMap({
   center = [15, 5], // Africa-centered for the cargo-plane scenario
   zoom = 3,
   onMapReady,
+  children,
 }: GlobalMapProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
+  if (!API_KEY) {
+    return <MapMissingKeyOverlay />;
+  }
+
+  return (
+    <APIProvider apiKey={API_KEY}>
+      <div className="absolute inset-0">
+        <Map
+          mapId={MAP_ID}
+          styles={MAP_ID ? undefined : DARK_STYLES}
+          defaultCenter={{ lat: center[1], lng: center[0] }}
+          defaultZoom={zoom}
+          disableDefaultUI
+          gestureHandling="greedy"
+          backgroundColor="#0a0e1a"
+        >
+          <MapHandoff onMapReady={onMapReady} center={center} zoom={zoom} />
+          {children}
+        </Map>
+      </div>
+    </APIProvider>
+  );
+}
+
+/**
+ * Forwards the Maps JS API map instance up to the parent and animates
+ * the camera when center / zoom change between scenario beats. Rendered
+ * INSIDE <Map> so ``useMap()`` resolves to the right instance.
+ */
+function MapHandoff({
+  onMapReady,
+  center,
+  zoom,
+}: {
+  onMapReady?: (m: google.maps.Map) => void;
+  center: [number, number];
+  zoom: number;
+}) {
+  const map = useMap();
+
+  const ready = useCallback(() => {
+    if (map && onMapReady) onMapReady(map);
+  }, [map, onMapReady]);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    ready();
+  }, [ready]);
 
-    const map = new mapboxgl.Map({
-      container: containerRef.current,
-      style: "mapbox://styles/mapbox/dark-v11",
-      center,
-      zoom,
-      // 3D globe projection — gives the cargo-plane drama its visual scale.
-      // Mapbox GL 3.x accepts either a string shorthand or a
-      // ProjectionSpecification object for `projection`.
-      projection: "globe",
-      attributionControl: false,
-    });
+  // Pan / zoom when the active beat changes. Google Maps ``panTo`` is the
+  // smooth move; ``setZoom`` is instant — for the demo's pace that's fine.
+  useEffect(() => {
+    if (!map) return;
+    map.panTo({ lat: center[1], lng: center[0] });
+    map.setZoom(zoom);
+  }, [map, center, zoom]);
 
-    map.on("load", () => {
-      // Fog/atmosphere for the globe effect — matches the dark-v11 palette.
-      map.setFog({
-        color: "rgb(20, 27, 53)",
-        "high-color": "rgb(36, 92, 223)",
-        "horizon-blend": 0.02,
-        "space-color": "rgb(11, 11, 25)",
-        "star-intensity": 0.6,
-      });
-      mapRef.current = map;
-      onMapReady?.(map);
-    });
+  return null;
+}
 
-    // React Strict Mode in dev double-mounts effects; without this cleanup
-    // Mapbox throws "Map container is already initialized".
-    return () => {
-      map.remove();
-      mapRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Full-bleed inside the CanvasShell's relative <main> column.
-  return <div ref={containerRef} className="absolute inset-0" />;
+function MapMissingKeyOverlay() {
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center"
+      style={{ background: "var(--color-bg-base)" }}
+    >
+      <div className="max-w-md rounded-lg border border-amber-400/30 bg-amber-500/5 p-6 text-amber-100">
+        <div className="mb-2 text-xs uppercase tracking-[0.18em] text-amber-300/70">
+          Map disabled
+        </div>
+        <div className="text-sm leading-relaxed">
+          Set{" "}
+          <code className="rounded bg-black/40 px-1">
+            NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+          </code>{" "}
+          in <code className="rounded bg-black/40 px-1">canvas/.env.local</code>{" "}
+          to render the canvas. Markers and arcs will still render on top once
+          the key is present.
+        </div>
+      </div>
+    </div>
+  );
 }

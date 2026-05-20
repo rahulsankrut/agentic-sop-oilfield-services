@@ -15,12 +15,16 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build-time Mapbox token (baked into client JS). Override via Cloud Build
-# substitution or `docker build --build-arg`. The actual demo deploy MUST
-# use a URL-restricted token; see canvas/src/components/canvas/GlobalMap.tsx
-# for the runtime constraint.
-ARG NEXT_PUBLIC_MAPBOX_TOKEN
-ENV NEXT_PUBLIC_MAPBOX_TOKEN=$NEXT_PUBLIC_MAPBOX_TOKEN
+# Build-time Google Maps Platform API key (baked into client JS). Override
+# via Cloud Build substitution or `docker build --build-arg`. The demo
+# deploy MUST use an HTTP-referrer-restricted key; see
+# canvas/src/components/canvas/GlobalMap.tsx for the runtime constraint.
+# Optional NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID selects a cloud-managed map
+# style (preferred over the inline dark style in production).
+ARG NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+ENV NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=$NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+ARG NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID
+ENV NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID=$NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID
 
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
