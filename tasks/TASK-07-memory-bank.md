@@ -10,10 +10,16 @@
 
 > **Spec-history note (2026-05-20):** This spec originally framed the work as creating six "Memory Profile" documents (one per persona) plus a `Workflow(callbacks={...})` hook and an `auto_load_memory_profile` framework callable. That mental model conflicts with the real API:
 >
-> - Memory Bank is **topic-based**, not profile-based. You declare *topics* at deploy time (`MemoryBankCustomizationConfig`), then memories are individual structured records keyed by `user_id` and attached to a topic. There is no "Profile" document. Per-persona state is modeled as *seed memories* written into the appropriate topics for that `user_id`.
+> - Memory Bank topics declared at deploy time (`MemoryBankCustomizationConfig`) guide the **extractor** that runs during `auto_save_memories` — they tell Memory Bank what to capture from session transcripts. They are NOT a write-time parameter for direct seeding, and NOT a read-time filter. Per-persona state is modeled as *seed memories* written via `add_memory(...)` into the appropriate agent's Memory Bank backend.
 > - ADK 2.0 `Workflow` has no `callbacks=` parameter; callbacks live on individual `LlmAgent`s (`before_agent_callback`, `after_agent_callback`). There is no `google.adk.callbacks` module with framework-provided memory hooks.
-> - `auto_save_memories` is a *project-defined* callback (verbatim pattern from demo-2); the repo's `src/orchestrator_agent/services/memory_manager.py` already implements it correctly.
-> - Memory reads at run-time use the built-in `preload_memory` tool or a direct `VertexAiMemoryBankService.search_memories(...)` call from a `before_agent_callback`.
+> - `auto_save_memories` is a *project-defined* callback (verbatim pattern from demo-2); the repo's `src/<agent>/services/memory_manager.py` already implements it correctly.
+> - Memory reads at run-time use the built-in `PreloadMemoryTool()` (instantiated, then added to `tools=`). It runs automatically on every LLM turn, takes the user's prompt as the search query, and calls `tool_context.search_memory(query)` (singular `search_memory`, NOT `search_memories`) on the deployed Memory Bank backend.
+>
+> Verified-good SDK surface as of 2026-05-20 (via `inspect.getsource(VertexAiMemoryBankService)` in `venv-deploy-310/`):
+> - `add_memory(*, app_name: str, user_id: str, memories: Sequence[MemoryEntry], custom_metadata=None) -> None` — direct seed path
+> - `add_session_to_memory(session: Session) -> None` — used by `auto_save_memories`
+> - `add_events_to_memory(*, app_name, user_id, events, session_id=None, ...) -> None`
+> - `search_memory(*, app_name: str, user_id: str, query: str) -> SearchMemoryResponse`
 >
 > This rewrite reflects the actual surface per `~/.claude/references/vertex-agent-engine-deploys.md` §Memory Bank and `~/.claude/references/google-adk-2.0.md` §Memory Bank.
 
@@ -113,17 +119,21 @@ topic=)`; write happens automatically via the
 
 ### Step 3 — Build the persona seed-memories script
 
-The script writes 5-10 individual memories per persona into the right topics, using the deployed Agent Engine resources' Memory Bank backends.
+The script writes 5-10 individual memories per persona into the right Memory Bank backend (one backend per deployed agent). Memories are stored as `MemoryEntry` objects wrapping a `genai.types.Content`. Routing to the right agent backend uses `TOPIC_TO_AGENT_ENV` — the topic label is the *metadata* we use to pick which backend to write to, but the topic is NOT a write-time API parameter (topic labels only matter to the auto-save extractor).
+
+**Seed content should be natural-language statements** optimized for semantic search, because `PreloadMemoryTool()` calls `tool_context.search_memory(user_query)` with the user's actual prompt as the query string. Avoid structured `key=value` strings — those are for the extractor (auto-save path), not the seed path.
 
 `memory_bank/seed_memories.py`:
 
 ```python
 """Seed Memory Bank with persona-specific starting memories.
 
-Re-runnable: existing memories are not duplicated because Memory Bank
-deduplicates on canonical content. Run after all four agents are deployed
-(so AGENT_ENGINE_IDs are known) — each persona's memories land in the
-topics declared by the appropriate agent.
+Re-runnable: re-runs append additional memory entries (Memory Bank does
+not deduplicate on canonical content). For a clean reset, run
+`make reset-memory-bank` (a future Makefile target that calls Memory
+Bank's delete endpoints) before re-seeding.
+
+Run after all four agents are deployed (so AGENT_ENGINE_IDs are known).
 
 Usage:
     venv-deploy-310/bin/python -m memory_bank.seed_memories
@@ -138,243 +148,279 @@ from typing import TypedDict
 
 from dotenv import load_dotenv
 from google.adk.memory import VertexAiMemoryBankService
+from google.adk.memory.memory_entry import MemoryEntry
+from google.genai import types
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 load_dotenv()
 logger = logging.getLogger(__name__)
 
 
-class Memory(TypedDict):
-    """A single memory record keyed by user_id under a topic."""
+class Seed(TypedDict):
+    """A single memory record to seed.
+
+    `topic` is metadata used by TOPIC_TO_AGENT_ENV to route to the right
+    Memory Bank backend; it is NOT passed to add_memory (topics matter only
+    for the extractor on the auto-save path).
+    """
     user_id: str
-    topic: str          # one of the labels documented in memory_bank/topics.md
-    content: str        # natural-language record Memory Bank's extractor stored
+    topic: str
+    content: str  # natural-language statement optimized for semantic search
+
+
+# Map each app_name to the env var holding its Agent Engine resource name.
+# app_name must match the explicit AdkApp(app_name=...) set in the deploy
+# script for each agent (see src/<agent>/runtime/deploy.py).
+APP_NAME_TO_ENV: dict[str, str] = {
+    "capacity_orchestrator_agent":  "ORCHESTRATOR_AGENT_RESOURCE_NAME",
+    "procurement_approval_agent":   "PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME",
+    "forecast_review_agent":        "FORECAST_REVIEW_AGENT_RESOURCE_NAME",
+    "capacity_planning_agent":      "CAPACITY_PLANNING_AGENT_RESOURCE_NAME",
+}
+
+# Topic → app_name that owns it (declared in that agent's memory_manager.py).
+TOPIC_TO_APP: dict[str, str] = {
+    "sourcing_history":     "capacity_orchestrator_agent",
+    "planner_preferences":  "capacity_orchestrator_agent",
+    "equivalence_patterns": "capacity_orchestrator_agent",
+    "approval_history":     "procurement_approval_agent",
+    "blocker_patterns":     "procurement_approval_agent",
+    "rationale_patterns":   "forecast_review_agent",
+    "leader_profiles":      "forecast_review_agent",
+    "risk_tolerance":       "capacity_planning_agent",
+    "buffer_outcomes":      "capacity_planning_agent",
+}
 
 
 # ----------------------------------------------------------------------------
-# Persona seed data — natural-language records that Memory Bank stores
-# verbatim. Match the topic's description format so the extractor surfaces
-# the record cleanly at read time.
+# Persona seed data — natural-language statements optimized for search.
+# Each statement should match how a user might phrase a question:
+#   "What's my region?"           -> region statement returned
+#   "What customers do I cover?"  -> customer portfolio statement returned
 # ----------------------------------------------------------------------------
 
-MARIA_MEMORIES: list[Memory] = [
+MARIA_SEEDS: list[Seed] = [
     {
         "user_id": "maria-occ-planner-west-africa",
         "topic": "planner_preferences",
         "content": (
-            "Preference: planner=maria, type=basin, value=West Africa OCC. "
-            "Authorization tier: Tier 2 (up to $500K self-approve). "
-            "Default transit modes: sea_freight, regional_air_charter."
+            "Maria Adeyemi is the Operations Control Center Planner for the "
+            "West Africa basin. Primary hubs: Lagos (Nigeria), Luanda (Angola), "
+            "Port Harcourt (Nigeria). Authorization tier: Tier 2 with $500K "
+            "self-approve threshold. Prefers imperial units, English (en-US)."
+        ),
+    },
+    {
+        "user_id": "maria-occ-planner-west-africa",
+        "topic": "planner_preferences",
+        "content": (
+            "Maria's customer portfolio: Chevron-Lagos Deepwater (next milestone: "
+            "Tool X delivery on 2026-05-22) and Shell-Angola Block 17 (workforce "
+            "rotation on 2026-06-01)."
         ),
     },
     {
         "user_id": "maria-occ-planner-west-africa",
         "topic": "sourcing_history",
         "content": (
-            "Sourcing: asset=Tool X-V7, basin=West Africa, savings_usd=474000. "
-            "Cargo charter from Australia (Tool X) was the naive plan; pivoted "
-            "to Tool X-V7 ex-Lagos via Knowledge Catalog equivalence lookup. "
-            "Chevron-Lagos Deepwater contract, approved 2026-05-15."
+            "Last sourcing decision (approved 2026-05-15, Chevron-Lagos Deepwater): "
+            "Tool X-V7 ex-Lagos chosen as functional substitute for Tool X. The "
+            "naive plan was an Australia→Luanda cargo charter; equivalence lookup "
+            "against InTouch §3.2 surfaced Tool X-V7 available at Lagos at 50km "
+            "distance. Avoided $474K of cargo-plane cost."
         ),
     },
     {
         "user_id": "maria-occ-planner-west-africa",
         "topic": "equivalence_patterns",
         "content": (
-            "Equivalence: Tool X -> Tool X-V7, customer=Chevron Lagos, "
-            "spec=InTouch 3.2. Confidence 0.92. Variant approved for completion-"
-            "phase use under same operational envelope."
-        ),
-    },
-    {
-        "user_id": "maria-occ-planner-west-africa",
-        "topic": "planner_preferences",
-        "content": (
-            "Customer portfolio: Chevron-Lagos Deepwater (next milestone: Tool X "
-            "delivery 2026-05-22), Shell-Angola Block 17 (workforce rotation "
-            "2026-06-01). Units: imperial. Language: en-US."
+            "For Chevron-Lagos contracts, Tool X-V7 is an accepted functional "
+            "substitute for Tool X (Knowledge Catalog confidence 0.92, grounded in "
+            "InTouch §3.2). Substitution approved for completion-phase use under "
+            "the same operational envelope."
         ),
     },
 ]
 
 
-TOMAS_MEMORIES: list[Memory] = [
+TOMAS_SEEDS: list[Seed] = [
     {
         "user_id": "tomas-fleet-scheduler-permian",
         "topic": "planner_preferences",
         "content": (
-            "Preference: planner=tomas, type=basin, value=Permian / Eagle Ford. "
-            "Risk tolerance: conservative (prefers higher buffer over late-start "
-            "exposure). Units: imperial."
+            "Tomas Reyes is the Fleet Scheduler for the Permian basin (with Eagle "
+            "Ford as a secondary). Hubs: Midland and Odessa, Texas. He runs "
+            "conservative on buffer tradeoffs — prefers higher buffer over "
+            "late-start exposure. Units: imperial."
         ),
     },
     {
         "user_id": "tomas-fleet-scheduler-permian",
         "topic": "risk_tolerance",
         "content": (
-            "Buffer tradeoff: planner=tomas, prefers buffer_pct over late_start_cost "
-            "at 1.5x ratio. Q2 2026 ExxonMobil Permian frac pump fleet: "
-            "approved 12% buffer."
+            "Tomas weights buffer_pct vs late_start_cost at roughly 1.5x — he "
+            "accepts ~50% more idle cost to avoid a late start. For Q2 2026 "
+            "ExxonMobil Permian frac pump fleet, he approved a 12% buffer."
         ),
     },
     {
         "user_id": "tomas-fleet-scheduler-permian",
         "topic": "buffer_outcomes",
         "content": (
-            "Outcome: buffer_pct=12, scenario=ExxonMobil-Permian-Q2, "
-            "on_time_actual=true, idle_hours=210. Slight over-buffer; planner "
-            "noted in retro that 10% would have sufficed."
+            "Q2 2026 ExxonMobil Permian frac pump fleet: 12% buffer delivered "
+            "on-time start with 210 idle hours. Slight over-buffer; in retro "
+            "Tomas noted 10% would have sufficed."
         ),
     },
 ]
 
 
-DAVID_MEMORIES: list[Memory] = [
+DAVID_SEEDS: list[Seed] = [
     {
         "user_id": "david-basin-leader-west-africa",
         "topic": "leader_profiles",
         "content": (
-            "Leader: david, basin=West Africa. Override pattern: aggressive "
-            "downward revisions when geological survey signals delay (Q3 2026 "
-            "Chevron-Lagos -18% vs ML)."
+            "David Okeke is the Basin Leader for West Africa. Hubs: Lagos and "
+            "Port Harcourt. He overrides ML forecasts aggressively when geological "
+            "survey signals indicate delay — e.g., Q3 2026 Chevron-Lagos forecast "
+            "was revised -18% versus the ML baseline."
         ),
     },
     {
         "user_id": "david-basin-leader-west-africa",
         "topic": "rationale_patterns",
         "content": (
-            "Tag: geological_survey_delay. Frequency: high (3 overrides in last "
-            "2 quarters). Predictive of: 14-day average shift in actual start "
-            "vs ML forecast."
+            "David's most common override rationale is the geological_survey_delay "
+            "tag (3 overrides in the last 2 quarters). When this tag appears, the "
+            "actual start date typically shifts ~14 days later than the ML forecast."
         ),
     },
 ]
 
 
-PRIYA_MEMORIES: list[Memory] = [
+PRIYA_SEEDS: list[Seed] = [
     {
         "user_id": "priya-operations-vp-global",
         "topic": "planner_preferences",
         "content": (
-            "Preference: planner=priya, role=Operations VP, scope=Global. "
-            "Views: cross-basin rollups, customer-level revenue attainment, "
-            "fleet utilization vs target. Units: metric."
+            "Priya is the Operations VP with global scope. She works in "
+            "cross-basin rollups: commit attainment by customer, fleet utilization "
+            "versus target, basin-level revenue attainment. Units: metric."
         ),
     },
 ]
 
 
-RAFAEL_MEMORIES: list[Memory] = [
+RAFAEL_SEEDS: list[Seed] = [
     {
         "user_id": "rafael-citizen-dev-permian",
         "topic": "planner_preferences",
         "content": (
-            "Preference: planner=rafael, role=Citizen Developer, basin=Permian. "
-            "Builds custom Gemini Enterprise extensions; prefers Knowledge "
-            "Catalog metadata visibility in agent outputs."
+            "Rafael is a citizen developer focused on the Permian basin. He builds "
+            "Gemini Enterprise extensions and prefers Knowledge Catalog metadata "
+            "to be visible in agent outputs (canonical_id, aspect references, "
+            "confidence scores)."
         ),
     },
 ]
 
 
-AYESHA_MEMORIES: list[Memory] = [
+AYESHA_SEEDS: list[Seed] = [
     {
         "user_id": "ayesha-audit-director-global",
         "topic": "planner_preferences",
         "content": (
-            "Preference: planner=ayesha, role=Audit Director, scope=Global. "
-            "Auditing focus: procurement-approval decisions over $500K threshold, "
-            "Model Armor blocked-attack incidents, Agent Identity SPIFFE chain."
+            "Ayesha is the Audit Director with global scope. Her audit focus: "
+            "procurement-approval decisions above the $500K threshold, Model "
+            "Armor blocked-attack incidents, and the Agent Identity SPIFFE chain "
+            "across A2A calls."
         ),
     },
 ]
 
 
-ALL_MEMORIES: list[Memory] = [
-    *MARIA_MEMORIES,
-    *TOMAS_MEMORIES,
-    *DAVID_MEMORIES,
-    *PRIYA_MEMORIES,
-    *RAFAEL_MEMORIES,
-    *AYESHA_MEMORIES,
+ALL_SEEDS: list[Seed] = [
+    *MARIA_SEEDS, *TOMAS_SEEDS, *DAVID_SEEDS,
+    *PRIYA_SEEDS, *RAFAEL_SEEDS, *AYESHA_SEEDS,
 ]
 
 
 # ----------------------------------------------------------------------------
-# Writer — uses the deployed agent's Memory Bank backend per topic
+# Writer — VertexAiMemoryBankService.add_memory(*, app_name, user_id, memories)
 # ----------------------------------------------------------------------------
 
-# Map each topic to the agent that declared it. Topic -> AGENT_ENGINE_ID env var.
-TOPIC_TO_AGENT_ENV: dict[str, str] = {
-    "sourcing_history": "ORCHESTRATOR_AGENT_ENGINE_ID",
-    "planner_preferences": "ORCHESTRATOR_AGENT_ENGINE_ID",
-    "equivalence_patterns": "ORCHESTRATOR_AGENT_ENGINE_ID",
-    "approval_history": "PROCUREMENT_APPROVAL_AGENT_ENGINE_ID",
-    "blocker_patterns": "PROCUREMENT_APPROVAL_AGENT_ENGINE_ID",
-    "rationale_patterns": "FORECAST_REVIEW_AGENT_ENGINE_ID",
-    "leader_profiles": "FORECAST_REVIEW_AGENT_ENGINE_ID",
-    "risk_tolerance": "CAPACITY_PLANNING_AGENT_ENGINE_ID",
-    "buffer_outcomes": "CAPACITY_PLANNING_AGENT_ENGINE_ID",
-}
 
-
-def _agent_engine_id_for(topic: str) -> str | None:
-    """Return the AGENT_ENGINE_ID for the agent that declared this topic."""
-    env_key = TOPIC_TO_AGENT_ENV.get(topic)
+def _agent_engine_id_for(app_name: str) -> str | None:
+    """Resolve the deployed Reasoning Engine numeric ID for an app_name."""
+    env_key = APP_NAME_TO_ENV.get(app_name)
     if env_key is None:
-        logger.warning("No agent registered for topic %r — skipping", topic)
+        logger.warning("Unknown app %r — skipping", app_name)
         return None
     value = os.environ.get(env_key)
     if not value:
-        logger.warning("%s not set in env — skipping topic %r", env_key, topic)
+        logger.warning("%s not set — skipping seed for app %r", env_key, app_name)
         return None
-    # Resource names look like projects/.../reasoningEngines/<id>; strip prefix.
-    return value.rsplit("/", 1)[-1]
+    return value.rsplit("/", 1)[-1]  # strip projects/.../reasoningEngines/ prefix
 
 
-async def seed_one(memory: Memory) -> None:
+async def seed_one(seed: Seed) -> None:
     project = os.environ["GOOGLE_CLOUD_PROJECT"]
     location = os.environ.get("AGENT_ENGINE_LOCATION", "us-central1")
-    agent_engine_id = _agent_engine_id_for(memory["topic"])
+    app_name = TOPIC_TO_APP.get(seed["topic"])
+    if app_name is None:
+        logger.warning("No app owns topic %r — skipping", seed["topic"])
+        return
+    agent_engine_id = _agent_engine_id_for(app_name)
     if agent_engine_id is None:
         return
 
     service = VertexAiMemoryBankService(
-        project=project,
-        location=location,
-        agent_engine_id=agent_engine_id,
+        project=project, location=location, agent_engine_id=agent_engine_id,
     )
-    # DEMO NARRATION: "We're populating Memory Bank topic by topic. Each
-    # persona gets a handful of seed memories — region, customer portfolio,
-    # past decisions — under the topics the agent declared at deploy time.
-    # No 'profile document' to manage; just typed memories the agent's
-    # preload_memory tool will surface on first turn."
-    await service.create_memory(
-        user_id=memory["user_id"],
-        topic=memory["topic"],
-        content=memory["content"],
+
+    # DEMO NARRATION: "We're populating Memory Bank with natural-language seed
+    # memories per persona. PreloadMemoryTool runs automatically on every LLM
+    # turn — it takes the user's prompt as the search query and pulls matching
+    # memories into the prompt context. No 'profile document' to manage."
+    memory_entry = MemoryEntry(
+        content=types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=seed["content"])],
+        ),
+    )
+    await service.add_memory(
+        app_name=app_name,
+        user_id=seed["user_id"],
+        memories=[memory_entry],
     )
     logger.info(
-        "Seeded memory: user=%s topic=%s",
-        memory["user_id"], memory["topic"],
+        "Seeded: app=%s user=%s topic=%s",
+        app_name, seed["user_id"], seed["topic"],
     )
 
 
 async def main() -> None:
-    for mem in ALL_MEMORIES:
-        await seed_one(mem)
-    logger.info("Memory Bank seeding complete (%d memories).", len(ALL_MEMORIES))
+    for seed in ALL_SEEDS:
+        await seed_one(seed)
+    logger.info("Memory Bank seeding complete (%d memories).", len(ALL_SEEDS))
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-**Note on the exact `create_memory` signature.** `VertexAiMemoryBankService` in `google-adk>=2.0.0` exposes `add_session_to_memory(session)` for the implicit write path (the `auto_save_memories` callback uses this). Direct seeding may go through `create_memory(user_id=, topic=, content=)` OR through the raw REST `projects/.../reasoningEngines/.../memories` endpoint depending on SDK version. **Verify with `inspect.getsource(VertexAiMemoryBankService)` from `venv-deploy-310/`** before running; if the method name has drifted, switch to the REST call directly per the auth/example in `~/.claude/references/gemini-enterprise-agent-platform.md` §REST API patterns. Do not invent method names — read the source.
+**API verified 2026-05-20 via `inspect.getsource(VertexAiMemoryBankService)` in `venv-deploy-310/`.** Signatures (subject to change in future `google-adk` releases — re-verify if you see method-not-found errors):
+
+- `add_memory(*, app_name: str, user_id: str, memories: Sequence[MemoryEntry], custom_metadata: Mapping[str, object] | None = None) -> None`
+- `add_session_to_memory(session: Session) -> None`
+- `search_memory(*, app_name: str, user_id: str, query: str) -> SearchMemoryResponse` (singular `memory`, not `memories`)
+- `MemoryEntry` lives at `google.adk.memory.memory_entry.MemoryEntry`; its `content` field is a `google.genai.types.Content`.
 
 ### Step 4 — Wire `preload_memory` into the first LLM node of each agent
 
-ADK 2.0 ships a built-in `preload_memory` tool (per `~/.claude/references/google-adk-2.0.md` §Built-in tools). Add it to the `tools=` list of every agent's `LlmAgent` (or in the Orchestrator's case, every LLM node placed in `edges`). The tool calls `VertexAiMemoryBankService.search_memories(user_id=<session.user_id>)` and injects the results into the prompt context BEFORE the LLM is invoked.
+ADK 2.0 ships a `PreloadMemoryTool` class (per `~/.claude/references/google-adk-2.0.md` §Built-in tools). The module exports an *instance* called `preload_memory` at `google.adk.tools.preload_memory`. Add it to the `tools=` list of every agent's `LlmAgent` (and in the Orchestrator's case, every LLM node placed in `edges`).
+
+`PreloadMemoryTool` runs automatically on every LLM turn — it does NOT need to be called by the model. It reads the user's current prompt, calls `tool_context.search_memory(user_query)` against the deployed Memory Bank backend, and injects matched memories into the prompt context BEFORE the LLM is invoked.
 
 For the Orchestrator's `equivalence_lookup` LLM node (`src/orchestrator_agent/core/nodes/equivalence_lookup.py`):
 
@@ -385,6 +431,7 @@ from google.adk.tools import preload_memory
 from ...prompts import EQUIVALENCE_LOOKUP_INSTRUCTION
 from ....schemas import EquivalentAssetCandidate
 from ....utils.global_gemini import GlobalGemini
+from ...services.memory_manager import auto_save_memories
 
 equivalence_lookup_agent = Agent(
     name="equivalence_lookup",
@@ -399,21 +446,49 @@ equivalence_lookup_agent = Agent(
 
 Same pattern for `sourcing_logistics`, `revise_plan`, and the plan_evaluator. For the standalone agents (Procurement, Forecast Review, Capacity Planning), add `preload_memory` to their root `LlmAgent`'s `tools=`.
 
-**Memory read happens implicitly when the LLM decides to call `preload_memory`.** If you want it guaranteed-called on every turn, add a `before_agent_callback` that hits `search_memories` directly and writes the results into `ctx.state` for downstream nodes to read:
+**Memory read happens automatically every LLM turn — no explicit code path needed.** `PreloadMemoryTool.process_llm_request` (verified at `google.adk.tools.preload_memory_tool`) runs as a `process_llm_request` hook, so it fires before the LLM call without the agent's instruction needing to mention it.
+
+If you also want memories surfaced to function (non-LLM) nodes — like `parse_request` — wire a `before_agent_callback` on the Orchestrator's first LLM node that hits `search_memory` directly and writes the results into session state:
 
 ```python
 # src/orchestrator_agent/core/nodes/preload.py
+from google.adk.agents.callback_context import CallbackContext
+
+from ..services.memory_manager import create_memory_service
+
+
 async def load_persona_memories(callback_context: CallbackContext) -> None:
-    """Eagerly fetch persona memories at the start of every Orchestrator turn."""
-    service = create_memory_service()  # from services/memory_manager.py
+    """Eagerly fetch persona memories and stash them into session state.
+
+    Called as a before_agent_callback on the Orchestrator's first LLM node.
+    Function nodes that ran before this point won't see persona_memories;
+    only nodes after the first LLM call will.
+    """
+    service = create_memory_service()
     if service is None:
         return
-    user_id = callback_context._invocation_context.session.user_id
-    memories = await service.search_memories(user_id=user_id)
-    callback_context.state["persona_memories"] = [m.content for m in memories]
+    invocation = callback_context._invocation_context
+    user_id = invocation.session.user_id
+    user_query = invocation.user_content.parts[0].text if invocation.user_content else ""
+
+    response = await service.search_memory(
+        app_name=invocation.session.app_name,
+        user_id=user_id,
+        query=user_query,
+    )
+    callback_context.state["persona_memories"] = [
+        _extract_text(m) for m in (response.memories or [])
+    ]
+
+
+def _extract_text(memory) -> str:
+    """Pull the text from a MemoryEntry's Content.parts."""
+    if not memory.content or not memory.content.parts:
+        return ""
+    return memory.content.parts[0].text or ""
 ```
 
-Then the first function node (`parse_request`) can read `ctx.state["persona_memories"]` and fold them into the parsed `CapacityGapRequest` defaults.
+Then `parse_request` (a function node that runs BEFORE the first LLM node) needs to call `search_memory` itself, OR be moved AFTER the first LLM node so it can read `ctx.state["persona_memories"]`. Discuss with the user before changing the workflow graph topology — the cleaner option is usually to do the lookup in `parse_request` directly.
 
 ### Step 5 — Use loaded memories in `parse_request`
 
