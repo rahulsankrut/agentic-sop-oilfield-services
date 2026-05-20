@@ -17,8 +17,8 @@ from google.genai.types import GenerateContentConfig, ThinkingConfig
 from agents.schemas import SourcingPlan
 from agents.utils.global_gemini import GlobalGemini
 
-from ..services.memory_manager import auto_save_memories
 from ..prompts import REVISE_PLAN_INSTRUCTION
+from ..services.memory_manager import auto_save_memories
 
 _MODEL_NAME = os.getenv("REVISE_PLAN_MODEL", "gemini-3.1-pro-preview")
 

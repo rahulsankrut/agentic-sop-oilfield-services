@@ -4,7 +4,7 @@
 # targets assume the venv is active (per CLAUDE.md, we use venv/ + Poetry,
 # not uv).
 
-.PHONY: help setup auth test lint
+.PHONY: help setup auth test lint coverage verify
 .PHONY: deploy-orchestrator-skeleton deploy-orchestrator
 .PHONY: deploy-procurement-gate deploy-forecast-review deploy-capacity-planning
 .PHONY: deploy-all-agents
@@ -19,7 +19,9 @@ help:
 	@echo "Available targets:"
 	@echo "  setup                          Install dependencies (poetry install)"
 	@echo "  auth                           Authenticate with GCP (ADC)"
-	@echo "  test                           Run unit tests"
+	@echo "  test                           Run all tests (agents/tests/)"
+	@echo "  coverage                       Run unit tests with coverage report (term-missing)"
+	@echo "  verify                         Local pre-commit gate: lint + unit tests + coverage (no infra)"
 	@echo "  lint                           Run ruff check + format check"
 	@echo "  deploy-orchestrator-skeleton   Deploy the placeholder Orchestrator (TASK-01, alias of deploy-orchestrator)"
 	@echo "  deploy-procurement-gate        Deploy Procurement Approval Agent (A2A, via deploy_a2a_agent_engine) (TASK-02)"
@@ -45,11 +47,26 @@ auth:
 	gcloud auth application-default login
 
 test:
-	poetry run pytest tests/
+	$(DEPLOY_PYTHON) -m pytest agents/tests/
+
+# Unit-only coverage. Integration tests are skipped here — they hit live
+# Agent Engine / Memory Bank when their resource-name env vars are set, and
+# we don't want their I/O reflected in unit coverage numbers.
+#
+# Uses $(DEPLOY_PYTHON) (venv-deploy-310) rather than `poetry run` because
+# pyproject.toml pins python = "^3.11" while the deploy venv is 3.10 to
+# match the Reasoning Engine runtime. Poetry would refuse to run from 3.10.
+coverage:
+	$(DEPLOY_PYTHON) -m pytest --cov=agents --cov-report=term-missing agents/tests/unit/
+
+# Local pre-commit gate. Runs everything that does NOT require GCP creds or
+# infra: ruff lint + format check, then unit tests with coverage in one pass.
+# Use before pushing.
+verify: lint coverage
 
 lint:
-	poetry run ruff check agents/ tests/
-	poetry run ruff format --check agents/ tests/
+	$(DEPLOY_PYTHON) -m ruff check agents/
+	$(DEPLOY_PYTHON) -m ruff format --check agents/
 
 # Per-agent deploy targets (TASK-02)
 # Order is enforced by deploy-all-agents: Procurement Gate first (so the

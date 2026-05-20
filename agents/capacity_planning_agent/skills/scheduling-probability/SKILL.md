@@ -1,10 +1,13 @@
 ---
 name: scheduling-probability
 description: >
-  Probabilistic reasoning over historical start-date variance per basin /
-  customer / asset class. Produces start-date distributions (p10/p50/p90),
-  recommends risk-calibrated buffer days, and projects fleet-utilization
-  uplift + deferred CapEx for the chosen buffer.
+  Use when the Capacity Planning agent needs probabilistic reasoning over
+  historical start-date variance for a basin / customer / asset class —
+  generating p10/p50/p90 start-date distributions, recommending a
+  risk-calibrated buffer in days, or projecting the fleet-utilization
+  uplift % and deferred CapEx USD from moving off the static default
+  buffer. Use when assembling a BufferOptimization schema instance.
+license: Apache-2.0
 metadata:
   adk_additional_tools:
     - get_start_date_distribution

@@ -1,10 +1,14 @@
 ---
 name: asset-equivalence
 description: >
-  Expert reasoning over the canonical asset taxonomy to identify functionally
-  equivalent equipment variants. Queries the canonical entity model and
-  traverses functional_equivalence relationships, returning ranked candidates
-  with confidence scores and rationale citations.
+  Use when the agent needs to resolve a requested asset (by local name, SAP
+  material number, Maximo equipment id, customer label, or canonical id) to
+  the canonical asset taxonomy, find functionally equivalent equipment
+  variants, or score how confident a substitution is for a specific customer
+  configuration. Use when a planner reports an asset is unavailable and you
+  need ranked candidate substitutions with confidence scores and rationale
+  citations.
+license: Apache-2.0
 metadata:
   adk_additional_tools:
     - resolve_canonical_asset

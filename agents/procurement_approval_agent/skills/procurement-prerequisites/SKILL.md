@@ -1,10 +1,13 @@
 ---
 name: procurement-prerequisites
 description: >
-  Deterministic procurement prerequisite checks for a SourcingPlan:
-  authorization tier vs cost, certification chain validity, regulatory
-  clearance for cross-border routes. Returns explicit blockers the agent
-  cites in the ProcurementApproval.
+  Use when the Procurement Approval agent needs to run deterministic
+  prerequisite checks on a SourcingPlan before approving — authorization
+  tier vs cost threshold, certification chain validity (every InTouch spec
+  resolves, certification hours remaining), and regulatory clearance for
+  cross-border or export-controlled routes. Use when assembling a
+  ProcurementApproval with explicit blocker citations.
+license: Apache-2.0
 metadata:
   adk_additional_tools:
     - check_budget_threshold

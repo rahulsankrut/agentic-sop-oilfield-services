@@ -76,8 +76,8 @@ from ..events.canvas_events import (
     EquivalentAssetFoundEvent,
     KnowledgeCatalogLookupEvent,
 )
-from ..services.memory_manager import auto_save_memories
 from ..prompts import EQUIVALENCE_LOOKUP_INSTRUCTION
+from ..services.memory_manager import auto_save_memories
 
 if TYPE_CHECKING:
     from google.adk.agents.callback_context import CallbackContext
@@ -148,7 +148,7 @@ def _build_mcp_toolset() -> list:
 EQUIVALENCE_LOOKUP_USING_MCP: bool = bool(os.getenv("AGENT_GATEWAY_ENDPOINT"))
 
 
-async def _emit_equivalence_events(callback_context: "CallbackContext") -> None:
+async def _emit_equivalence_events(callback_context: CallbackContext) -> None:
     """Surface the equivalence decision to the canvas as two events.
 
     Runs after the LLM produces a structured ``EquivalentAssetCandidate``.

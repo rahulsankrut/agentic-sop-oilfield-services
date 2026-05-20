@@ -57,8 +57,7 @@ def _patched_validate_app_name(name: str) -> None:
     """
     if not _PERMISSIVE_NAME_RE.match(name):
         raise ValueError(
-            f"Invalid app name '{name}': must consist of letters, digits, "
-            "underscores, and hyphens."
+            f"Invalid app name '{name}': must consist of letters, digits, underscores, and hyphens."
         )
     if name == "user":
         raise ValueError("App name cannot be 'user'; reserved for end-user input.")

@@ -1,10 +1,14 @@
 ---
 name: enterprise-systems
 description: >
-  Abstracts queries to SAP (material master + workforce), Maximo (equipment
-  inventory + status), FDP (customer configurations), and the InTouch
-  technical-document index. In TASK-04 the synthetic backing is replaced by
-  real MCP servers; the skill surface stays identical.
+  Use when the agent needs read-only data from a customer's enterprise source
+  systems — Maximo equipment availability and certification status, SAP
+  workforce snapshots by basin, FDP customer configuration / approval flags,
+  or InTouch technical-spec document citations. Use when assembling a
+  SourcingPlan that must be grounded in concrete inventory, workforce, or
+  customer-config facts. Always called by canonical_id, so resolve the asset
+  via the asset-equivalence skill first.
+license: Apache-2.0
 metadata:
   adk_additional_tools:
     - query_maximo_availability

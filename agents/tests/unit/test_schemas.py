@@ -7,12 +7,18 @@ A2A wire format between agents.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+# Python 3.10 compat — `datetime.UTC` was added in 3.11 and the deployed
+# Reasoning Engine container is 3.10. `timezone.utc` works on both versions;
+# the UP017 suggestion to use `datetime.UTC` would break 3.10 deploys, so
+# suppress it here.
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
 
-from agents.schemas import (
+UTC = timezone.utc  # noqa: UP017
+
+from agents.schemas import (  # noqa: E402
     AssetIdentifier,
     BufferOptimization,
     CanvasEventEnvelope,

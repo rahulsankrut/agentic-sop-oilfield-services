@@ -17,7 +17,6 @@ from google.adk import Context, Event
 from ..events.canvas_events import RouterDecisionEvent
 from ..events.emit import emit
 
-
 # Route keys live in module scope so the agent.py edge dict and the routers
 # stay in sync without string-literal drift.
 DIRECT_AVAILABLE = "DIRECT_AVAILABLE"
@@ -143,9 +142,7 @@ def route_on_procurement_threshold(node_input: dict, ctx: Context) -> Event:
         )
     else:
         route = AUTO_APPROVE
-        rationale = (
-            f"Cost ${cost:,} under threshold and no blockers — OCC planner self-approval"
-        )
+        rationale = f"Cost ${cost:,} under threshold and no blockers — OCC planner self-approval"
 
     return Event(
         message=(f"Routing on procurement: cost=${cost:,} blockers={len(blockers)} → {route}"),

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Literal, Union
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -177,20 +177,20 @@ class BufferRecommendationEvent(BaseEvent):
 # --- Discriminated union for type-safe dispatch ---------------------------
 
 
-CanvasEvent = Union[
-    WorkflowStartedEvent,
-    WorkflowCompletedEvent,
-    WorkflowFailedEvent,
-    NodeStartedEvent,
-    NodeCompletedEvent,
-    MCPCallStartedEvent,
-    MCPCallCompletedEvent,
-    KnowledgeCatalogLookupEvent,
-    RouterDecisionEvent,
-    CapacityGapDetectedEvent,
-    DoomedRouteProposedEvent,
-    EquivalentAssetFoundEvent,
-    RecommendedRouteFinalizedEvent,
-    ForecastLoadedEvent,
-    BufferRecommendationEvent,
-]
+CanvasEvent = (
+    WorkflowStartedEvent
+    | WorkflowCompletedEvent
+    | WorkflowFailedEvent
+    | NodeStartedEvent
+    | NodeCompletedEvent
+    | MCPCallStartedEvent
+    | MCPCallCompletedEvent
+    | KnowledgeCatalogLookupEvent
+    | RouterDecisionEvent
+    | CapacityGapDetectedEvent
+    | DoomedRouteProposedEvent
+    | EquivalentAssetFoundEvent
+    | RecommendedRouteFinalizedEvent
+    | ForecastLoadedEvent
+    | BufferRecommendationEvent
+)

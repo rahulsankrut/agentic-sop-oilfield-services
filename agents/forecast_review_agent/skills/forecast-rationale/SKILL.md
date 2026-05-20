@@ -1,10 +1,13 @@
 ---
 name: forecast-rationale
 description: >
-  Extracts structured rationale tags from a basin leader's freeform
-  explanation of a forecast override, computes override significance, and
-  prepares the record for BigQuery write-back (so the next ML retrain
-  ingests human judgement).
+  Use when the Forecast Review agent receives a basin leader's freeform
+  explanation of a forecast override and needs to extract structured
+  rationale tags against the canonical taxonomy, compute override
+  significance (magnitude + confidence interval), and assemble a
+  ForecastRationale schema instance for BigQuery write-back into the next
+  ML retrain.
+license: Apache-2.0
 metadata:
   adk_additional_tools:
     - extract_rationale_tags

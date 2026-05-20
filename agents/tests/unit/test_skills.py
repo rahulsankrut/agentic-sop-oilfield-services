@@ -28,7 +28,8 @@ def _load_skill_tools(skill_path: str):
     import importlib.util
     from pathlib import Path
 
-    project_root = Path(__file__).parent.parent.parent
+    # File is at <repo>/agents/tests/unit/test_skills.py → 4 parents up to repo root.
+    project_root = Path(__file__).parent.parent.parent.parent
     file_path = project_root / skill_path
     spec = importlib.util.spec_from_file_location(file_path.stem, file_path)
     module = importlib.util.module_from_spec(spec)
@@ -37,16 +38,22 @@ def _load_skill_tools(skill_path: str):
 
 
 # Load each skill's tools module once
-asset_equiv = _load_skill_tools("agents/orchestrator_agent/skills/asset-equivalence/scripts/tools.py")
+asset_equiv = _load_skill_tools(
+    "agents/orchestrator_agent/skills/asset-equivalence/scripts/tools.py"
+)
 sourcing = _load_skill_tools("agents/orchestrator_agent/skills/sourcing-logistics/scripts/tools.py")
-enterprise = _load_skill_tools("agents/orchestrator_agent/skills/enterprise-systems/scripts/tools.py")
+enterprise = _load_skill_tools(
+    "agents/orchestrator_agent/skills/enterprise-systems/scripts/tools.py"
+)
 plan_eval = _load_skill_tools(
-    "src/orchestrator_agent/plan_evaluator/skills/plan-evaluation/scripts/tools.py"
+    "agents/orchestrator_agent/plan_evaluator/skills/plan-evaluation/scripts/tools.py"
 )
 procurement = _load_skill_tools(
     "agents/procurement_approval_agent/skills/procurement-prerequisites/scripts/tools.py"
 )
-forecast = _load_skill_tools("agents/forecast_review_agent/skills/forecast-rationale/scripts/tools.py")
+forecast = _load_skill_tools(
+    "agents/forecast_review_agent/skills/forecast-rationale/scripts/tools.py"
+)
 scheduling = _load_skill_tools(
     "agents/capacity_planning_agent/skills/scheduling-probability/scripts/tools.py"
 )

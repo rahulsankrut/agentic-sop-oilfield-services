@@ -10,8 +10,6 @@ import os
 from typing import TYPE_CHECKING
 
 from google.adk.memory import VertexAiMemoryBankService
-
-logger = logging.getLogger(__name__)
 from vertexai._genai.types import (
     MemoryBankCustomizationConfig,
 )
@@ -21,6 +19,8 @@ from vertexai._genai.types import (
 from vertexai._genai.types import (
     MemoryBankCustomizationConfigMemoryTopicCustomMemoryTopic as CustomMemoryTopic,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from google.adk.agents.callback_context import CallbackContext

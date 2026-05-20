@@ -1,10 +1,13 @@
 ---
 name: sourcing-logistics
 description: >
-  Estimates transit mode, time, and cost for moving an asset from a source
-  location to a target location, identifies blockers, and computes the
-  fully-loaded sourcing cost. Distance-driven thresholds choose between
-  ground transit, sea freight, and cargo charter.
+  Use when the agent needs to estimate transit mode (ground / sea freight /
+  cargo charter), transit hours, and fully-loaded sourcing cost for moving
+  an asset between two locations, or to identify blockers (missing
+  workforce, certification overdue, customs / export-control, customer
+  config restrictions) for a candidate sourcing option. Use when filling a
+  SourcingOption Pydantic schema with concrete logistics figures.
+license: Apache-2.0
 metadata:
   adk_additional_tools:
     - estimate_transit

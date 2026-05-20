@@ -15,7 +15,7 @@ import pathlib
 import vertexai
 from google.adk.agents import LlmAgent
 from google.adk.skills import load_skill_from_dir
-from google.adk.tools import preload_memory
+from google.adk.tools import google_maps_grounding, preload_memory
 from google.adk.tools.skill_toolset import SkillToolset
 from google.genai.types import GenerateContentConfig, ThinkingConfig
 
@@ -87,7 +87,12 @@ root_agent = LlmAgent(
     ),
     include_contents="none",
     after_agent_callback=auto_save_memories,
-    tools=[preload_memory]
-    + ([_skill_toolset] if _skill_toolset else [])
-    + _skill_function_tools,
+    # google_maps_grounding lets the evaluator verify logistics_feasibility +
+    # schedule_feasibility claims against real-world Maps data (transit times,
+    # cross-border routes, port availability). Model-level GA tool, Gemini 2+.
+    tools=(
+        [preload_memory, google_maps_grounding]
+        + ([_skill_toolset] if _skill_toolset else [])
+        + _skill_function_tools
+    ),
 )

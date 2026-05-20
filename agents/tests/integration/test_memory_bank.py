@@ -16,7 +16,7 @@ API surface verified against the deployed SDK (Python 3.10 venv):
 
 Run (after ``make deploy-orchestrator`` and ``make seed-memory-bank``):
 
-    pytest -xvs tests/integration/test_memory_bank.py
+    pytest -xvs agents/tests/integration/test_memory_bank.py
 """
 
 from __future__ import annotations
@@ -85,13 +85,11 @@ async def test_seed_memories_are_retrievable_for_maria() -> None:
 
     memories = list(getattr(response, "memories", []) or [])
     assert memories, (
-        "Expected at least one memory for Maria — did "
-        "`make seed-memory-bank` run after deploy?"
+        "Expected at least one memory for Maria — did `make seed-memory-bank` run after deploy?"
     )
     joined = "\n".join(_entry_text(m) for m in memories).lower()
     assert "west africa" in joined, (
-        f"Expected a returned memory to mention 'West Africa' (case-insensitive); "
-        f"got: {joined!r}"
+        f"Expected a returned memory to mention 'West Africa' (case-insensitive); got: {joined!r}"
     )
 
 

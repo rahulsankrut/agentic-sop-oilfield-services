@@ -1,10 +1,13 @@
 ---
 name: plan-evaluation
 description: >
-  Deterministic pre-scoring for SourcingPlans across 7 weighted criteria
-  (safety, customer compatibility, logistics feasibility, cost, equivalence
-  confidence, regulatory, schedule). The LLM consumes these partial scores
-  + the rubrics in `references/` to produce the final PlanEvaluation.
+  Use when the Plan Evaluator (LLM-as-Judge) needs deterministic pre-scoring
+  of a SourcingPlan across the 7 weighted criteria (safety, customer
+  compatibility, logistics feasibility, cost, equivalence confidence,
+  regulatory, schedule) before layering qualitative judgement on top. Use
+  when producing a PlanEvaluation that must be grounded in computable
+  partial scores plus the rubrics in `references/`.
+license: Apache-2.0
 metadata:
   adk_additional_tools:
     - evaluate_plan_deterministic

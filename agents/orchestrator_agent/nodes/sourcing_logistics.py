@@ -17,7 +17,7 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from google.adk import Agent
-from google.adk.tools import preload_memory
+from google.adk.tools import google_maps_grounding, preload_memory
 from google.genai.types import GenerateContentConfig, ThinkingConfig
 
 from agents.schemas import SourcingPlan
@@ -27,8 +27,8 @@ from ..events.canvas_events import (
     DoomedRouteProposedEvent,
     RecommendedRouteFinalizedEvent,
 )
-from ..services.memory_manager import auto_save_memories
 from ..prompts import SOURCING_LOGISTICS_INSTRUCTION
+from ..services.memory_manager import auto_save_memories
 
 if TYPE_CHECKING:
     from google.adk.agents.callback_context import CallbackContext
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 _MODEL_NAME = os.getenv("SOURCING_LOGISTICS_MODEL", "gemini-3.1-pro-preview")
 
 
-async def _emit_route_events(callback_context: "CallbackContext") -> None:
+async def _emit_route_events(callback_context: CallbackContext) -> None:
     """Emit doomed + recommended route canvas events after the refinement.
 
     The refined SourcingPlan carries both the primary_option and the
@@ -127,7 +127,11 @@ sourcing_logistics_agent = Agent(
     ),
     instruction=SOURCING_LOGISTICS_INSTRUCTION,
     output_schema=SourcingPlan,
-    tools=[preload_memory],
+    # google_maps_grounding lets the model ground transit-time and distance
+    # claims in real Maps data during reasoning (Persona 3 cargo-plane
+    # routes — Lagos→Luanda sea freight, Darwin→Luanda doomed baseline,
+    # etc.). It's a model-level built-in tool (GA, Gemini 2+).
+    tools=[preload_memory, google_maps_grounding],
     after_agent_callback=_emit_route_events,
     generate_content_config=GenerateContentConfig(
         temperature=0.0,

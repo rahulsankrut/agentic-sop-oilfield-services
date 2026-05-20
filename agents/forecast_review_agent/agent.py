@@ -19,9 +19,9 @@ from google.genai.types import GenerateContentConfig, ThinkingConfig
 from agents.schemas import ForecastRationale
 from agents.utils.global_gemini import GlobalGemini
 
-from .services.memory_manager import auto_save_memories
 from .config import AGENT_DESCRIPTION, AGENT_NAME, MODEL_NAME
 from .prompts import INSTRUCTION
+from .services.memory_manager import auto_save_memories
 from .tools import get_tools
 
 project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")

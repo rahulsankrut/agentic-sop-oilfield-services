@@ -41,21 +41,15 @@ def _env_vars(agent_engine_id: str, location: str) -> dict[str, str]:
         "AGENT_ENGINE_ID": agent_engine_id,
         "AGENT_ENGINE_LOCATION": location,
         "GOOGLE_GENAI_USE_VERTEXAI": "true",
-        "ORCHESTRATOR_MODEL": os.environ.get(
-            "ORCHESTRATOR_MODEL", "gemini-3.1-pro-preview"
-        ),
+        "ORCHESTRATOR_MODEL": os.environ.get("ORCHESTRATOR_MODEL", "gemini-3.1-pro-preview"),
         "EQUIVALENCE_LOOKUP_MODEL": os.environ.get(
             "EQUIVALENCE_LOOKUP_MODEL", "gemini-3.1-pro-preview"
         ),
         "SOURCING_LOGISTICS_MODEL": os.environ.get(
             "SOURCING_LOGISTICS_MODEL", "gemini-3.1-pro-preview"
         ),
-        "REVISE_PLAN_MODEL": os.environ.get(
-            "REVISE_PLAN_MODEL", "gemini-3.1-pro-preview"
-        ),
-        "EVALUATOR_MODEL": os.environ.get(
-            "EVALUATOR_MODEL", "gemini-3.1-pro-preview"
-        ),
+        "REVISE_PLAN_MODEL": os.environ.get("REVISE_PLAN_MODEL", "gemini-3.1-pro-preview"),
+        "EVALUATOR_MODEL": os.environ.get("EVALUATOR_MODEL", "gemini-3.1-pro-preview"),
     }
     for var in (
         "PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME",
@@ -150,10 +144,7 @@ def deploy_orchestrator() -> str:
         },
     )
 
-    stream_url = (
-        f"https://{location}-aiplatform.googleapis.com/v1beta1/"
-        f"{resource_name}:streamQuery"
-    )
+    stream_url = f"https://{location}-aiplatform.googleapis.com/v1beta1/{resource_name}:streamQuery"
 
     print(f"\n{'=' * 60}")
     print("Capacity Orchestrator Agent deployed!")

@@ -18,7 +18,7 @@ Skipped automatically if ``ORCHESTRATOR_AGENT_RESOURCE_NAME`` is unset —
 this test only runs after ``make deploy-all-agents`` has been completed.
 
 Usage:
-    poetry run pytest tests/integration/test_orchestrator_skeleton.py -v -s
+    poetry run pytest agents/tests/integration/test_orchestrator_skeleton.py -v -s
 """
 
 from __future__ import annotations

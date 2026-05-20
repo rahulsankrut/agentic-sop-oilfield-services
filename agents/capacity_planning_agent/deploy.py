@@ -77,7 +77,11 @@ def deploy_capacity_planning() -> str:
                 "pydantic>=2.12.0",
                 "python-dotenv>=1.0.0",
             ],
-            "extra_packages": ["agents/capacity_planning_agent", "agents/utils", "agents/schemas.py"],
+            "extra_packages": [
+                "agents/capacity_planning_agent",
+                "agents/utils",
+                "agents/schemas.py",
+            ],
             "env_vars": {
                 "AGENT_ENGINE_ID": agent_engine_id,
                 "AGENT_ENGINE_LOCATION": location,
