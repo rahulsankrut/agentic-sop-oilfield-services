@@ -7,8 +7,9 @@ Accepted (TASK-04, 2026-05-19).
 ## Context
 
 The Capacity Orchestrator in ADK 1.x was an `LlmAgent` with a 9-step
-`static_instruction` (see `core/agent_v1_llmagent.py.bak`). It worked, but it
-had three issues:
+`static_instruction` (preserved in git history at the TASK-03 tip — the
+``.bak`` placeholder was removed during dormant-code cleanup on
+2026-05-20). It worked, but it had three issues:
 
 1. The LLM had latitude to skip or re-order steps despite "MUST execute in
    order" framing. Cloud Trace inspections from TASK-03 showed the model
@@ -117,9 +118,10 @@ Other agents stay as `LlmAgent`s for now:
 
 ## Migration notes
 
-- `core/agent_v1_llmagent.py.bak` preserves the LlmAgent shape for diff
-  reference. Once the Workflow has shipped through the integration tests
-  (TASK-04 step 2 + step 8, run by main thread), this file is removed.
+- The LlmAgent shape (formerly preserved at `core/agent_v1_llmagent.py.bak`)
+  was removed during dormant-code cleanup on 2026-05-20 after the
+  Workflow had shipped through the integration tests. Refer to git
+  history at the TASK-03 tip for the diff reference if needed.
 - The v1 `core/prompts.py` 9-step instruction is collapsed into three
   focused per-node instructions in the same file. Each node has ONE
   decision; no monolithic "Orchestrator instruction" anymore.

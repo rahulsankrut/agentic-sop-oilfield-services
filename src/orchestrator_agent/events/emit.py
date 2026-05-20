@@ -4,10 +4,11 @@ Workflow nodes call :func:`emit` to record a canvas event. The function
 returns a ``state_delta`` dict shaped for ADK 2.0's ``Event(state=...)``
 kwarg, which the framework merges into ``ctx.actions.state_delta``.
 
-The A2A executor (``runtime/agent_executor.py``) reads
-``ctx.state['canvas_events']`` (or the equivalent ``state_delta`` carried
-on each emitted ADK ``Event``) and translates new entries into A2A
-``Message`` events on the SSE stream that drives the canvas.
+The canvas consumes the Orchestrator's deployed ``streamQuery`` REST
+endpoint (driven by ``AdkApp.async_stream_query``). Each ADK ``Event``
+yielded by the Runner carries ``event.actions.state_delta`` —
+``canvas_events`` lives there, and the canvas SSE client
+(``canvas/src/lib/agent-stream.ts``) drains new entries off each chunk.
 
 Usage (function node)::
 

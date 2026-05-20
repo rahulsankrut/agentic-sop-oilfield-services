@@ -10,9 +10,9 @@ carry a ``type`` literal discriminator so the canvas reducer can dispatch
 via tagged union.
 
 Workflow nodes emit these by appending to ``ctx.state['canvas_events']``
-via :func:`src.orchestrator_agent.events.emit.emit`. The A2A executor
-(``runtime/agent_executor.py``) reads new entries on each ADK event and
-forwards them as A2A ``Message`` events on the SSE stream.
+via :func:`src.orchestrator_agent.events.emit.emit`. The canvas SSE
+client (``canvas/src/lib/agent-stream.ts``) drains new entries off
+each ADK chunk on the deployed Orchestrator's ``streamQuery`` endpoint.
 """
 
 from __future__ import annotations
