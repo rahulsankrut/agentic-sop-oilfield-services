@@ -18,7 +18,15 @@ import { APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
  */
 
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID;
+// Map ID is required for AdvancedMarkerElement (modern markers). Falls back
+// to Google's "DEMO_MAP_ID" string literal — works for development with the
+// default Google style. For production, create a Map ID in Cloud Console
+// (Maps Platform → Map Management) with a dark cloud-managed style and set
+// NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID. With a real Map ID, the inline DARK_STYLES
+// below is ignored (cloud style wins).
+const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID ?? "DEMO_MAP_ID";
+const USE_INLINE_STYLES =
+  !process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID; // only when no real Map ID
 
 // Inline dark cartographic style. Mirrors the visual feel of Mapbox's
 // dark-v11 — muted blues for water, dark slate for land, dimmed labels.
@@ -62,7 +70,7 @@ export function GlobalMap({
       <div className="absolute inset-0">
         <Map
           mapId={MAP_ID}
-          styles={MAP_ID ? undefined : DARK_STYLES}
+          styles={USE_INLINE_STYLES ? DARK_STYLES : undefined}
           defaultCenter={{ lat: center[1], lng: center[0] }}
           defaultZoom={zoom}
           disableDefaultUI
