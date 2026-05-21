@@ -1,0 +1,56 @@
+{
+  "permian": {
+    "naics_211_state_employment": 41223,
+    "components_by_fips": {
+      "48000": 67466,
+      "35000": 4844
+    },
+    "shares_by_fips": {
+      "48000": 0.55,
+      "35000": 0.85
+    },
+    "data_source": "BLS QCEW 2024 NAICS 211 (Oil & Gas Extraction)"
+  },
+  "gulf_of_mexico": {
+    "naics_211_state_employment": 10360,
+    "components_by_fips": {
+      "48000": 67466,
+      "22000": 5560
+    },
+    "shares_by_fips": {
+      "48000": 0.1,
+      "22000": 0.65
+    },
+    "data_source": "BLS QCEW 2024 NAICS 211 (Oil & Gas Extraction)"
+  },
+  "west_africa": {
+    "naics_211_state_employment": null,
+    "components_by_fips": {},
+    "shares_by_fips": {},
+    "data_source": "Synthesized \u2014 BLS QCEW covers US states only; foreign basin workforce stays demo-synthesized"
+  },
+  "north_sea": {
+    "naics_211_state_employment": null,
+    "components_by_fips": {},
+    "shares_by_fips": {},
+    "data_source": "Synthesized \u2014 BLS QCEW covers US states only; foreign basin workforce stays demo-synthesized"
+  },
+  "bohai": {
+    "naics_211_state_employment": null,
+    "components_by_fips": {},
+    "shares_by_fips": {},
+    "data_source": "Synthesized \u2014 BLS QCEW covers US states only; foreign basin workforce stays demo-synthesized"
+  },
+  "south_china_sea": {
+    "naics_211_state_employment": null,
+    "components_by_fips": {},
+    "shares_by_fips": {},
+    "data_source": "Synthesized \u2014 BLS QCEW covers US states only; foreign basin workforce stays demo-synthesized"
+  },
+  "asia_pacific": {
+    "naics_211_state_employment": null,
+    "components_by_fips": {},
+    "shares_by_fips": {},
+    "data_source": "Synthesized \u2014 BLS QCEW covers US states only; foreign basin workforce stays demo-synthesized"
+  }
+}

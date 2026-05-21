@@ -114,13 +114,22 @@ OPTIONS (description = 'SAP KNVV — Customer Sales Data.');
 
 -- Custom workforce-by-basin Z-table (no standard SAP table for this).
 -- Synthesized-signature per §5; customer maps to their HR view.
+--
+-- Columns NAICS_211_STATE_EMPLOYMENT + DATA_SOURCE added in TASK-16
+-- Step 4d.3 (Mode C real-data enrichment). For US basins these carry
+-- real BLS QCEW Oil & Gas Extraction (NAICS 211) state employment
+-- aggregated to basin via the curated state-share map in
+-- scripts/build_bls_qcew_anchors.py. For foreign basins the field is
+-- NULL — BLS QCEW only covers US states.
 CREATE TABLE IF NOT EXISTS `vertex-ai-demos-468803.sap_extract.ZHR_WORKFORCE` (
-  BASIN                      STRING(20) NOT NULL,
-  CREW_COUNT_AVAILABLE       INT64,
-  SPECIALIST_COUNT_AVAILABLE INT64,
-  ON_CALL_COUNT              INT64,
-  SNAPSHOT_DATE              DATE       NOT NULL,
-  _loaded_at                 TIMESTAMP  DEFAULT CURRENT_TIMESTAMP(),
+  BASIN                          STRING(20) NOT NULL,
+  CREW_COUNT_AVAILABLE           INT64,
+  SPECIALIST_COUNT_AVAILABLE     INT64,
+  ON_CALL_COUNT                  INT64,
+  NAICS_211_STATE_EMPLOYMENT     INT64,
+  DATA_SOURCE                    STRING(80),
+  SNAPSHOT_DATE                  DATE       NOT NULL,
+  _loaded_at                     TIMESTAMP  DEFAULT CURRENT_TIMESTAMP(),
   PRIMARY KEY (BASIN, SNAPSHOT_DATE) NOT ENFORCED
 )
 PARTITION BY SNAPSHOT_DATE

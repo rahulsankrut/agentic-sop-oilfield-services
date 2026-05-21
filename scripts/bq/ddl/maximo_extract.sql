@@ -81,21 +81,29 @@ OPTIONS (description = 'Maximo INVBALANCES — Storage Bin Balances. Per-bin/per
 
 -- Location Master. LATITUDE/LONGITUDE inline (demo simplification — MAS 9.0
 -- Spatial extension moves geometry to a separate table).
+--
+-- WPI_PORT_INDEX_NUMBER + WPI_PORT_NAME added in TASK-16 Step 4d.4 —
+-- the seeder snaps each location to its nearest real port in NGA's
+-- World Port Index (worldport_index.ports). Used by sourcing-logistics
+-- skill tools to ground transit cost / harbor capability claims in real
+-- port metadata.
 CREATE TABLE IF NOT EXISTS `vertex-ai-demos-468803.maximo_extract.LOCATIONS` (
-  LOCATION     STRING(25)    NOT NULL,
-  SITEID       STRING(16)    NOT NULL,
-  ORGID        STRING(8),
-  DESCRIPTION  STRING(100),
-  TYPE         STRING(16),
-  STATUS       STRING(16),
-  LATITUDE     NUMERIC(9,6),
-  LONGITUDE    NUMERIC(9,6),
-  REGION       STRING(20),
-  _loaded_at   TIMESTAMP     DEFAULT CURRENT_TIMESTAMP(),
+  LOCATION              STRING(25)    NOT NULL,
+  SITEID                STRING(16)    NOT NULL,
+  ORGID                 STRING(8),
+  DESCRIPTION           STRING(100),
+  TYPE                  STRING(16),
+  STATUS                STRING(16),
+  LATITUDE              NUMERIC(9,6),
+  LONGITUDE             NUMERIC(9,6),
+  REGION                STRING(20),
+  WPI_PORT_INDEX_NUMBER INT64,
+  WPI_PORT_NAME         STRING(80),
+  _loaded_at            TIMESTAMP     DEFAULT CURRENT_TIMESTAMP(),
   PRIMARY KEY (SITEID, LOCATION) NOT ENFORCED
 )
 CLUSTER BY REGION, SITEID
-OPTIONS (description = 'Maximo LOCATIONS — Location Master with inline lat/lon.');
+OPTIONS (description = 'Maximo LOCATIONS — Location Master with inline lat/lon + WPI port reference.');
 
 -- Asset Location History. Slim version.
 CREATE TABLE IF NOT EXISTS `vertex-ai-demos-468803.maximo_extract.ASSETLOCATIONS` (
@@ -114,18 +122,24 @@ OPTIONS (description = 'Maximo ASSETLOCATIONS — Asset Location History.');
 -- the WO_HISTORY view (below) + the cert_hours_remaining derivation
 -- depend on them.
 CREATE TABLE IF NOT EXISTS `vertex-ai-demos-468803.maximo_extract.WORKORDER` (
-  WONUM       STRING(16)    NOT NULL,
-  SITEID      STRING(16)    NOT NULL,
-  ASSETNUM    STRING(25),
-  LOCATION    STRING(25),
-  STATUS      STRING(16),
-  WORKTYPE    STRING(10),
-  REPORTDATE  TIMESTAMP,
-  SCHEDSTART  TIMESTAMP,
-  ACTSTART    TIMESTAMP,
-  ESTLABHRS   NUMERIC(8,2),
-  ACTLABHRS   NUMERIC(8,2),
-  _loaded_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP(),
+  WONUM             STRING(16)    NOT NULL,
+  SITEID            STRING(16)    NOT NULL,
+  ASSETNUM          STRING(25),
+  LOCATION          STRING(25),
+  STATUS            STRING(16),
+  WORKTYPE          STRING(10),
+  REPORTDATE        TIMESTAMP,
+  SCHEDSTART        TIMESTAMP,
+  ACTSTART          TIMESTAMP,
+  ESTLABHRS         NUMERIC(8,2),
+  ACTLABHRS         NUMERIC(8,2),
+  -- TASK-16 Step 4d.5 — when a recert/repair WO models response to a
+  -- real-world incident, BSEE_LEASE_REF + BSEE_INCIDENT_DATE point at
+  -- the actual BSEE investigation that grounded the WO's existence.
+  -- For purely scheduled WOs, both are NULL.
+  BSEE_LEASE_REF    STRING(16),
+  BSEE_INCIDENT_DATE DATE,
+  _loaded_at        TIMESTAMP     DEFAULT CURRENT_TIMESTAMP(),
   PRIMARY KEY (SITEID, WONUM) NOT ENFORCED
 )
 CLUSTER BY ASSETNUM, SITEID

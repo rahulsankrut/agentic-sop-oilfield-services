@@ -324,10 +324,18 @@ class SapCustomer(BaseModel):
 
 
 class SapWorkforce(BaseModel):
-    """SAP ZHR_WORKFORCE — workforce-by-basin snapshot (Z-table)."""
+    """SAP ZHR_WORKFORCE — workforce-by-basin snapshot (Z-table).
+
+    NAICS_211_STATE_EMPLOYMENT and DATA_SOURCE are TASK-16 Step 4d.3
+    additions: real BLS QCEW reference data for US basins, NULL for
+    foreign basins where BLS doesn't cover. DATA_SOURCE is a free-form
+    citation string suitable for the agent to surface in narration.
+    """
 
     basin: str
     crew_count_available: int
     specialist_count_available: int
     on_call_count: int
     snapshot_date: str  # ISO date string — keep as str per CLAUDE.md gotcha
+    naics_211_state_employment: int | None = None
+    data_source: str | None = None

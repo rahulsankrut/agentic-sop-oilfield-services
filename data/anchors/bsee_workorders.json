@@ -1,0 +1,16 @@
+{
+  "TX-007-LGS-001": {
+    "lease_number": "G03520",
+    "area_block": "WC 498",
+    "incident_date": "2026-05-02",
+    "accident_type": "- RW/JT (1-3 days) - Required Evacuation",
+    "panel_district": "DISTRICT"
+  },
+  "__repair_default__": {
+    "lease_number": "G03520",
+    "area_block": "WC 498",
+    "incident_date": "2026-05-10",
+    "accident_type": "- Crane",
+    "panel_district": "DISTRICT"
+  }
+}

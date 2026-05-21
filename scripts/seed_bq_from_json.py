@@ -185,6 +185,24 @@ def load_data() -> dict[str, Any]:
     else:
         log.warning("data/anchors/sec_edgar_customers.json missing — KNA1 address/country will fall back to JSON kernel")
 
+    d["bls_qcew"] = {}
+    bls_path = anchors_dir / "bls_qcew_workforce.json"
+    if bls_path.exists():
+        with bls_path.open() as f:
+            d["bls_qcew"] = json.load(f)
+        log.info("loaded data/anchors/bls_qcew_workforce.json (%d basins)", len(d["bls_qcew"]))
+    else:
+        log.warning("data/anchors/bls_qcew_workforce.json missing — ZHR_WORKFORCE will lack BLS data")
+
+    d["bsee_workorders"] = {}
+    bsee_path = anchors_dir / "bsee_workorders.json"
+    if bsee_path.exists():
+        with bsee_path.open() as f:
+            d["bsee_workorders"] = json.load(f)
+        log.info("loaded data/anchors/bsee_workorders.json (%d WO anchors)", len(d["bsee_workorders"]))
+    else:
+        log.warning("data/anchors/bsee_workorders.json missing — WORKORDER will lack BSEE refs")
+
     return d
 
 
@@ -428,14 +446,23 @@ def build_sap_knvv(d: dict[str, Any]) -> list[dict]:
 
 
 def build_sap_zhr_workforce(d: dict[str, Any]) -> list[dict]:
+    """ZHR_WORKFORCE — Mode C: keep crew/specialist/on_call values from
+    JSON kernel (these are operational counts the agents reason on);
+    enrich with real BLS QCEW NAICS 211 state employment context for US
+    basins (Permian, GoM). Foreign basins get NULL + a synthesis label.
+    """
+    bls = d.get("bls_qcew", {})
     today = date.today().isoformat()
     rows = []
     for basin, w in d["sap_workforce"].items():
+        anchor = bls.get(basin, {})
         rows.append({
             "BASIN": basin,
             "CREW_COUNT_AVAILABLE": w["crew_count_available"],
             "SPECIALIST_COUNT_AVAILABLE": w["specialist_count_available"],
             "ON_CALL_COUNT": w["on_call_count"],
+            "NAICS_211_STATE_EMPLOYMENT": anchor.get("naics_211_state_employment"),
+            "DATA_SOURCE": (anchor.get("data_source") or "Synthesized — no anchor")[:80],
             "SNAPSHOT_DATE": today,
         })
     return rows
@@ -491,8 +518,41 @@ def build_maximo_asset(d: dict[str, Any]) -> list[dict]:
     return rows
 
 
+def _nearest_wpi_port(client, lat: float, lon: float) -> tuple[int, str] | None:
+    """Find the nearest WPI port within 200km of (lat, lon).
+
+    Returns (port_index_number, main_port_name) or None for inland locations
+    where no port is within 200km.
+    """
+    sql = """
+    SELECT WORLD_PORT_INDEX_NUMBER, MAIN_PORT_NAME,
+           ST_DISTANCE(ST_GEOGPOINT(LONGITUDE, LATITUDE),
+                       ST_GEOGPOINT(@lon, @lat)) / 1000.0 AS dist_km
+    FROM `vertex-ai-demos-468803.worldport_index.ports`
+    WHERE LATITUDE IS NOT NULL AND LONGITUDE IS NOT NULL
+    ORDER BY dist_km
+    LIMIT 1
+    """
+    from google.cloud import bigquery as bq  # noqa: PLC0415 — local to avoid top-level dep
+    job_config = bq.QueryJobConfig(query_parameters=[
+        bq.ScalarQueryParameter("lat", "FLOAT64", lat),
+        bq.ScalarQueryParameter("lon", "FLOAT64", lon),
+    ])
+    rows = list(client.query(sql, job_config=job_config).result())
+    if not rows or rows[0]["dist_km"] > 200:
+        return None
+    return int(rows[0]["WORLD_PORT_INDEX_NUMBER"]), str(rows[0]["MAIN_PORT_NAME"])
+
+
 def build_maximo_locations(d: dict[str, Any]) -> list[dict]:
-    """Dedup locations from maximo_inventory."""
+    """Dedup locations from maximo_inventory. Snap each to nearest real
+    WPI port (within 200km) — keeps the facility lat/lon as-is but
+    attaches a real port reference for logistics grounding.
+    """
+    # Lazy: use the module-level client if the caller injected it; else create
+    from google.cloud import bigquery as bq  # noqa: PLC0415
+    client = bq.Client(project=PROJECT)
+
     seen: dict[tuple, dict] = {}
     for inv in d["maximo_inventory"]:
         loc = inv["location"]
@@ -502,8 +562,14 @@ def build_maximo_locations(d: dict[str, Any]) -> list[dict]:
         key = (siteid, location)
         if key in seen:
             continue
-        # Choose TYPE based on label heuristic
         ltype = "STOREROOM" if any(w in loc["label"].lower() for w in ("storage", "depot", "shop", "yard", "warehouse")) else "OPERATING"
+        lat, lon = loc.get("latitude"), loc.get("longitude")
+        port_num: int | None = None
+        port_name: str | None = None
+        if lat is not None and lon is not None:
+            match = _nearest_wpi_port(client, float(lat), float(lon))
+            if match:
+                port_num, port_name = match
         seen[key] = {
             "LOCATION": location,
             "SITEID": siteid,
@@ -511,9 +577,11 @@ def build_maximo_locations(d: dict[str, Any]) -> list[dict]:
             "DESCRIPTION": loc["label"][:100],
             "TYPE": ltype,
             "STATUS": "OPERATING",
-            "LATITUDE": loc.get("latitude"),
-            "LONGITUDE": loc.get("longitude"),
+            "LATITUDE": lat,
+            "LONGITUDE": lon,
             "REGION": region[:20],
+            "WPI_PORT_INDEX_NUMBER": port_num,
+            "WPI_PORT_NAME": (port_name or "")[:80] if port_name else None,
         }
     return list(seen.values())
 
@@ -579,9 +647,15 @@ def build_maximo_workorder(d: dict[str, Any]) -> list[dict]:
     For assets with status='available_after_recert' or 'in_repair', or
     `certification_hours_remaining > 0`, emit one open WO. ESTLABHRS and
     ACTLABHRS are set so that ESTLABHRS - ACTLABHRS = the certification
-    hours remaining — i.e., the customer's view layer would compute the
-    Q5-derived field via this same arithmetic.
+    hours remaining (Q5 — customer's extract layer materializes the
+    cert_hours_remaining derived field with this arithmetic).
+
+    Each WO is anchored to a real BSEE Incident Investigation (Step 4d.5):
+    the BSEE incident's lease number + date + accident type populate
+    BSEE_LEASE_REF + BSEE_INCIDENT_DATE + REPORTDATE — so the WO models
+    a maintenance response to a real publicly-investigated incident.
     """
+    bsee = d.get("bsee_workorders", {})
     rows = []
     for i, inv in enumerate(d["maximo_inventory"]):
         cert_hrs = inv.get("certification_hours_remaining", 0) or 0
@@ -591,9 +665,14 @@ def build_maximo_workorder(d: dict[str, Any]) -> list[dict]:
         region = inv["location"]["region"]
         siteid = REGION_TO_SITEID.get(region, "DEFAULT")[:16]
         worktype = "REPAIR" if status == "in_repair" else "RECERT"
-        # Open WO — STATUS=INPRG. EstLab - ActLab = cert_hrs remaining.
         est = float(max(cert_hrs * 2, 8.0))
         act = est - float(cert_hrs)
+
+        # Pick a BSEE anchor for this asset. Asset-specific first; fall
+        # back to __repair_default__ if no targeted anchor exists.
+        anchor = bsee.get(inv["equipment_instance_id"]) or bsee.get("__repair_default__") or {}
+        report_date = (anchor.get("incident_date") or now_iso()[:10]) + "T00:00:00+00:00"
+
         rows.append({
             "WONUM": f"WO-{i + 1:06d}",
             "SITEID": siteid,
@@ -601,11 +680,13 @@ def build_maximo_workorder(d: dict[str, Any]) -> list[dict]:
             "LOCATION": slug(inv["location"]["label"]),
             "STATUS": "INPRG",
             "WORKTYPE": worktype,
-            "REPORTDATE": now_iso(),
+            "REPORTDATE": report_date,
             "SCHEDSTART": None,
             "ACTSTART": None,
             "ESTLABHRS": est,
             "ACTLABHRS": act,
+            "BSEE_LEASE_REF": (anchor.get("lease_number") or "")[:16] or None,
+            "BSEE_INCIDENT_DATE": anchor.get("incident_date"),
         })
     return rows
 

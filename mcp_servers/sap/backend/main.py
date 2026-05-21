@@ -277,7 +277,8 @@ async def get_workforce_by_basin(basin: str) -> SapWorkforce:
     rows = _run_query(
         f"""
         SELECT BASIN, CREW_COUNT_AVAILABLE, SPECIALIST_COUNT_AVAILABLE,
-               ON_CALL_COUNT, SNAPSHOT_DATE
+               ON_CALL_COUNT, NAICS_211_STATE_EMPLOYMENT, DATA_SOURCE,
+               SNAPSHOT_DATE
         FROM {_qualified("ZHR_WORKFORCE")}
         WHERE BASIN = @basin
         ORDER BY SNAPSHOT_DATE DESC
@@ -302,6 +303,10 @@ async def get_workforce_by_basin(basin: str) -> SapWorkforce:
         specialist_count_available=int(r["SPECIALIST_COUNT_AVAILABLE"] or 0),
         on_call_count=int(r["ON_CALL_COUNT"] or 0),
         snapshot_date=r["SNAPSHOT_DATE"].isoformat(),
+        naics_211_state_employment=(
+            int(r["NAICS_211_STATE_EMPLOYMENT"]) if r["NAICS_211_STATE_EMPLOYMENT"] is not None else None
+        ),
+        data_source=r["DATA_SOURCE"],
     )
 
 
