@@ -175,6 +175,16 @@ def load_data() -> dict[str, Any]:
         log.info("loaded data/anchors/uspto_patents.json (%d real patents)", len(d["uspto_patents"]))
     else:
         log.warning("data/anchors/uspto_patents.json missing — manufacturer/intro_year will fall back to JSON kernel")
+
+    d["sec_edgar"] = {}
+    sec_path = anchors_dir / "sec_edgar_customers.json"
+    if sec_path.exists():
+        with sec_path.open() as f:
+            d["sec_edgar"] = json.load(f)
+        log.info("loaded data/anchors/sec_edgar_customers.json (%d real customer filings)", len(d["sec_edgar"]))
+    else:
+        log.warning("data/anchors/sec_edgar_customers.json missing — KNA1 address/country will fall back to JSON kernel")
+
     return d
 
 
@@ -379,16 +389,27 @@ def build_sap_mard(d: dict[str, Any]) -> list[dict]:
 
 
 def build_sap_kna1(d: dict[str, Any]) -> list[dict]:
+    """KNA1 — Mode C: keep NAME1 from JSON kernel (scenario continuity);
+    enrich LAND1 + ORT01 + STRAS from real SEC EDGAR filings.
+    """
+    sec = d.get("sec_edgar", {})
     rows = []
     for i, c in enumerate(d["customers"]):
+        anchor = sec.get(c["customer_id"], {})
         primary_region = (c.get("regions") or ["permian"])[0]
+        # LAND1: ISO-2 country from curated anchor; fall back to region map.
+        land1 = anchor.get("iso_country") or REGION_TO_COUNTRY.get(primary_region, "US")
+        # ORT01: real city from SEC filing; fall back to region as Title Case.
+        ort01 = (anchor.get("city") or primary_region.replace("_", " ").title())[:35]
+        # STRAS: real street from SEC filing; fall back to a generic.
+        stras = (anchor.get("street1") or "1 Main St")[:35]
         rows.append({
             "MANDT": "100",
             "KUNNR": kunnr_for(i),
             "NAME1": c["name"][:35],
-            "LAND1": REGION_TO_COUNTRY.get(primary_region, "US"),
-            "ORT01": primary_region.replace("_", " ").title()[:35],
-            "STRAS": "1 Main St"[:35],
+            "LAND1": land1,
+            "ORT01": ort01,
+            "STRAS": stras,
         })
     return rows
 
