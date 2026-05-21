@@ -43,15 +43,27 @@ EXCLUDE_GLOBS = [
     "**/__pycache__/**",
 ]
 
-# The pattern catches every shape of import:
-#   from agents.utils.synthetic_data import ...
-#   import agents.utils.synthetic_data
-#   from .synthetic_data import ...   (relative inside utils/)
+# The pattern catches:
+#   - imports of the retired synthetic_data module
+#   - any code that opens a .json file from disk via Path().read_text() or
+#     json.load(open(...)). Files staged into `extra_packages` exist on the
+#     deployed runtime; everything else (e.g. data/start_date_variance/*.json)
+#     does not, so a `.json` read in production code degrades silently. See
+#     code-review HIGH #7.
 OFFENDING_PATTERN = re.compile(
-    r"^\s*(from\s+agents\.utils\.synthetic_data\s+import|"
+    r"^\s*("
+    # synthetic_data module imports (legacy)
+    r"from\s+agents\.utils\.synthetic_data\s+import|"
     r"import\s+agents\.utils\.synthetic_data|"
-    r"from\s+\.+synthetic_data\s+import)",
+    r"from\s+\.+synthetic_data\s+import"
+    r")",
     re.MULTILINE,
+)
+
+JSON_READ_PATTERN = re.compile(
+    r"(json\.loads?\s*\(|Path\([^)]*\.json[^)]*\)\.read_text|"
+    r"open\s*\([^)]*\.json[^)]*\)\.read|"
+    r"\.read_text\(\)\s*\)\s*if\s+.+\.json)",
 )
 
 
@@ -69,6 +81,11 @@ def main() -> int:
                 line_no = text.count("\n", 0, m.start()) + 1
                 line_text = text.splitlines()[line_no - 1]
                 offenses.append((py, line_no, line_text))
+            for m in JSON_READ_PATTERN.finditer(text):
+                line_no = text.count("\n", 0, m.start()) + 1
+                line_text = text.splitlines()[line_no - 1]
+                if ".json" in line_text:
+                    offenses.append((py, line_no, line_text))
 
     if offenses:
         print("✗ Found agents.utils.synthetic_data imports in production code:")

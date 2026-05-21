@@ -41,9 +41,9 @@ import logging
 import sys
 import urllib.request
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-UTC = timezone.utc  # Python 3.10 compat (datetime.UTC is 3.11+)
+UTC = UTC  # Python 3.10 compat (datetime.UTC is 3.11+)
 
 from google.cloud import bigquery
 

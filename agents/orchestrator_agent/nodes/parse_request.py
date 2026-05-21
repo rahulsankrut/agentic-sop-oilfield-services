@@ -104,8 +104,12 @@ def parse_capacity_gap_request(node_input: str, ctx: Context) -> Event:
     # downstream function nodes (`build_equivalent_plan` in particular) can
     # find it after the equivalence LLM clobbers node_input with its own
     # structured output.
+    # Code-review HIGH #8: reset iteration_count to 0 so a re-used session id
+    # doesn't carry over count from a prior workflow and prematurely exhaust
+    # the revise loop on the next run.
     state_delta = emit(ctx, gap_event)
     state_delta["request"] = request.model_dump(mode="json")
+    state_delta["iteration_count"] = 0
     return Event(
         message=f"Parsed capacity-gap request: {request.requested_asset} "
         f"to {request.target_location.label} by {request.deadline.date()}",

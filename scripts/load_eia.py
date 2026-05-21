@@ -40,9 +40,9 @@ import calendar
 import logging
 import sys
 import urllib.request
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
-UTC = timezone.utc  # Python 3.10 compat (datetime.UTC is 3.11+)
+UTC = UTC  # Python 3.10 compat (datetime.UTC is 3.11+)
 from pathlib import Path
 
 from google.cloud import bigquery

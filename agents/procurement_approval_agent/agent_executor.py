@@ -164,10 +164,18 @@ class ProcurementApprovalExecutor(AgentExecutor):
                 final=True,
             )
 
-        except Exception as e:
+        except Exception:
+            # Log the full exception + traceback server-side for triage,
+            # surface only a sanitized error code to the A2A caller. Raw
+            # `str(e)` can include DB query fragments, file paths, or
+            # downstream API response bodies. (Code-review HIGH #10.)
+            logger.exception("Procurement Approval review failed")
             await updater.update_status(
                 TaskState.failed,
-                message=new_agent_text_message(f"Review failed: {str(e)}"),
+                message=new_agent_text_message(
+                    "Review failed — check the agent's Cloud Logs for the "
+                    f"invocation id ({context.context_id}) for details."
+                ),
                 final=True,
             )
 

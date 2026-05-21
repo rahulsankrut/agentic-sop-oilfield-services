@@ -38,8 +38,11 @@ from agents.utils.skin_schema import CustomerSkin
 
 # Resolve `skins/` relative to repo root — two levels up from this file
 # (agents/utils/skin_loader.py → agents/utils/ → agents/ → <repo>).
+# Env var `SKINS_DIR` overrides — handy if the deploy layout changes
+# in a way that breaks the `parents[2]` math (cf. the `_SKILLS_DIR`
+# bug fixed at commit 4bd0e50; same class of failure mode).
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_SKINS_DIR = _REPO_ROOT / "skins"
+_SKINS_DIR = Path(os.environ.get("SKINS_DIR", str(_REPO_ROOT / "skins")))
 
 _cached_skin: CustomerSkin | None = None
 _cached_slug: str | None = None

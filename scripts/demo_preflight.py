@@ -60,8 +60,8 @@ import subprocess
 import sys
 import time
 import traceback
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

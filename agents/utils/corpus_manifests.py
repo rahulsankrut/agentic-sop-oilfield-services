@@ -16,11 +16,14 @@ works regardless.
 from __future__ import annotations
 
 import json
+import os
 from functools import lru_cache
 from pathlib import Path
 
+# Env var `ANCHORS_DIR` overrides — same defensive pattern as
+# agents.utils.skin_loader's `SKINS_DIR`.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_ANCHORS = _REPO_ROOT / "data" / "anchors"
+_ANCHORS = Path(os.environ.get("ANCHORS_DIR", str(_REPO_ROOT / "data" / "anchors")))
 
 
 @lru_cache(maxsize=1)

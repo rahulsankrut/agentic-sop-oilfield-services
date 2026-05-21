@@ -52,8 +52,13 @@ def evaluate_direct_availability(node_input: dict) -> Event:
     results = SystemQueryResults(**node_input["results"])
 
     chosen = _pick_best_instance(results.maximo)
-    fdp_approved = bool((results.fdp or {}).get("approved"))
-    direct_available = chosen is not None and fdp_approved
+    # Code-review HIGH #9: don't gate direct path on FDP. If FDP returns no
+    # row (unknown customer / FDP outage), still route DIRECT when a
+    # deployable instance exists — the Plan Evaluator can downgrade
+    # customer_compatibility if FDP is missing. Previous behavior
+    # silently forced equivalence path for any customer without an FDP
+    # entry.
+    direct_available = chosen is not None
 
     # If direct path isn't available, pre-fetch the KC equivalents so the
     # equivalence_lookup LLM has a real list to pick from (otherwise the LLM

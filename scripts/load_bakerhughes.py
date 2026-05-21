@@ -34,9 +34,9 @@ import argparse
 import logging
 import sys
 from collections.abc import Iterable
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
-UTC = timezone.utc  # Python 3.10 compat (datetime.UTC is 3.11+)
+UTC = UTC  # Python 3.10 compat (datetime.UTC is 3.11+)
 from pathlib import Path
 
 from google.cloud import bigquery

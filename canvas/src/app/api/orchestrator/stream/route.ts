@@ -30,6 +30,24 @@ const auth = new GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/cloud-platform"],
 });
 
+/**
+ * SSRF guard — the proxy attaches an ADC OAuth token before forwarding,
+ * so we MUST validate that ``streamUrl`` points at a legitimate Vertex AI
+ * Reasoning Engine endpoint. Without this, any caller can post an
+ * attacker-controlled URL and we'd leak the token to it.
+ *
+ * Allowed:
+ *   https://<region>-aiplatform.googleapis.com/v1beta1/
+ *     projects/<numeric-id>/locations/<region>/reasoningEngines/<id>:streamQuery
+ *   (optionally with ?alt=sse query string)
+ */
+const STREAM_URL_ALLOWLIST_REGEX =
+  /^https:\/\/[a-z0-9-]+-aiplatform\.googleapis\.com\/v1beta1\/projects\/\d+\/locations\/[a-z0-9-]+\/reasoningEngines\/\d+:streamQuery(\?[a-zA-Z0-9_=&-]*)?$/;
+
+function isAllowedStreamUrl(url: string): boolean {
+  return STREAM_URL_ALLOWLIST_REGEX.test(url);
+}
+
 interface ProxyRequestBody {
   streamUrl: string;
   /**
@@ -57,6 +75,15 @@ export async function POST(req: Request): Promise<Response> {
   if (!body.streamUrl || !body.userId || !body.userMessage) {
     return new Response(
       "Missing required field: streamUrl, userId, userMessage",
+      { status: 400 },
+    );
+  }
+
+  // SSRF: refuse to attach our ADC token to arbitrary URLs. Only forward
+  // to the Vertex AI Reasoning Engine streamQuery endpoint pattern.
+  if (!isAllowedStreamUrl(body.streamUrl)) {
+    return new Response(
+      `streamUrl rejected by allowlist: ${body.streamUrl}`,
       { status: 400 },
     );
   }

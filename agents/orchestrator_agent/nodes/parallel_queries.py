@@ -440,9 +440,25 @@ async def _via_in_process_skills(
         via_gateway=False,
     )
 
-    maximo, sap, fdp, intouch = await asyncio.gather(
-        maximo_task, sap_task, fdp_task, intouch_task, return_exceptions=False
+    # Code-review HIGH #11: use return_exceptions=True so one query
+    # failing doesn't kill the workflow — `node.started` already fired,
+    # so an uncaught exception here means the canvas spinner hangs with
+    # no `node.completed` ever arriving. Log each per-system failure;
+    # let the workflow continue with empty data for that system.
+    maximo_r, sap_r, fdp_r, intouch_r = await asyncio.gather(
+        maximo_task, sap_task, fdp_task, intouch_task, return_exceptions=True
     )
+
+    def _ok(result, label, default):
+        if isinstance(result, Exception):
+            logger.warning("parallel_system_queries: %s failed: %s", label, result)
+            return default
+        return result
+
+    maximo = _ok(maximo_r, "maximo", [])
+    sap = _ok(sap_r, "sap", None)
+    fdp = _ok(fdp_r, "fdp", None)
+    intouch = _ok(intouch_r, "intouch", [])
 
     return SystemQueryResults(
         maximo={"instances": maximo, "count": len(maximo)},

@@ -91,6 +91,7 @@ def deploy_forecast_review() -> str:
                 # TASK-13 Step 5 skin data — see orchestrator_agent/deploy.py.
                 "skins/default",
                 "skins/halliburton",
+            "data/anchors",
             ],
             "env_vars": {
                 k: v
@@ -111,6 +112,7 @@ def deploy_forecast_review() -> str:
                 "SAP_MCP_URL": os.environ.get("SAP_MCP_URL"),
                 "MAXIMO_MCP_URL": os.environ.get("MAXIMO_MCP_URL"),
                 "FDP_MCP_URL": os.environ.get("FDP_MCP_URL"),
+                "CUSTOMER_SKIN": os.environ.get("CUSTOMER_SKIN", "default"),
                 }.items()
                 if v
             },

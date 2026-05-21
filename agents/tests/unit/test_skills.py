@@ -380,10 +380,19 @@ def test_compute_override_significance_trivial():
 # ----------------------------------------------------------------------
 
 
-def test_get_start_date_distribution_permian():
+def test_get_start_date_distribution_permian_default_when_no_history():
+    """No WO_HISTORY for permian in BQ → default 14d distribution.
+
+    Previously this test asserted sample_size>0 because the legacy
+    `data/start_date_variance/permian.json` fallback existed. That
+    fallback was removed (code-review HIGH #7) because it never worked
+    on the deployed runtime — the JSON files aren't shipped in
+    extra_packages. The deployed runtime always returned default 14d for
+    permian; now local tests match.
+    """
     dist = scheduling.get_start_date_distribution("permian")
-    assert dist["sample_size"] > 0
-    assert dist["p90_offset_days"] >= dist["p50_offset_days"] >= dist["p10_offset_days"]
+    assert dist["sample_size"] == 0
+    assert dist["p50_offset_days"] == 14
 
 
 def test_get_start_date_distribution_unknown_basin_returns_default():

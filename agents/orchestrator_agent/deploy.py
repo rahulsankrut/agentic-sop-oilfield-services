@@ -66,6 +66,7 @@ def _env_vars(agent_engine_id: str, location: str) -> dict[str, str]:
         "SAP_MCP_URL",
         "MAXIMO_MCP_URL",
         "FDP_MCP_URL",
+        "CUSTOMER_SKIN",
     ):
         value = os.environ.get(var)
         if value:
@@ -158,6 +159,7 @@ def deploy_orchestrator() -> str:
                 # tarball needs the literal `skins/<slug>/` tree.
                 "skins/default",
                 "skins/halliburton",
+                "data/anchors",  # InTouch citation manifests
             ],
             "env_vars": _env_vars(agent_engine_id, location),
         },

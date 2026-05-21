@@ -13,7 +13,7 @@ from __future__ import annotations
 import math
 
 from agents.utils import enterprise_data as ed
-from agents.utils.bq_query import bq_query
+from agents.utils.bq_query import BQ_PROJECT, bq_query
 
 # Distance thresholds in km
 GROUND_TRANSIT_MAX_KM = 250
@@ -153,7 +153,7 @@ def _slug_from_name1(name1: str) -> str:
 def _resolve_canonical_to_matnr(canonical_id: str) -> str | None:
     """Look up the SAP MATNR for a canonical asset id via cross_system_aliases."""
     rows = bq_query(
-        "SELECT SAP_MATNR FROM `vertex-ai-demos-468803.oilfield_kc.cross_system_aliases` "
+        f"SELECT SAP_MATNR FROM `{BQ_PROJECT}.oilfield_kc.cross_system_aliases` "
         "WHERE CANONICAL_ID = @cid LIMIT 1",
         {"cid": canonical_id},
     )
@@ -163,7 +163,7 @@ def _resolve_canonical_to_matnr(canonical_id: str) -> str | None:
 def _resolve_canonical_to_itemnum(canonical_id: str) -> str | None:
     """Look up the Maximo ITEMNUM for a canonical asset id."""
     rows = bq_query(
-        "SELECT MAXIMO_ITEMNUM FROM `vertex-ai-demos-468803.oilfield_kc.cross_system_aliases` "
+        f"SELECT MAXIMO_ITEMNUM FROM `{BQ_PROJECT}.oilfield_kc.cross_system_aliases` "
         "WHERE CANONICAL_ID = @cid LIMIT 1",
         {"cid": canonical_id},
     )

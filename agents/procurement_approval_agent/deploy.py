@@ -80,6 +80,7 @@ def deploy_procurement_approval() -> str:
             # TASK-13 Step 5 skin data — see orchestrator_agent/deploy.py.
             "skins/default",
             "skins/halliburton",
+            "data/anchors",
         ],
         requirements=[
             "google-cloud-aiplatform[agent_engines,evaluation]>=1.121.0",
@@ -109,6 +110,7 @@ def deploy_procurement_approval() -> str:
                 "SAP_MCP_URL": os.environ.get("SAP_MCP_URL"),
                 "MAXIMO_MCP_URL": os.environ.get("MAXIMO_MCP_URL"),
                 "FDP_MCP_URL": os.environ.get("FDP_MCP_URL"),
+                "CUSTOMER_SKIN": os.environ.get("CUSTOMER_SKIN", "default"),
             }.items()
             if v
         },

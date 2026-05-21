@@ -161,17 +161,41 @@ def _emit_kc_drawer_a2ui(ctx, candidate_dict: dict) -> None:
         return
     try:
         from agents.utils import a2ui  # noqa: PLC0415
+        from agents.utils.bq_query import BQ_PROJECT, bq_query  # noqa: PLC0415
 
+        # Populate the drawer's "Cross-system aliases" + "Functional
+        # equivalence rationale" rows from BigQuery (cross_system_aliases
+        # + functional_equivalences tables). EquivalentAssetCandidate
+        # only carries the LLM's chosen substitute id + rationale; the
+        # rich aspect set the drawer wants lives in KC, not on the schema.
+        cid = str(candidate_dict.get("canonical_id", ""))
+        alias_row: dict = {}
+        if cid:
+            rows = bq_query(
+                f"SELECT SAP_MATNR, MAXIMO_ITEMNUM, FDP_CONFIG_ID, INTOUCH_SPEC_REFS "
+                f"FROM `{BQ_PROJECT}.oilfield_kc.cross_system_aliases` "
+                f"WHERE CANONICAL_ID = @cid LIMIT 1",
+                {"cid": cid},
+            )
+            if rows:
+                alias_row = rows[0]
         aspects = {
-            "cross_system_aliases": candidate_dict.get("aliases", {}) or {},
-            "functional_equivalences": [candidate_dict] if candidate_dict else [],
-            "asset_specification": {
-                "manufacturer": candidate_dict.get("manufacturer", ""),
-                "introduced_year": candidate_dict.get("introduced_year", ""),
+            "cross_system_aliases": {
+                "sap_material_number": alias_row.get("SAP_MATNR") or "",
+                "maximo_equipment_id": alias_row.get("MAXIMO_ITEMNUM") or "",
+                "fdp_config_id": alias_row.get("FDP_CONFIG_ID") or "",
             },
+            "functional_equivalence": {
+                "canonical_id": cid,
+                "canonical_label": str(candidate_dict.get("canonical_label", "")),
+                "rationale_source": str(candidate_dict.get("rationale_source", "")),
+                "rationale_summary": str(candidate_dict.get("rationale_summary", "")),
+                "confidence": float(candidate_dict.get("confidence") or 0.0),
+            },
+            "intouch_spec_refs": list(alias_row.get("INTOUCH_SPEC_REFS") or []),
         }
         a2ui_msgs = a2ui.kc_drawer(
-            str(candidate_dict.get("canonical_id", "")),
+            cid,
             str(candidate_dict.get("canonical_label", "")),
             aspects=aspects,
         )

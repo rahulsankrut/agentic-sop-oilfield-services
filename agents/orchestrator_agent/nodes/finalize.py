@@ -192,21 +192,16 @@ def finalize_sourcing_plan(node_input: dict, ctx: Context) -> Event:  # noqa: PL
     # WorkflowCompleted canvas event. The canvas's A2UIProvider drains
     # `a2ui_envelopes` from the SSE state_delta and renders the surface.
     if naive_baseline is not None:
-        try:
-            from agents.utils import a2ui  # noqa: PLC0415
+        from agents.utils import a2ui  # noqa: PLC0415
 
-            from .emit import emit_a2ui  # noqa: PLC0415
+        from ..events.emit import emit_a2ui  # noqa: PLC0415
 
-            cost_msgs = a2ui.cost_rollup(
-                doomed_usd=int(naive_baseline.estimated_cost_usd),
-                recommended_usd=int(final.primary_option.estimated_cost_usd),
-                avoided_usd=int(avoided),
-            )
-            state_delta = {**state_delta, **emit_a2ui(ctx, cost_msgs)}
-        except Exception:  # noqa: BLE001
-            # A2UI emit is best-effort; canvas falls back to the bespoke
-            # cost banner if the surface payload isn't present.
-            pass
+        cost_msgs = a2ui.cost_rollup(
+            doomed_usd=int(naive_baseline.estimated_cost_usd),
+            recommended_usd=int(final.primary_option.estimated_cost_usd),
+            avoided_usd=int(avoided),
+        )
+        state_delta = {**state_delta, **emit_a2ui(ctx, cost_msgs)}
 
     return Event(
         message=(
