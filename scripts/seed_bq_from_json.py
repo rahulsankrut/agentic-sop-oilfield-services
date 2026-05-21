@@ -148,7 +148,7 @@ def kunnr_for(customer_index: int) -> str:
 
 
 def load_data() -> dict[str, Any]:
-    """Load all data/*.json (skipping excluded subdirs)."""
+    """Load all data/*.json + real-data anchors (data/anchors/*.json)."""
     d: dict[str, Any] = {}
     for name in [
         "canonical_assets",
@@ -163,6 +163,18 @@ def load_data() -> dict[str, Any]:
         with path.open() as f:
             d[name] = json.load(f)
         log.info("loaded data/%s.json", name)
+
+    # Real-data anchors (TASK-16 Step 4d — Mode C, "real fields, kept IDs").
+    # Each anchor file enriches the synthetic kernel with real public data.
+    anchors_dir = DATA_DIR / "anchors"
+    d["uspto_patents"] = {}
+    uspto_path = anchors_dir / "uspto_patents.json"
+    if uspto_path.exists():
+        with uspto_path.open() as f:
+            d["uspto_patents"] = json.load(f)
+        log.info("loaded data/anchors/uspto_patents.json (%d real patents)", len(d["uspto_patents"]))
+    else:
+        log.warning("data/anchors/uspto_patents.json missing — manufacturer/intro_year will fall back to JSON kernel")
     return d
 
 
@@ -175,10 +187,40 @@ def now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
+def _shorten_assignee(name: str | None) -> str | None:
+    """Trim 'SCHLUMBERGER TECHNOLOGY CORP' → 'SCHLUMBERGER' for the 20-char column.
+
+    The harmonized assignee name from Google Patents BQ often has corporate
+    suffixes (CORP, INC, LLC, A GE COMPANY LLC, OILFIELD OPERATIONS) that
+    bust our STRING(20) MANUFACTURER column. Map to a known short form when
+    we recognize the major; otherwise keep the first 20 chars.
+    """
+    if not name:
+        return None
+    upper = name.upper()
+    knowns = [
+        ("SCHLUMBERGER", "Schlumberger"),
+        ("HALLIBURTON",  "Halliburton"),
+        ("BAKER HUGHES", "Baker Hughes"),
+        ("NATIONAL OILWELL", "NOV"),
+        ("WEATHERFORD",  "Weatherford"),
+    ]
+    for needle, short in knowns:
+        if needle in upper:
+            return short
+    return name[:20].title()
+
+
 def build_oilfield_kc_canonical_assets(d: dict[str, Any]) -> list[dict]:
+    """Build canonical_assets rows. Mode C: keep canonical_id + canonical_label
+    from the JSON kernel (scenario continuity); enrich manufacturer and
+    introduced_year from real USPTO patents (data/anchors/uspto_patents.json).
+    """
+    patents = d.get("uspto_patents", {})
     rows = []
     for a in d["canonical_assets"]:
         spec = a.get("specifications", {})
+        anchor = patents.get(a["canonical_id"], {})
         rows.append({
             "CANONICAL_ID": a["canonical_id"],
             "CANONICAL_LABEL": a["canonical_label"],
@@ -187,8 +229,10 @@ def build_oilfield_kc_canonical_assets(d: dict[str, Any]) -> list[dict]:
             "OPERATING_TEMP_MAX_C": spec.get("operating_temp_max_c"),
             "OPERATING_PRESSURE_MAX_PSI": spec.get("operating_pressure_max_psi"),
             "OUTER_DIAMETER_IN": spec.get("outer_diameter_in"),
-            "MANUFACTURER": a.get("manufacturer"),
-            "INTRODUCED_YEAR": a.get("introduced_year"),
+            # REAL from USPTO patent assignee; fall back to JSON kernel if anchor missing.
+            "MANUFACTURER": _shorten_assignee(anchor.get("assignee")) or a.get("manufacturer"),
+            # REAL from USPTO patent filing_year; fall back to JSON kernel.
+            "INTRODUCED_YEAR": anchor.get("filing_year") or a.get("introduced_year"),
         })
     return rows
 
@@ -246,17 +290,26 @@ def build_sap_mara(d: dict[str, Any]) -> list[dict]:
 
 
 def build_sap_makt(d: dict[str, Any]) -> list[dict]:
+    """MAKTX — real description from USPTO patent title (truncated to 40);
+    falls back to the JSON kernel's canonical_label when no anchor.
+    """
     aliases = d["cross_system_aliases"]
+    patents = d.get("uspto_patents", {})
     rows = []
     for a in d["canonical_assets"]:
         matnr = aliases.get(a["canonical_id"], {}).get("sap_material_number")
         if matnr is None:
             continue
+        anchor = patents.get(a["canonical_id"], {})
+        real_title = (anchor.get("title") or "").strip()
+        # SAP MAKT.MAKTX is CHAR(40) — truncate; if the patent title is too
+        # long for 40, prefix the kernel label for readability.
+        maktx = (real_title or a["canonical_label"])[:40]
         rows.append({
             "MANDT": "100",
             "MATNR": matnr,
             "SPRAS": "E",
-            "MAKTX": a["canonical_label"][:40],
+            "MAKTX": maktx,
         })
     return rows
 
@@ -368,17 +421,23 @@ def build_sap_zhr_workforce(d: dict[str, Any]) -> list[dict]:
 
 
 def build_maximo_item(d: dict[str, Any]) -> list[dict]:
+    """Maximo ITEM.DESCRIPTION — real patent title (100 chars); falls
+    back to canonical_label."""
     aliases = d["cross_system_aliases"]
+    patents = d.get("uspto_patents", {})
     rows = []
     for a in d["canonical_assets"]:
         cid = a["canonical_id"]
         itemnum = aliases.get(cid, {}).get("maximo_equipment_id")
         if itemnum is None:
             continue
+        anchor = patents.get(cid, {})
+        real_title = (anchor.get("title") or "").strip()
+        description = (real_title or a["canonical_label"])[:100]
         rows.append({
             "ITEMNUM": itemnum,
             "ITEMSETID": "SET1",
-            "DESCRIPTION": a["canonical_label"][:100],
+            "DESCRIPTION": description,
             "COMMODITYGROUP": a["category"][:16],
         })
     return rows
