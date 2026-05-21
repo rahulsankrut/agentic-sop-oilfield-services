@@ -83,12 +83,22 @@ def deploy_capacity_planning() -> str:
                 "agents/schemas.py",
             ],
             "env_vars": {
-                "AGENT_ENGINE_ID": agent_engine_id,
-                "AGENT_ENGINE_LOCATION": location,
-                "GOOGLE_GENAI_USE_VERTEXAI": "true",
-                "CAPACITY_PLANNING_MODEL": os.environ.get(
-                    "CAPACITY_PLANNING_MODEL", "gemini-3-flash-preview"
-                ),
+                k: v
+                for k, v in {
+                    "AGENT_ENGINE_ID": agent_engine_id,
+                    "AGENT_ENGINE_LOCATION": location,
+                    "GOOGLE_GENAI_USE_VERTEXAI": "true",
+                    "CAPACITY_PLANNING_MODEL": os.environ.get(
+                        "CAPACITY_PLANNING_MODEL", "gemini-3-flash-preview"
+                    ),
+                    # Vertex AI Search (Discovery Engine) — Phase 3 RAG.
+                    "DISCOVERY_ENGINE_PROJECT": os.environ.get("DISCOVERY_ENGINE_PROJECT"),
+                    "DISCOVERY_ENGINE_LOCATION": os.environ.get("DISCOVERY_ENGINE_LOCATION"),
+                    "BSEE_ENGINE_ID": os.environ.get("BSEE_ENGINE_ID"),
+                    "MCC_ENGINE_ID": os.environ.get("MCC_ENGINE_ID"),
+                    "INTOUCH_ENGINE_ID": os.environ.get("INTOUCH_ENGINE_ID"),
+                }.items()
+                if v
             },
         },
     )

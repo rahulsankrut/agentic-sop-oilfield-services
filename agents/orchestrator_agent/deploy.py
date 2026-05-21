@@ -56,6 +56,12 @@ def _env_vars(agent_engine_id: str, location: str) -> dict[str, str]:
         "FORECAST_REVIEW_AGENT_RESOURCE_NAME",
         "CAPACITY_PLANNING_AGENT_RESOURCE_NAME",
         "AGENT_GATEWAY_ENDPOINT",
+        # Vertex AI Search (Discovery Engine) — TASK-16 Phase 3 RAG.
+        "DISCOVERY_ENGINE_PROJECT",
+        "DISCOVERY_ENGINE_LOCATION",
+        "BSEE_ENGINE_ID",
+        "MCC_ENGINE_ID",
+        "INTOUCH_ENGINE_ID",
     ):
         value = os.environ.get(var)
         if value:
