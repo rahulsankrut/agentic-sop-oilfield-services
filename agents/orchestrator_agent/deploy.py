@@ -145,6 +145,12 @@ def deploy_orchestrator() -> str:
                 "agents/orchestrator_agent",
                 "agents/utils",
                 "agents/schemas.py",
+                # TASK-13 Step 5: skin data must ship with the runtime —
+                # skin_loader.py resolves _REPO_ROOT/skins/<slug>/customer.yaml
+                # via Path(__file__).resolve().parents[2], so the deployed
+                # tarball needs the literal `skins/<slug>/` tree.
+                "skins/default",
+                "skins/halliburton",
             ],
             "env_vars": _env_vars(agent_engine_id, location),
         },

@@ -73,7 +73,14 @@ def deploy_procurement_approval() -> str:
             "Reviews oilfield-services SourcingPlans for procurement readiness "
             "(budget, customer authorization, certification, regulatory)."
         ),
-        extra_packages=["agents/procurement_approval_agent", "agents/utils", "agents/schemas.py"],
+        extra_packages=[
+            "agents/procurement_approval_agent",
+            "agents/utils",
+            "agents/schemas.py",
+            # TASK-13 Step 5 skin data — see orchestrator_agent/deploy.py.
+            "skins/default",
+            "skins/halliburton",
+        ],
         requirements=[
             "google-cloud-aiplatform[agent_engines,evaluation]>=1.121.0",
             "google-adk>=2.0.0,<2.1",

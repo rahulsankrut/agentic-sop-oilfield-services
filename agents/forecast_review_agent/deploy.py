@@ -81,7 +81,14 @@ def deploy_forecast_review() -> str:
                 "pydantic>=2.12.0",
                 "python-dotenv>=1.0.0",
             ],
-            "extra_packages": ["agents/forecast_review_agent", "agents/utils", "agents/schemas.py"],
+            "extra_packages": [
+                "agents/forecast_review_agent",
+                "agents/utils",
+                "agents/schemas.py",
+                # TASK-13 Step 5 skin data — see orchestrator_agent/deploy.py.
+                "skins/default",
+                "skins/halliburton",
+            ],
             "env_vars": {
                 k: v
                 for k, v in {

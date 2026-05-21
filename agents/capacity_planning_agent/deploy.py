@@ -81,6 +81,9 @@ def deploy_capacity_planning() -> str:
                 "agents/capacity_planning_agent",
                 "agents/utils",
                 "agents/schemas.py",
+                # TASK-13 Step 5 skin data — see orchestrator_agent/deploy.py.
+                "skins/default",
+                "skins/halliburton",
             ],
             "env_vars": {
                 k: v
