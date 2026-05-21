@@ -155,17 +155,45 @@ def test_calculate_sourcing_cost_adds_certification_and_customs():
     assert with_extras == base + (4 * 150) + 5000
 
 
-def test_identify_blockers_clean():
+def test_identify_blockers_clean(monkeypatch):
+    """Equipment has no open RECERT WOs, no customer restriction → no blockers.
+
+    The BQ-seeded TX-007-LGS-001 actually has an open RECERT WO with
+    cert hours remaining; we patch out the WO endpoint for this case
+    to assert the clean-path behavior of `identify_blockers`.
+    """
+    monkeypatch.setattr(sourcing.mcp_client, "fdp_list_customer_restrictions", lambda cid: [])
+    monkeypatch.setattr(sourcing.mcp_client, "maximo_get_open_workorders", lambda *a, **kw: [])
     blockers = sourcing.identify_blockers("TX-007", "gulf-petroleum", "TX-007-LGS-001")
     assert blockers == []
 
 
-def test_identify_blockers_customer_restriction():
+def test_identify_blockers_customer_restriction(monkeypatch):
+    """A matching FDP restriction row → 'restricts substitution' blocker.
+
+    `bohai-energy` rejects `RIG-LWP-B` (MAT-LWPB) as a substitute. We
+    inject the restriction here rather than depend on the seeder
+    flattening this from `customers.json::substitution_restrictions`
+    (the v1 seeder only handles `v?_substitution_accepted` keys).
+    """
+    monkeypatch.setattr(
+        sourcing.mcp_client,
+        "fdp_list_customer_restrictions",
+        lambda cid: [
+            {
+                "customer_id": "bohai-energy",
+                "matnr_original": "MAT-LWPA",
+                "matnr_substitute_rejected": "MAT-LWPB",
+            }
+        ],
+    )
     blockers = sourcing.identify_blockers("RIG-LWP-B", "bohai-energy", None)
     assert any("restricts substitution" in b for b in blockers)
 
 
-def test_identify_blockers_unknown_equipment():
+def test_identify_blockers_unknown_equipment(monkeypatch):
+    """An equipment id that no Maximo ASSET row matches → 'not found' blocker."""
+    monkeypatch.setattr(sourcing.mcp_client, "fdp_list_customer_restrictions", lambda cid: [])
     blockers = sourcing.identify_blockers("TX-007", "gulf-petroleum", "TX-007-NOWHERE-999")
     assert any("not found" in b for b in blockers)
 
@@ -177,8 +205,11 @@ def test_identify_blockers_unknown_equipment():
 
 def test_query_maximo_availability_returns_lagos_instance():
     rows = enterprise.query_maximo_availability("TX-007")
-    labels = [r["location"]["label"] for r in rows]
-    assert any("Lagos" in lbl for lbl in labels)
+    # Q8 (TASK-16 Step 9): location.description replaces legacy
+    # location.label. The Lagos repair shop's DESCRIPTION column carries
+    # "Lagos repair shop, Nigeria" in the seeded data.
+    descriptions = [r["location"]["description"] for r in rows]
+    assert any("Lagos" in (d or "") for d in descriptions)
 
 
 def test_query_maximo_availability_region_filter():
@@ -197,17 +228,24 @@ def test_query_sap_workforce_unknown_basin_returns_zeros():
 
 
 def test_query_fdp_customer_config_gulf_petroleum_tx001():
+    # TASK-16 Step 9: substitution_accepted keys are now derived from the
+    # substitute's canonical_id suffix (e.g. "TX-007" → "007"), not the
+    # legacy free-form JSON key names ("v7_substitution_accepted" → "V7").
+    # The BQ APPROVED_SUBSTITUTIONS row links MAT-67890 → MAT-67899; the
+    # alias table reverses MAT-67899 → TX-007 → "007".
     cfg = enterprise.query_fdp_customer_config("gulf-petroleum", "TX-001")
     assert cfg["approved"] is True
-    assert "V7" in cfg["substitution_accepted"]
-    assert cfg["substitution_accepted"]["V7"] is True
+    assert "007" in cfg["substitution_accepted"]
+    assert cfg["substitution_accepted"]["007"] is True
 
 
 def test_query_intouch_specs_returns_relevant_docs():
-    docs = enterprise.query_intouch_specs("TX-007")
-    ids = {d["spec_id"] for d in docs}
-    assert "spec-3.2-2024" in ids
-    assert "v7-upgrade-guide-2023" in ids
+    # TASK-16 Step 9: query_intouch_specs now returns list[str] (the
+    # ARRAY<STRING> column from oilfield_kc.cross_system_aliases), not
+    # a list of {spec_id, title} dicts.
+    specs = enterprise.query_intouch_specs("TX-007")
+    assert "spec-3.2-2024" in specs
+    assert "v7-upgrade-guide-2023" in specs
 
 
 # ----------------------------------------------------------------------

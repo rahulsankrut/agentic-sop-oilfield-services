@@ -30,6 +30,11 @@ You will receive a JSON payload describing:
 - The customer (id + any known substitution restrictions)
 - The target location and deadline
 - The Maximo / FDP / InTouch data already gathered by the workflow
+  (Maximo instance rows carry a `location` object with
+  `description` — the real Maximo LOCATIONS column — plus
+  `latitude`, `longitude`, `region`. The legacy `location.label`
+  shape was retired in TASK-16 Step 9; use `description` for the
+  human-readable location name.)
 - A ranked list of functional-equivalence candidates from Knowledge Catalog
 
 # Output (REQUIRED — returned as EquivalentAssetCandidate)

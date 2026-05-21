@@ -1,10 +1,25 @@
-"""Tools for the scheduling-probability skill."""
+"""Tools for the scheduling-probability skill.
+
+TASK-16 Step 11 — `get_start_date_distribution` now calls the Maximo MCP
+(`maximo.get_start_date_distribution`) instead of reading
+`data/start_date_variance/{basin}.json` directly. The Maximo MCP queries
+the `maximo_extract.WO_HISTORY` BigQuery view per Q7 resolution.
+
+The other two functions (`compute_optimal_buffer`,
+`compute_fleet_utilization_impact`) remain pure-compute and unchanged.
+"""
 
 from __future__ import annotations
 
+import json
+import logging
 import statistics
+from datetime import datetime
+from pathlib import Path
 
-from agents.utils.synthetic_data import load_start_date_variance
+from agents.utils.mcp_client import maximo_get_start_date_distribution
+
+logger = logging.getLogger(__name__)
 
 # Default static buffer (days) most basins run on without the agent.
 DEFAULT_STATIC_BUFFER_DAYS = 14.0
@@ -12,6 +27,67 @@ DEFAULT_STATIC_BUFFER_DAYS = 14.0
 CAPEX_PER_BUFFER_DAY = 320_000.0
 # Fleet-utilization uplift per buffer-day removed, percentage points.
 UTIL_UPLIFT_PCT_PER_DAY = 2.0
+
+# Repo root for the legacy-JSON fallback. tools.py lives at
+# <repo>/agents/capacity_planning_agent/skills/scheduling-probability/scripts/tools.py
+# → 6 parents up = <repo>.
+_REPO_ROOT = Path(__file__).resolve().parents[5]
+_LEGACY_VARIANCE_DIR = _REPO_ROOT / "data" / "start_date_variance"
+
+
+def _parse_iso(value: str | datetime) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    # FastAPI serializes datetimes as ISO 8601 strings.
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _offset_days(reference: datetime, target: datetime) -> float:
+    return (target - reference).total_seconds() / 86_400.0
+
+
+# TODO: remove when WO_HISTORY is fully seeded with reverse-engineered COMP WOs.
+# Until then, the Maximo MCP's `start_date_distribution` endpoint returns
+# confidence=0.0 with zero-variance dates because `maximo_extract.WO_HISTORY`
+# filters STATUS='COMP' and the v1 seed has only INPRG WOs. For basins where
+# we still have legacy aggregated JSON (`data/start_date_variance/*.json`),
+# fall back to reverse-engineering the distribution from those records so
+# the cargo-plane Persona-3 scenario keeps producing meaningful p10/p50/p90.
+def _synthesize_from_legacy_json(
+    basin: str,
+    customer_id: str | None,
+    asset_class: str | None,
+) -> dict | None:
+    """Compute p10/p50/p90 offsets from the aggregated JSON, or None if absent."""
+    json_path = _LEGACY_VARIANCE_DIR / f"{basin}.json"
+    if not json_path.exists():
+        return None
+    try:
+        rows = json.loads(json_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Failed to read legacy variance JSON %s: %s", json_path, exc)
+        return None
+
+    if customer_id:
+        rows = [r for r in rows if r.get("customer_id") == customer_id]
+    if asset_class:
+        rows = [r for r in rows if r.get("asset_class") == asset_class]
+    if not rows:
+        return None
+
+    offsets = sorted(r["actual_start_offset_days"] for r in rows)
+    if len(offsets) == 1:
+        p10 = p90 = offsets[0]
+    else:
+        quantiles = statistics.quantiles(offsets, n=10, method="inclusive")
+        p10, p90 = quantiles[0], quantiles[8]
+    return {
+        "p10_offset_days": p10,
+        "p50_offset_days": statistics.median(offsets),
+        "p90_offset_days": offsets[-1] if len(offsets) == 1 else p90,
+        "sample_size": len(offsets),
+        "source": "legacy_json_fallback",
+    }
 
 
 def get_start_date_distribution(
@@ -21,45 +97,62 @@ def get_start_date_distribution(
 ) -> dict:
     """Return p10/p50/p90 actual-vs-requested offsets in days for a basin.
 
-    Filters by ``customer_id`` and ``asset_class`` if provided. If the basin
-    has no recorded data the returned distribution is the conservative
-    default (14d offset across percentiles).
+    Calls the Maximo MCP (`maximo.get_start_date_distribution`), which
+    queries `maximo_extract.WO_HISTORY` for `APPROX_QUANTILES(variance_days,
+    100)[OFFSET(10/50/90)]`. Filters by ``customer_id`` and ``asset_class``
+    are forwarded (currently no-ops on the MCP side until WO_HISTORY
+    carries those join keys).
+
+    The MCP returns `StartDateDistribution` (a date-shaped payload with
+    `requested_date` + p10/p50/p90 `*_actual_date` + `confidence`). We
+    convert back to day-offsets so `compute_optimal_buffer` keeps working.
+
+    Fallback chain:
+      1. MCP with `confidence > 0`  →  use MCP quantiles.
+      2. MCP zero-variance/empty + legacy JSON exists  →  reverse-engineer
+         from the aggregated `data/start_date_variance/{basin}.json` so the
+         cargo-plane scenario keeps working before WO_HISTORY is seeded.
+      3. Neither  →  conservative 14d default across percentiles.
     """
-    try:
-        rows = load_start_date_variance(basin)
-    except FileNotFoundError:
-        return {
-            "p10_offset_days": 14,
-            "p50_offset_days": 14,
-            "p90_offset_days": 14,
-            "sample_size": 0,
-            "note": f"No variance history for basin '{basin}' — returning default 14d.",
-        }
-
-    if customer_id:
-        rows = [r for r in rows if r.get("customer_id") == customer_id]
-    if asset_class:
-        rows = [r for r in rows if r.get("asset_class") == asset_class]
-    if not rows:
-        return {
-            "p10_offset_days": 14,
-            "p50_offset_days": 14,
-            "p90_offset_days": 14,
-            "sample_size": 0,
-            "note": "No records match the given filters; returning default 14d.",
-        }
-
-    offsets = sorted(r["actual_start_offset_days"] for r in rows)
-    quantiles = (
-        statistics.quantiles(offsets, n=10, method="inclusive")
-        if len(offsets) > 1
-        else [offsets[0]] * 9
+    mcp_payload = maximo_get_start_date_distribution(
+        basin, customer_id=customer_id, asset_class=asset_class
     )
+
+    if mcp_payload and float(mcp_payload.get("confidence", 0.0)) > 0.0:
+        try:
+            requested = _parse_iso(mcp_payload["requested_date"])
+            p10 = _offset_days(requested, _parse_iso(mcp_payload["p10_actual_date"]))
+            p50 = _offset_days(requested, _parse_iso(mcp_payload["p50_actual_date"]))
+            p90 = _offset_days(requested, _parse_iso(mcp_payload["p90_actual_date"]))
+        except (KeyError, ValueError) as exc:
+            logger.warning("Malformed MCP StartDateDistribution payload: %s", exc)
+        else:
+            # Heuristic sample size from confidence (inverse of the MCP's
+            # `0.25 + 0.25 * sqrt(n)/10` heuristic, capped). Used only for
+            # downstream display; the buffer math doesn't need it exact.
+            confidence = float(mcp_payload["confidence"])
+            approx_n = max(1, int(((confidence - 0.25) * 40) ** 2)) if confidence > 0.25 else 1
+            return {
+                "p10_offset_days": round(p10, 2),
+                "p50_offset_days": round(p50, 2),
+                "p90_offset_days": round(p90, 2),
+                "sample_size": approx_n,
+                "confidence": confidence,
+                "source": "maximo_mcp",
+            }
+
+    # MCP returned zero-confidence (WO_HISTORY empty for this basin). Try
+    # the legacy JSON fallback before defaulting to the static 14d.
+    fallback = _synthesize_from_legacy_json(basin, customer_id, asset_class)
+    if fallback is not None:
+        return fallback
+
     return {
-        "p10_offset_days": offsets[0] if len(offsets) == 1 else quantiles[0],
-        "p50_offset_days": statistics.median(offsets),
-        "p90_offset_days": offsets[-1] if len(offsets) == 1 else quantiles[8],
-        "sample_size": len(offsets),
+        "p10_offset_days": 14,
+        "p50_offset_days": 14,
+        "p90_offset_days": 14,
+        "sample_size": 0,
+        "note": f"No variance history for basin '{basin}' — returning default 14d.",
     }
 
 

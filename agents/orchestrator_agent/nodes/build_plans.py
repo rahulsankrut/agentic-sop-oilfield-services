@@ -26,12 +26,19 @@ from agents.utils.skill_imports import (
 
 
 def _instance_to_geopoint(instance: dict) -> GeoPoint:
-    """Pull a GeoPoint out of a Maximo instance row's ``location`` field."""
+    """Pull a GeoPoint out of a Maximo instance row's ``location`` field.
+
+    Q8 resolution (TASK-16 Step 9): the Maximo MCP-backed
+    ``query_maximo_availability`` now returns ``location.description``
+    (real Maximo LOCATIONS column) instead of the legacy
+    ``location.label``. Accept either key so this stays robust during
+    the migration window.
+    """
     loc = instance.get("location") or {}
     return GeoPoint(
         latitude=float(loc.get("latitude", 0.0)),
         longitude=float(loc.get("longitude", 0.0)),
-        label=loc.get("label") or loc.get("region"),
+        label=loc.get("description") or loc.get("label") or loc.get("region"),
     )
 
 
@@ -40,18 +47,26 @@ def _build_option_for_instance(
     canonical_id: str,
     instance: dict,
     fdp_approved: bool,
-    intouch_specs: list[dict],
+    intouch_specs: list,
 ) -> SourcingOption:
     """Common SourcingOption assembly for both direct + equivalence paths."""
     asset_payload = resolve_canonical_asset(local_identifier=canonical_id)
+    # TASK-16 Step 9: query_intouch_specs now returns list[str] (the
+    # ARRAY<STRING> column). For backwards-compat during the migration
+    # window, accept either list[str] or the legacy list[{spec_id,...}].
+    spec_ids: list[str] = []
+    for s in intouch_specs or []:
+        if isinstance(s, str):
+            spec_ids.append(s)
+        elif isinstance(s, dict) and s.get("spec_id"):
+            spec_ids.append(str(s["spec_id"]))
     asset = AssetIdentifier(
         **{
             **asset_payload,
             # Splice in the InTouch spec ids we just fetched (they overrule
             # whatever resolve_canonical_asset returned if the catalog has a
             # more current list).
-            "intouch_spec_refs": [s["spec_id"] for s in intouch_specs]
-            or asset_payload.get("intouch_spec_refs", []),
+            "intouch_spec_refs": spec_ids or asset_payload.get("intouch_spec_refs", []),
         }
     )
     source = _instance_to_geopoint(instance)

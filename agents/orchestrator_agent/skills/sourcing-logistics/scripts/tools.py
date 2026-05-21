@@ -1,10 +1,19 @@
-"""Tools for the sourcing-logistics skill."""
+"""Tools for the sourcing-logistics skill.
+
+TASK-16 Step 10: ``identify_blockers`` migrated to use MCP backends +
+``oilfield_kc.cross_system_aliases`` via the BQ query helper instead of
+the legacy ``customers.json`` / ``maximo_inventory.json`` JSON reads.
+
+``estimate_transit`` and ``calculate_sourcing_cost`` stay pure-Python
+(haversine + thresholds) — no data lookups, nothing to migrate.
+"""
 
 from __future__ import annotations
 
 import math
 
-from agents.utils.synthetic_data import get_customer, load_maximo_inventory
+from agents.utils import mcp_client
+from agents.utils.bq_query import bq_query
 
 # Distance thresholds in km
 GROUND_TRANSIT_MAX_KM = 250
@@ -90,6 +99,129 @@ def calculate_sourcing_cost(  # noqa: PLR0913 — config-heavy cost calc is natu
     return cost
 
 
+# ---------------------------------------------------------------------------
+# identify_blockers — migrated to MCP + BQ backends (TASK-16 Step 10)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_customer_id(raw: str) -> str:
+    """Slug-or-display-name → canonical slug.
+
+    Tries SAP MCP's ``sap_resolve_customer_by_name`` first; if the
+    input matches a KNA1 NAME1, derive a slug from NAME1 (lowercased,
+    spaces → hyphens, "Services"/"Corp"-style suffixes stripped).
+    Falls back to the obvious local heuristic (lowercase + replace
+    spaces with hyphens) when the SAP lookup returns nothing — which
+    is also the path the existing tests use (they pass ``gulf-petroleum``
+    as a literal slug; the helper short-circuits when input already
+    looks like one).
+    """
+    if not raw:
+        return ""
+    needle = raw.strip()
+
+    # Slug shape (lowercase + hyphens, no spaces) — assume already canonical.
+    if needle and needle == needle.lower() and " " not in needle:
+        return needle
+
+    # Display name: ask SAP MCP. The KNA1 NAME1 → slug bridge isn't stored
+    # anywhere directly, so we derive it the same way the original
+    # `customers.json` slugs were minted: lowercase the first 1-2 NAME1
+    # tokens and join with hyphens.
+    matches = mcp_client.sap_resolve_customer_by_name(needle) or []
+    if matches:
+        name1 = matches[0].get("name1", "")
+        return _slug_from_name1(name1) or needle.lower().replace(" ", "-")
+
+    return needle.lower().replace(" ", "-")
+
+
+def _slug_from_name1(name1: str) -> str:
+    """Derive the legacy customer-id slug from a SAP NAME1.
+
+    Matches the convention in ``data/customers.json``: take the first two
+    tokens (excluding generic corporate suffixes), lowercase, join with
+    hyphens. ``"Gulf Petroleum Services"`` → ``"gulf-petroleum"``.
+    """
+    if not name1:
+        return ""
+    suffixes = {"services", "co", "co.", "ltd", "ltd.", "inc", "inc.", "corp", "corp.", "company"}
+    tokens = [t for t in name1.lower().split() if t not in suffixes]
+    return "-".join(tokens[:2])
+
+
+def _resolve_canonical_to_matnr(canonical_id: str) -> str | None:
+    """Look up the SAP MATNR for a canonical asset id via cross_system_aliases."""
+    rows = bq_query(
+        "SELECT SAP_MATNR FROM `vertex-ai-demos-468803.oilfield_kc.cross_system_aliases` "
+        "WHERE CANONICAL_ID = @cid LIMIT 1",
+        {"cid": canonical_id},
+    )
+    return rows[0]["SAP_MATNR"] if rows else None
+
+
+def _resolve_canonical_to_itemnum(canonical_id: str) -> str | None:
+    """Look up the Maximo ITEMNUM for a canonical asset id."""
+    rows = bq_query(
+        "SELECT MAXIMO_ITEMNUM FROM `vertex-ai-demos-468803.oilfield_kc.cross_system_aliases` "
+        "WHERE CANONICAL_ID = @cid LIMIT 1",
+        {"cid": canonical_id},
+    )
+    return rows[0]["MAXIMO_ITEMNUM"] if rows else None
+
+
+def _customer_restriction_blocker(canonical_id_substitute: str, customer_id: str) -> str | None:
+    """Return a 'restricts substitution' blocker string, or None."""
+    matnr_sub = _resolve_canonical_to_matnr(canonical_id_substitute)
+    if not matnr_sub:
+        return None
+    normalized = _normalize_customer_id(customer_id)
+    restrictions = mcp_client.fdp_list_customer_restrictions(normalized) or []
+    for r in restrictions:
+        if r.get("matnr_substitute_rejected") == matnr_sub:
+            return f"Customer {customer_id} restricts substitution to {canonical_id_substitute}"
+    return None
+
+
+def _open_recert_hours_remaining(assetnum: str, siteid: str) -> float:
+    """Sum (est_lab_hrs - act_lab_hrs) across open RECERT work orders."""
+    total = 0.0
+    wos = mcp_client.maximo_get_open_workorders(assetnum, siteid) or []
+    for wo in wos:
+        if (wo.get("worktype") or "").upper() != "RECERT":
+            continue
+        est = float(wo.get("est_lab_hrs") or 0)
+        act = float(wo.get("act_lab_hrs") or 0)
+        if est - act > 0:
+            total += est - act
+    return total
+
+
+def _equipment_blockers(
+    canonical_id_substitute: str, source_equipment_instance_id: str
+) -> list[str]:
+    """Return blockers for the equipment-instance leg of identify_blockers."""
+    itemnum = _resolve_canonical_to_itemnum(canonical_id_substitute)
+    matched: dict | None = None
+    if itemnum:
+        for a in mcp_client.maximo_query_assets_by_item(itemnum) or []:
+            if a.get("assetnum") == source_equipment_instance_id:
+                matched = a
+                break
+    if matched is None:
+        return [f"Equipment instance {source_equipment_instance_id} not found"]
+
+    cert_hours = _open_recert_hours_remaining(
+        source_equipment_instance_id, matched.get("siteid", "")
+    )
+    if cert_hours > 0:
+        return [
+            f"Equipment {source_equipment_instance_id} has "
+            f"{cert_hours:g} certification hours remaining"
+        ]
+    return []
+
+
 def identify_blockers(
     canonical_id_substitute: str,
     customer_id: str,
@@ -97,30 +229,36 @@ def identify_blockers(
 ) -> list[str]:
     """Surface issues that would block this sourcing option.
 
-    Currently considers:
-    - Customer config restriction (substitution disallowed).
-    - Workforce / certification at the source (from Maximo inventory record).
+    Migrated to MCP + BQ backends (TASK-16 Step 10):
+
+    1. **Customer-restriction check** — call FDP MCP's
+       ``list_customer_restrictions(customer_id)``. If the substitute's
+       resolved SAP MATNR appears as ``matnr_substitute_rejected`` in any
+       restriction row, append a ``"Customer X restricts substitution
+       to Y"`` blocker.
+    2. **Equipment-instance check** (when ``source_equipment_instance_id``
+       is given) — resolve the canonical_id to a Maximo ITEMNUM, query
+       Maximo MCP for assets matching that ITEMNUM, and filter by
+       ``assetnum == source_equipment_instance_id``. If no match,
+       append ``"Equipment instance ... not found"``. If the matched
+       asset has open RECERT WOs with remaining cert hours
+       (``est_lab_hrs - act_lab_hrs > 0``), append a
+       ``"has N certification hours remaining"`` blocker.
+
+    The ``workforce_attached`` check from the JSON era is **deliberately
+    skipped** — the seeder synthesized it from no real signal and the
+    customer's production derivation (LABTRANS join) returns different
+    numbers, so a placeholder here would be misleading. The spec §5
+    note explicitly flags it as synthesized-signature; we drop rather
+    than fake it.
     """
     blockers: list[str] = []
 
-    customer = get_customer(customer_id) or {}
-    restricted = customer.get("substitution_restrictions", [])
-    if canonical_id_substitute in restricted:
-        blockers.append(
-            f"Customer {customer_id} restricts substitution to {canonical_id_substitute}"
-        )
+    restriction = _customer_restriction_blocker(canonical_id_substitute, customer_id)
+    if restriction:
+        blockers.append(restriction)
 
     if source_equipment_instance_id:
-        inv = {x["equipment_instance_id"]: x for x in load_maximo_inventory()}
-        item = inv.get(source_equipment_instance_id)
-        if item is None:
-            blockers.append(
-                f"Equipment instance {source_equipment_instance_id} not found in Maximo"
-            )
-        else:
-            if item.get("status") not in ("available", "available_after_recert"):
-                blockers.append(f"Equipment status is '{item['status']}' — not deployable")
-            if not item.get("workforce_attached"):
-                blockers.append("No workforce attached to this equipment instance")
+        blockers.extend(_equipment_blockers(canonical_id_substitute, source_equipment_instance_id))
 
     return blockers
