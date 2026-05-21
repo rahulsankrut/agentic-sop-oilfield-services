@@ -339,3 +339,127 @@ class SapWorkforce(BaseModel):
     snapshot_date: str  # ISO date string — keep as str per CLAUDE.md gotcha
     naics_211_state_employment: int | None = None
     data_source: str | None = None
+
+
+# ----- FDP (Forecast Demand Planner) — TASK-16 Step 7 -----------------------
+#
+# FDP is the OFS major's homegrown forecasting / customer-config tool. There
+# is no public schema; the contract is the columns. Customer brings their
+# FDP-equivalent extract as a flat table of
+# (customer_id, material_number, approved_flag, accepted_substitutes[], notes).
+
+
+class FdpCustomerConfig(BaseModel):
+    """FDP per-customer per-material configuration record."""
+
+    customer_id: str
+    matnr: str
+    approved: bool
+    notes: str | None = None
+    effective_date: str | None = None  # ISO date string
+
+
+class FdpSubstitution(BaseModel):
+    """FDP-approved substitute mapping (one row of the APPROVED_SUBSTITUTIONS table)."""
+
+    customer_id: str
+    matnr_original: str
+    matnr_substitute: str
+    accepted: bool
+
+
+class FdpRestriction(BaseModel):
+    """Derived: a substitution this customer has REJECTED (ACCEPTED=FALSE).
+
+    Used by sourcing-logistics + asset-equivalence to apply the customer
+    restriction multiplier when scoring equivalence confidence.
+    """
+
+    customer_id: str
+    matnr_original: str
+    matnr_substitute_rejected: str
+
+
+# ----- Maximo — TASK-16 Step 6 ----------------------------------------------
+#
+# Mirror the real Maximo MAS 9.x table layout (ASSET / ITEM / INVENTORY /
+# INVBALANCES / LOCATIONS / WORKORDER). The typed MCP tool surface stays
+# identical whether the implementation queries our `maximo_extract.*` BQ
+# dataset (v1) or a live MAS via the Maximo REST API (a customer's
+# production swap). Dates serialized as ISO strings per the CLAUDE.md UUID
+# gotcha (deployed ADK runtime uses stdlib json.dumps).
+
+
+class MaximoItem(BaseModel):
+    """Maximo ITEM — Item Master."""
+
+    itemnum: str
+    itemsetid: str = "SET1"
+    description: str | None = None
+    commoditygroup: str | None = None
+
+
+class MaximoLocation(BaseModel):
+    """Maximo LOCATIONS — Location Master with inline lat/lon + WPI port ref."""
+
+    siteid: str
+    location: str
+    description: str | None = None
+    type: str | None = None
+    status: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    region: str | None = None
+    wpi_port_index_number: int | None = None
+    wpi_port_name: str | None = None
+
+
+class MaximoAssetWithLocation(BaseModel):
+    """Maximo ASSET joined to LOCATIONS — single physical unit + its place.
+
+    Substitutes the legacy `EquipmentInstance` shape on the v2 tool surface.
+    `location.description` replaces the legacy `location.label` (Q8 resolution).
+    """
+
+    assetnum: str
+    itemnum: str | None = None
+    status: str
+    siteid: str
+    description: str | None = None
+    serialnum: str | None = None
+    assettype: str | None = None
+    installdate: str | None = None  # ISO date string
+    location: MaximoLocation
+
+
+class MaximoWorkOrder(BaseModel):
+    """Maximo WORKORDER — recert + repair tracking."""
+
+    wonum: str
+    siteid: str
+    assetnum: str | None = None
+    location: str | None = None
+    status: str
+    worktype: str | None = None
+    reportdate: str | None = None  # ISO timestamp string
+    schedstart: str | None = None  # ISO timestamp string
+    actstart: str | None = None  # ISO timestamp string
+    est_lab_hrs: float | None = None
+    act_lab_hrs: float | None = None
+    bsee_lease_ref: str | None = None
+    bsee_incident_date: str | None = None  # ISO date string
+
+
+class InvBalance(BaseModel):
+    """Maximo INVBALANCES — per-bin / per-lot stock balance."""
+
+    itemnum: str
+    itemsetid: str = "SET1"
+    location: str
+    siteid: str
+    binnum: str
+    lotnum: str | None = None
+    conditioncode: str | None = None
+    physcnt: float | None = None
+    physcntdate: str | None = None  # ISO date string
+    curbal: float | None = None

@@ -1,44 +1,119 @@
-# genai-toolbox configuration for the FDP MCP server.
+# genai-toolbox configuration for the FDP MCP server (TASK-16 Step 7).
+#
+# Exposes the BQ-backed FastAPI backend's v2 typed endpoints as MCP tools.
+# Tool names match the spec §4 surface — `fdp.<verb>_<entity>` — so a
+# customer who later swaps to a different FDP-equivalent backend
+# implementation (e.g. live FDP REST) only re-points the HTTP source, not
+# the tool names.
+#
+# Legacy v1 tool (`fdp_get_customer_config` with the in-memory shape) stays
+# in the `fdp_oilfield_legacy` toolset for the one-release deprecation
+# window the spec calls out.
 #
 # Run locally:
+#   uvicorn mcp_servers.fdp.backend.main:app --port 8003
 #   toolbox --tools-file=mcp_servers/fdp/config.yaml --port=8103
 #
-# Required env vars:
-#   FDP_BACKEND_URL — base URL of the FastAPI backend.
+# Required env vars at runtime:
+#   FDP_BACKEND_URL — base URL of the FastAPI backend
+#                     (e.g. http://localhost:8003 or the Cloud Run service URL).
 
 sources:
-  fdp_synthetic:
+  fdp_backend:
     kind: http
     baseUrl: ${FDP_BACKEND_URL}
-    timeout: 5s
+    timeout: 10s
     headers:
       Content-Type: application/json
 
 tools:
+  # --- v2 typed tool surface (per spec §4) ---
+
   fdp_get_customer_config:
     kind: http
-    source: fdp_synthetic
+    source: fdp_backend
     description: |
-      Return a customer's FDP configuration for a canonical asset.
-      Inputs:
-        customer_id     — slug ("gulf-petroleum") or display name ("Gulf Petroleum").
-        canonical_id    — canonical asset id (e.g. "TX-001").
-      Returns:
-        found, approved, substitution_accepted (dict keyed by the substitute
-        canonical-id segment uppercased), notes.
-      Use this BEFORE recommending any substitution: an "approved" base
-      asset whose `substitution_accepted` map says the substitute is False
-      means the planner must NOT offer it without procurement approval.
+      Use this when the agent has a (customer_id, MATNR) pair and needs to
+      know whether this customer has APPROVED that material for use, plus
+      any free-form notes and the effective date. Reads FDP CUSTOMER_CONFIG.
+      An "approved=false" or 404 means the planner must NOT offer this
+      material to that customer without procurement approval.
+    method: GET
+    path: /fdp/v2/customer_config
+    queryParams:
+      - name: customer_id
+        type: string
+        description: Customer slug (e.g. "gulf-petroleum").
+        required: true
+      - name: matnr
+        type: string
+        description: SAP material number (MATNR).
+        required: true
+
+  fdp_list_approved_substitutions:
+    kind: http
+    source: fdp_backend
+    description: |
+      Use this when the agent has a (customer_id, original MATNR) and needs
+      the full list of approved-or-rejected substitute materials for that
+      customer. Returns rows from FDP APPROVED_SUBSTITUTIONS — each row has
+      MATNR_SUBSTITUTE and an ACCEPTED bool. Use this BEFORE recommending a
+      substitution: only offer substitutes where ACCEPTED=TRUE.
+    method: GET
+    path: /fdp/v2/approved_substitutions
+    queryParams:
+      - name: customer_id
+        type: string
+        description: Customer slug.
+        required: true
+      - name: matnr_original
+        type: string
+        description: Original SAP material number.
+        required: true
+
+  fdp_list_customer_restrictions:
+    kind: http
+    source: fdp_backend
+    description: |
+      Use this when scoring equivalence confidence — returns every
+      substitution this customer has REJECTED (ACCEPTED=FALSE in FDP).
+      The asset-equivalence skill applies a 0.3 confidence penalty when
+      an LLM-proposed substitute appears in this list. Empty result means
+      no known customer restrictions.
+    method: GET
+    path: /fdp/v2/customer_restrictions/{customer_id}
+    pathParams:
+      - name: customer_id
+        type: string
+        description: Customer slug.
+
+  # --- Legacy v1 tool (retire after one release per spec §4) ---
+
+  fdp_get_customer_config_legacy:
+    kind: http
+    source: fdp_backend
+    description: |
+      DEPRECATED in favor of fdp_get_customer_config (keyed by MATNR).
+      Returns the legacy in-memory CustomerConfigResponse shape keyed by
+      (customer_id, canonical_id), bridged through the KC cross-system
+      alias table. Kept for one release for TASK-05 backwards compat.
     method: POST
     path: /fdp/customer_config
     bodyParams:
       - name: customer_id
         type: string
-        description: Customer slug or display name.
+        description: Customer slug.
       - name: canonical_id
         type: string
-        description: Canonical asset id.
+        description: Canonical asset id (e.g. "TX-001").
 
 toolsets:
+  # Default toolset — the v2 typed tool surface for the migrated agents.
   fdp_oilfield:
     - fdp_get_customer_config
+    - fdp_list_approved_substitutions
+    - fdp_list_customer_restrictions
+
+  # Legacy toolset — anyone still on TASK-05 v1 endpoints.
+  fdp_oilfield_legacy:
+    - fdp_get_customer_config_legacy

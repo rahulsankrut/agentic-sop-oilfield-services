@@ -1,30 +1,187 @@
-# genai-toolbox configuration for the Maximo MCP server.
+# genai-toolbox configuration for the Maximo MCP server (TASK-16 Step 6).
+#
+# Exposes the BQ-backed FastAPI backend's v2 typed endpoints as MCP tools.
+# Tool names match the spec §4 surface — `maximo.<verb>_<entity>` — so a
+# customer who later swaps to a different Maximo backend implementation
+# (e.g. live MAS REST) only re-points the HTTP source, not the tool names.
+#
+# Legacy v1 tools (`maximo_query_availability`, `maximo_get_equipment_instance`)
+# stay in the `maximo_oilfield_legacy` toolset for the one-release
+# deprecation window the spec calls out.
 #
 # Run locally:
+#   uvicorn mcp_servers.maximo.backend.main:app --port 8002
 #   toolbox --tools-file=mcp_servers/maximo/config.yaml --port=8102
 #
-# Required env vars:
-#   MAXIMO_BACKEND_URL — base URL of the FastAPI backend.
+# Required env vars at runtime:
+#   MAXIMO_BACKEND_URL — base URL of the FastAPI backend
+#                       (e.g. http://localhost:8002 or the Cloud Run service URL).
 
 sources:
-  maximo_synthetic:
+  maximo_backend:
     kind: http
     baseUrl: ${MAXIMO_BACKEND_URL}
-    timeout: 5s
+    timeout: 10s
     headers:
       Content-Type: application/json
 
 tools:
+  # --- v2 typed tool surface (per spec §4) ---
+
+  maximo_get_item:
+    kind: http
+    source: maximo_backend
+    description: |
+      Use this when the agent has a Maximo ITEMNUM and needs the item's
+      description and commodity group. Reads Maximo ITEM (Item Master).
+    method: GET
+    path: /maximo/v2/item/{itemnum}
+    pathParams:
+      - name: itemnum
+        type: string
+        description: Maximo item number (ITEMNUM, e.g. "EQ-12345").
+
+  maximo_query_assets_by_item:
+    kind: http
+    source: maximo_backend
+    description: |
+      Use this when the agent needs to list physical Maximo asset
+      instances of a given item — with each asset's location, lat/lon,
+      and region. Optionally filter by STATUS (e.g. "available",
+      "in_use") and / or SITEID. Joins ASSET ⋈ LOCATIONS on
+      (SITEID, LOCATION). Returns a list of MaximoAssetWithLocation.
+    method: GET
+    path: /maximo/v2/assets/by_item/{itemnum}
+    pathParams:
+      - name: itemnum
+        type: string
+        description: Maximo item number (ITEMNUM).
+    queryParams:
+      - name: status
+        type: string
+        description: Optional Maximo asset status filter (e.g. "available").
+        required: false
+      - name: siteid
+        type: string
+        description: Optional Maximo site id filter.
+        required: false
+
+  maximo_query_assets_by_region:
+    kind: http
+    source: maximo_backend
+    description: |
+      Use this when the planner needs to know which physical units of an
+      item exist in a particular region (e.g. "where in west_africa do
+      we have Tool X variants"). Joins ASSET ⋈ LOCATIONS on
+      (SITEID, LOCATION) and filters by LOCATIONS.REGION. Replaces the
+      v1 maximo_query_availability(canonical_id, region_filter) — the
+      canonical-id translation happens upstream in the Knowledge Catalog,
+      so this tool takes Maximo's natural key (ITEMNUM).
+    method: GET
+    path: /maximo/v2/assets/by_region/{itemnum}
+    pathParams:
+      - name: itemnum
+        type: string
+        description: Maximo item number (ITEMNUM).
+    queryParams:
+      - name: region
+        type: string
+        description: Region slug (e.g. "west_africa", "north_america").
+        required: true
+
+  maximo_get_inventory_balances:
+    kind: http
+    source: maximo_backend
+    description: |
+      Use this when the agent needs per-bin / per-lot stock balance for a
+      Maximo item — physical count, current balance, condition code.
+      Reads Maximo INVBALANCES. Optionally filter by SITEID. Unlike
+      ASSET (which tracks individual serialized units), INVBALANCES
+      tracks consumable / bulk inventory at a bin.
+    method: GET
+    path: /maximo/v2/inventory_balances/{itemnum}
+    pathParams:
+      - name: itemnum
+        type: string
+        description: Maximo item number (ITEMNUM).
+    queryParams:
+      - name: siteid
+        type: string
+        description: Optional Maximo site id filter.
+        required: false
+
+  maximo_get_location:
+    kind: http
+    source: maximo_backend
+    description: |
+      Use this when the agent needs the full location record for a
+      Maximo (SITEID, LOCATION) — description, lat/lon, region, and the
+      nearest World Port Index port for transit-cost grounding. Reads
+      Maximo LOCATIONS.
+    method: GET
+    path: /maximo/v2/location/{siteid}/{location}
+    pathParams:
+      - name: siteid
+        type: string
+        description: Maximo site id (e.g. "LAGOS").
+      - name: location
+        type: string
+        description: Maximo location code.
+
+  maximo_get_open_workorders:
+    kind: http
+    source: maximo_backend
+    description: |
+      Use this when the agent needs the open work orders against a
+      specific Maximo asset — a recert or repair WO blocks a unit from
+      being committed to a sourcing plan. Reads Maximo WORKORDER
+      filtered to STATUS != 'COMP'.
+    method: GET
+    path: /maximo/v2/open_workorders/{assetnum}/{siteid}
+    pathParams:
+      - name: assetnum
+        type: string
+        description: Maximo asset number (e.g. "TX-007-LGS-001").
+      - name: siteid
+        type: string
+        description: Maximo site id (e.g. "LAGOS").
+
+  maximo_get_start_date_distribution:
+    kind: http
+    source: maximo_backend
+    description: |
+      Use this when the Capacity Planning agent needs the schedule-vs-
+      actual variance distribution (p10 / p50 / p90 actual-start dates
+      relative to today) for a basin, so it can size an optimal buffer.
+      Queries the maximo_extract.WO_HISTORY view's variance_days column
+      with APPROX_QUANTILES. Optional customer_id / asset_class filters
+      are reserved for future v2 work — accepted as no-ops today.
+    method: GET
+    path: /maximo/v2/start_date_distribution/{basin}
+    pathParams:
+      - name: basin
+        type: string
+        description: Region slug (e.g. "permian", "west_africa").
+    queryParams:
+      - name: customer_id
+        type: string
+        description: Reserved — accepted but currently a no-op.
+        required: false
+      - name: asset_class
+        type: string
+        description: Reserved — accepted but currently a no-op.
+        required: false
+
+  # --- Legacy v1 tools (retire after one release per spec §4) ---
+
   maximo_query_availability:
     kind: http
-    source: maximo_synthetic
+    source: maximo_backend
     description: |
-      List Maximo-tracked equipment instances matching a canonical asset id,
-      optionally filtered by region. Returns the instances with location,
-      status (available / in_use / in_repair / available_after_recert),
-      certification_hours_remaining, and workforce_attached.
-      Use this when the planner needs to know where physical units of an
-      asset sit and which are available.
+      DEPRECATED in favor of maximo_query_assets_by_region. Lists
+      Maximo-tracked equipment instances matching a canonical asset id
+      (legacy wire shape with location.label, certification_hours_remaining,
+      workforce_attached), optionally filtered by region.
     method: POST
     path: /maximo/availability
     bodyParams:
@@ -34,25 +191,34 @@ tools:
       - name: region_filter
         type: string
         required: false
-        description: Optional region slug (e.g. "west_africa", "north_america").
+        description: Optional region slug (e.g. "west_africa").
 
   maximo_get_equipment_instance:
     kind: http
-    source: maximo_synthetic
+    source: maximo_backend
     description: |
-      Fetch the full Maximo equipment-instance record by its instance id
-      (e.g. "TX-007-LGS-001"). Returns the same fields as
-      `maximo_query_availability` but for a single unit.
-      Use this once a planner has narrowed the choice to a specific
-      instance and wants to confirm its current status before committing.
+      DEPRECATED in favor of maximo_query_assets_by_item +
+      maximo_get_open_workorders. Fetches the legacy EquipmentInstance
+      shape by ASSETNUM.
     method: GET
     path: /maximo/equipment/{equipment_instance_id}
     pathParams:
       - name: equipment_instance_id
         type: string
-        description: Maximo equipment instance id (e.g. "TX-007-LGS-001").
+        description: Maximo asset number (e.g. "TX-007-LGS-001").
 
 toolsets:
+  # Default toolset — the v2 typed tool surface for the migrated agents.
   maximo_oilfield:
+    - maximo_get_item
+    - maximo_query_assets_by_item
+    - maximo_query_assets_by_region
+    - maximo_get_inventory_balances
+    - maximo_get_location
+    - maximo_get_open_workorders
+    - maximo_get_start_date_distribution
+
+  # Legacy toolset — anyone still on TASK-05 v1 endpoints.
+  maximo_oilfield_legacy:
     - maximo_query_availability
     - maximo_get_equipment_instance
