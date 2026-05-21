@@ -216,7 +216,7 @@ async def _emit_equivalence_events(callback_context: CallbackContext) -> None:
             candidate_dict = output
         elif hasattr(output, "model_dump"):
             try:
-                candidate_dict = output.model_dump()
+                candidate_dict = output.model_dump(mode="json")
             except Exception:
                 candidate_dict = None
 

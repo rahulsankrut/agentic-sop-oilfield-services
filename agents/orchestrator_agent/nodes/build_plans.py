@@ -8,7 +8,7 @@ the initial shape comes from deterministic data joins.
 
 from __future__ import annotations
 
-from google.adk import Event
+from google.adk import Context, Event
 
 from agents.schemas import (
     AssetIdentifier,
@@ -127,9 +127,9 @@ def build_direct_plan(node_input: dict) -> Event:
     return Event(
         message=f"Direct plan built — primary cost ${option.estimated_cost_usd:,}",
         output={
-            "request": request.model_dump(),
-            "results": results.model_dump(),
-            "plan": plan.model_dump(),
+            "request": request.model_dump(mode="json"),
+            "results": results.model_dump(mode="json"),
+            "plan": plan.model_dump(mode="json"),
             "path": "direct",
         },
     )
@@ -140,17 +140,39 @@ def build_direct_plan(node_input: dict) -> Event:
 # instance of that substitute, assemble a SourcingPlan, and forward. Again,
 # no LLM here — the AI's job was to identify the substitute; the workflow's
 # job is to ground the plan in concrete tool-returned data."
-def build_equivalent_plan(node_input: dict) -> Event:
+def build_equivalent_plan(node_input: dict, ctx: Context) -> Event:
     """Build a SourcingPlan around the LLM-chosen equivalent asset.
 
-    ``node_input`` is expected to carry ``equivalent_candidate`` (the LLM
-    node's structured output, with ``canonical_id`` + ``equipment_instance_id``
-    fields if a specific instance was picked) plus the ``request`` + initial
-    ``results`` so this node has everything it needs.
+    ``node_input`` is the equivalence LLM's structured output (the
+    candidate substitute). Because the LLM doesn't echo the original
+    ``request`` / ``results`` keys, we read those from ``ctx.state``
+    (persisted there by parse_capacity_gap_request +
+    parallel_system_queries). Treats ``node_input`` itself as the
+    ``equivalent_candidate``.
     """
-    request = CapacityGapRequest(**node_input["request"])
-    results = SystemQueryResults(**node_input["results"])
-    candidate = node_input.get("equivalent_candidate") or {}
+    # The LLM's structured output IS the candidate; fall back to a
+    # node_input["equivalent_candidate"] nested form if a future schema
+    # change re-wraps it.
+    candidate = node_input.get("equivalent_candidate") or node_input or {}
+
+    # request + results live in ctx.state (set by upstream function nodes).
+    state_request = {}
+    state_results = {}
+    try:
+        state_request = ctx.state.get("request", {}) or {}
+        state_results = ctx.state.get("results", {}) or {}
+    except Exception:  # noqa: BLE001 — defensive; ctx.state is usually present
+        pass
+    # Final fallback: legacy node_input["request"] (pre-refactor shape).
+    request_dict = state_request or node_input.get("request") or {}
+    results_dict = state_results or node_input.get("results") or {}
+    if not request_dict:
+        raise ValueError(
+            "build_equivalent_plan: no `request` in ctx.state or node_input — "
+            "parse_capacity_gap_request must run first and persist the request"
+        )
+    request = CapacityGapRequest(**request_dict)
+    results = SystemQueryResults(**results_dict)
 
     substitute_canonical_id = candidate.get("canonical_id") or request.canonical_asset_id or ""
     # The equivalence LLM may have already picked a specific instance; fall
@@ -167,8 +189,8 @@ def build_equivalent_plan(node_input: dict) -> Event:
                 f"{substitute_canonical_id!r}"
             ),
             output={
-                "request": request.model_dump(),
-                "results": results.model_dump(),
+                "request": request.model_dump(mode="json"),
+                "results": results.model_dump(mode="json"),
                 "plan": None,
                 "path": "equivalence",
                 "equivalent_candidate": candidate,
@@ -198,9 +220,9 @@ def build_equivalent_plan(node_input: dict) -> Event:
             f"primary cost ${option.estimated_cost_usd:,}"
         ),
         output={
-            "request": request.model_dump(),
-            "results": results.model_dump(),
-            "plan": plan.model_dump(),
+            "request": request.model_dump(mode="json"),
+            "results": results.model_dump(mode="json"),
+            "plan": plan.model_dump(mode="json"),
             "path": "equivalence",
             "equivalent_candidate": candidate,
         },

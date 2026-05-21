@@ -85,7 +85,12 @@ def sap_get_workforce_by_basin(basin: str) -> dict[str, Any]:
         "crew_count_available": int(r["CREW_COUNT_AVAILABLE"] or 0),
         "specialist_count_available": int(r["SPECIALIST_COUNT_AVAILABLE"] or 0),
         "on_call_count": int(r["ON_CALL_COUNT"] or 0),
-        "naics_211_state_employment": r["NAICS_211_STATE_EMPLOYMENT"],
+        # BQ NUMERIC arrives as Decimal which json.dumps can't serialize.
+        "naics_211_state_employment": (
+            int(r["NAICS_211_STATE_EMPLOYMENT"])
+            if r["NAICS_211_STATE_EMPLOYMENT"] is not None
+            else None
+        ),
         "data_source": r["DATA_SOURCE"],
         "snapshot_date": _iso(r["SNAPSHOT_DATE"]) or "1970-01-01",
     }
@@ -213,10 +218,16 @@ def _asset_row_to_dict(r: dict) -> dict[str, Any]:
             "siteid": r["SITEID"],
             "type": r["LOC_TYPE"],
             "status": r["LOC_STATUS"],
-            "latitude": r["LATITUDE"],
-            "longitude": r["LONGITUDE"],
+            # BQ NUMERIC arrives as `Decimal` which json.dumps can't
+            # serialize; cast eagerly to float for downstream consumers.
+            "latitude": _f(r["LATITUDE"]) if r["LATITUDE"] is not None else None,
+            "longitude": _f(r["LONGITUDE"]) if r["LONGITUDE"] is not None else None,
             "region": r["REGION"],
-            "wpi_port_index_number": r["WPI_PORT_INDEX_NUMBER"],
+            "wpi_port_index_number": (
+                int(r["WPI_PORT_INDEX_NUMBER"])
+                if r["WPI_PORT_INDEX_NUMBER"] is not None
+                else None
+            ),
             "wpi_port_name": r["WPI_PORT_NAME"],
         },
     }

@@ -65,7 +65,7 @@ async def _emit_route_events(callback_context: CallbackContext) -> None:
             plan_dict = output
         elif hasattr(output, "model_dump"):
             try:
-                plan_dict = output.model_dump()
+                plan_dict = output.model_dump(mode="json")
             except Exception:
                 plan_dict = None
 

@@ -493,7 +493,7 @@ async def parallel_system_queries(node_input: dict, ctx: Context) -> Event:
         # Should never happen — resolve_canonical_asset_node ran upstream.
         return Event(
             message="parallel_system_queries: missing canonical_asset_id",
-            output=SystemQueryResults().model_dump(),
+            output=SystemQueryResults().model_dump(mode="json"),
             state=emitter.state_delta(),
         )
 
@@ -540,9 +540,21 @@ async def parallel_system_queries(node_input: dict, ctx: Context) -> Event:
         # Pass the original request alongside the results so downstream
         # nodes don't have to re-thread it through every payload.
         output={
-            "request": request.model_dump(),
-            "results": aggregated.model_dump(),
+            # mode="json" so `request.deadline` (datetime) and any nested
+            # date columns get ISO-stringified before the next LLM node's
+            # json.dumps wrapper runs them through. Otherwise the ADK
+            # workflow's `_node_input_to_content` blows up with
+            # "Object of type datetime is not JSON serializable".
+            "request": request.model_dump(mode="json"),
+            "results": aggregated.model_dump(mode="json"),
             "transport": path_label,
         },
-        state=emitter.state_delta(),
+        state={
+            **emitter.state_delta(),
+            # TASK-MCP-REFACTOR (smoke fix): persist request + results into
+            # session state so build_equivalent_plan can find them after the
+            # equivalence LLM clobbers node_input with its structured output.
+            "request": request.model_dump(mode="json"),
+            "results": aggregated.model_dump(mode="json"),
+        },
     )

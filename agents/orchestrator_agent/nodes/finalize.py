@@ -93,12 +93,12 @@ def finalize_sourcing_plan(node_input: dict, ctx: Context) -> Event:
         completed = WorkflowCompletedEvent(
             workflow_id=workflow_id,
             session_id=session_id,
-            final_output={"request": request.model_dump(), "plan": None},
+            final_output={"request": request.model_dump(mode="json"), "plan": None},
             duration_ms=duration_ms,
         )
         return Event(
             message="finalize_sourcing_plan: no plan to finalize",
-            output={"request": request.model_dump(), "plan": None},
+            output={"request": request.model_dump(mode="json"), "plan": None},
             state=emit(ctx, completed),
         )
     plan = SourcingPlan(**plan_dict)
@@ -145,9 +145,9 @@ def finalize_sourcing_plan(node_input: dict, ctx: Context) -> Event:
     )
 
     final_output = {
-        "request": request.model_dump(),
-        "results": results.model_dump(),
-        "plan": final.model_dump(),
+        "request": request.model_dump(mode="json"),
+        "results": results.model_dump(mode="json"),
+        "plan": final.model_dump(mode="json"),
     }
 
     completed = WorkflowCompletedEvent(

@@ -51,8 +51,8 @@ def evaluate_direct_availability(node_input: dict) -> Event:
             + ("YES" if direct_available else "NO — equivalence path required")
         ),
         output={
-            "request": request.model_dump(),
-            "results": results.model_dump(),
+            "request": request.model_dump(mode="json"),
+            "results": results.model_dump(mode="json"),
             "direct_available": direct_available,
             "chosen_direct_instance": chosen,
         },

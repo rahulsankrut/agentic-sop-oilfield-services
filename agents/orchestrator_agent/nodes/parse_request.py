@@ -100,9 +100,15 @@ def parse_capacity_gap_request(node_input: str, ctx: Context) -> Event:
         deadline=deadline.isoformat(),
     )
 
+    # TASK-MCP-REFACTOR (smoke fix): persist the request into ctx.state so
+    # downstream function nodes (`build_equivalent_plan` in particular) can
+    # find it after the equivalence LLM clobbers node_input with its own
+    # structured output.
+    state_delta = emit(ctx, gap_event)
+    state_delta["request"] = request.model_dump(mode="json")
     return Event(
         message=f"Parsed capacity-gap request: {request.requested_asset} "
         f"to {request.target_location.label} by {request.deadline.date()}",
-        output=request.model_dump(),
-        state=emit(ctx, gap_event),
+        output=request.model_dump(mode="json"),
+        state=state_delta,
     )
