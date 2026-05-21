@@ -36,68 +36,134 @@ if TYPE_CHECKING:
 # ============================================================================
 # CUSTOM MEMORY TOPICS — Oilfield S&OP domain
 # ============================================================================
+#
+# Topic descriptions read the active customer skin at runtime so the
+# extraction-guidance examples ("Sourcing: asset=Tool X variant ...") map
+# to whichever customer this deployment is skinned for. Module-level
+# constants would freeze the example values at the wrong moment.
 
-SOURCING_HISTORY = MemoryTopic(
-    custom_memory_topic=CustomMemoryTopic(
-        label="sourcing_history",
-        description="""Track sourcing decisions for service capacity gaps across sessions.
 
-        Extract:
-        - Requested asset (canonical_id + canonical_label)
-        - Target basin / region (Permian, North Sea, Gulf of Guinea, ...)
-        - Recommended source location and transit mode
-        - Naive-baseline avoided cost (savings)
-        - Final approval outcome
+def _skin_examples() -> dict[str, str]:
+    """Skin-derived example fragments for the topic descriptions.
 
-        Format: "Sourcing: asset={asset}, basin={basin}, savings_usd={n}"
-        Example: "Sourcing: asset=Tool X variant, basin=West Africa, savings_usd=380000"
-        """,
+    Falls back to in-house defaults if the skin loader can't be reached
+    (e.g., during a unit test that monkey-patches the loader away).
+    """
+    hero_label = "Tool X variant"
+    equivalent_label = "Tool X-V7"
+    customer_label = "Gulf Petroleum"
+    persona_id = "maria"
+    basin_label = "West Africa OCC"
+    spec_ref = "InTouch 3.2"
+    try:
+        from agents.utils.skin_loader import get_active_skin  # noqa: PLC0415
+
+        skin = get_active_skin()
+        hero_label = skin.taxonomy.hero_asset.canonical_label or hero_label
+        # First secondary asset, if any, doubles as the equivalent label.
+        for asset in skin.taxonomy.secondary_assets or []:
+            if asset.canonical_label:
+                equivalent_label = asset.canonical_label
+                break
+        # Persona 3 = the cargo-plane operator. May be None on minimal skins.
+        for p in skin.personas or []:
+            if p.scenario_slug == "cargo-plane":
+                persona_id = p.id or persona_id
+                break
+        sc = skin.scenario("cargo-plane")
+        if sc.customer_account_name:
+            customer_label = sc.customer_account_name
+        # Skin doesn't carry a direct "basin" label — fall back to the
+        # location-focus label (e.g. "Luanda, Angola" / "Búzios, Brazil"),
+        # which is what extraction guidance actually needs as a hint.
+        if sc.location_focus_label:
+            basin_label = sc.location_focus_label
+    except Exception:  # noqa: BLE001 — defensive; defaults still steer extraction
+        pass
+    return {
+        "hero_label": hero_label,
+        "equivalent_label": equivalent_label,
+        "customer_label": customer_label,
+        "persona_id": persona_id,
+        "basin_label": basin_label,
+        "spec_ref": spec_ref,
+    }
+
+
+def _build_sourcing_history(ex: dict[str, str]) -> MemoryTopic:
+    example = (
+        f"\"Sourcing: asset={ex['hero_label']}, "
+        f"basin={ex['basin_label']}, savings_usd=380000\""
     )
-)
+    return MemoryTopic(
+        custom_memory_topic=CustomMemoryTopic(
+            label="sourcing_history",
+            description=f"""Track sourcing decisions for service capacity gaps across sessions.
 
+            Extract:
+            - Requested asset (canonical_id + canonical_label)
+            - Target basin / region
+            - Recommended source location and transit mode
+            - Naive-baseline avoided cost (savings)
+            - Final approval outcome
 
-PLANNER_PREFERENCES = MemoryTopic(
-    custom_memory_topic=CustomMemoryTopic(
-        label="planner_preferences",
-        description="""Track per-planner defaults and authorization context.
-
-        Extract:
-        - Basin the planner operates in
-        - Authorization tier (informs $500K threshold logic)
-        - Customer compatibility preferences
-        - Default transit modes they accept
-
-        Format: "Preference: planner={planner}, type={type}, value={value}"
-        Example: "Preference: planner=maria, type=basin, value=West Africa OCC"
-        """,
+            Format: "Sourcing: asset={{asset}}, basin={{basin}}, savings_usd={{n}}"
+            Example: {example}
+            """,
+        )
     )
-)
 
 
-EQUIVALENCE_PATTERNS = MemoryTopic(
-    custom_memory_topic=CustomMemoryTopic(
-        label="equivalence_patterns",
-        description="""Track which canonical-asset equivalences have been applied successfully.
+def _build_planner_preferences(ex: dict[str, str]) -> MemoryTopic:
+    return MemoryTopic(
+        custom_memory_topic=CustomMemoryTopic(
+            label="planner_preferences",
+            description=f"""Track per-planner defaults and authorization context.
 
-        Extract:
-        - Canonical asset + the functionally-equivalent variant chosen
-        - Customer + context in which the substitution was accepted
-        - Spec reference that grounded the equivalence (InTouch §x.y)
+            Extract:
+            - Basin the planner operates in
+            - Authorization tier (informs $500K threshold logic)
+            - Customer compatibility preferences
+            - Default transit modes they accept
 
-        Format: "Equivalence: asset={a} -> {b}, context={ctx}, spec={ref}"
-        Example: "Equivalence: Tool X -> Tool X-V7, customer=Gulf Petroleum, spec=InTouch 3.2"
-        """,
+            Format: "Preference: planner={{planner}}, type={{type}}, value={{value}}"
+            Example: "Preference: planner={ex['persona_id']}, type=basin, value={ex['basin_label']}"
+            """,
+        )
     )
-)
+
+
+def _build_equivalence_patterns(ex: dict[str, str]) -> MemoryTopic:
+    return MemoryTopic(
+        custom_memory_topic=CustomMemoryTopic(
+            label="equivalence_patterns",
+            description=f"""Track which canonical-asset equivalences have been applied successfully.
+
+            Extract:
+            - Canonical asset + the functionally-equivalent variant chosen
+            - Customer + context in which the substitution was accepted
+            - Spec reference that grounded the equivalence
+
+            Format: "Equivalence: asset={{a}} -> {{b}}, context={{ctx}}, spec={{ref}}"
+            Example: "Equivalence: {ex['hero_label']} -> {ex['equivalent_label']}, "
+                     "customer={ex['customer_label']}, spec={ex['spec_ref']}"
+            """,
+        )
+    )
 
 
 def create_orchestrator_memory_topics() -> MemoryBankCustomizationConfig:
-    """Build the Memory Bank customization config used by the Orchestrator."""
+    """Build the Memory Bank customization config used by the Orchestrator.
+
+    Reads the active customer skin at call time so the topic
+    descriptions' example fragments match the skinned customer.
+    """
+    ex = _skin_examples()
     return MemoryBankCustomizationConfig(
         memory_topics=[
-            SOURCING_HISTORY,
-            PLANNER_PREFERENCES,
-            EQUIVALENCE_PATTERNS,
+            _build_sourcing_history(ex),
+            _build_planner_preferences(ex),
+            _build_equivalence_patterns(ex),
         ]
     )
 

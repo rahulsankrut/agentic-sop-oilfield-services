@@ -261,15 +261,52 @@ The initial drop covered tasks 01-03. The current drop covers tasks 04-06 (the A
 When v1 is complete, the following must all be true:
 
 1. `make deploy` deploys the full stack to a Google Cloud project from a clean clone
+   - **Deviation 2026-05-21:** deferred to the end-of-project reproducibility
+     pass (TASK-14). Until then, deploy is done piecewise via the per-agent
+     `make deploy-<agent>` targets + `make deploy-mcp-servers`.
 2. `make demo-cargo-plane` runs the Persona 3 scenario end-to-end with the Operations Canvas rendering the spatial choreography in real time
 3. `make demo-forecast` runs the Persona 1 scenario in Gemini Enterprise app's Connected Sheets surface
 4. `make demo-fleet-buffer` runs the Persona 2 scenario with the Fleet Utilization View
 5. All five agents are visible in Agent Registry with cryptographic Agent Identity
+   - **Deviation 2026-05-21:** 4 standalone agents on Agent Runtime
+     (Orchestrator, Procurement Approval, Forecast Review, Capacity Planning) +
+     the Plan Evaluator **bundled in-process** via `AgentTool(agent=…)` inside
+     the Orchestrator's Reasoning Engine. Matches the marathon-planner
+     reference repo's pattern. Agent Registry shows 4 standalone identities.
 6. Agent Gateway policies enforce the $500K human-review threshold
 7. Cloud Trace shows full reasoning chains for any agent invocation
 8. Customer skinning works: changing `customer.yaml` and redeploying changes branding, terminology, and hero scenario location
 9. Fallback playback mode works for the canvas when WebSocket is unavailable
+   - **Deviation 2026-05-21:** "WebSocket" was a spec assumption that didn't
+     match the actual Vertex AI surface. Streaming uses the deployed
+     Reasoning Engine's `:streamQuery` REST endpoint via a same-origin
+     Next.js API proxy (`canvas/src/app/api/orchestrator/stream/route.ts`).
+     See TASK-10's "SHIPPED PATTERN" banner for the full pivot. Fallback
+     Static + Replay modes still apply and remain a hard requirement.
 10. `make teardown` removes all resources cleanly
+    - **Deviation 2026-05-21:** deferred to the reproducibility pass
+      (TASK-14), same as `make deploy`.
+
+### Architectural deviations from earlier drafts (full list)
+
+- **Package manager:** Poetry instead of `uv`. The original tech-stack lock
+  was `uv`, but `uv` doesn't work on the user's corp laptop where this code
+  will eventually run. Poetry mirrors the existing `earnings_analyst`
+  workflow. CLAUDE.md captures the porting convention (`[tool.poetry]`,
+  `poetry-core` build backend).
+- **Streaming protocol:** Vertex AI `streamQuery` SSE (NDJSON over `?alt=sse`)
+  instead of WebSocket. See TASK-10 "SHIPPED PATTERN" banner.
+- **5th agent:** Plan Evaluator bundled in-process, not a 5th standalone
+  Reasoning Engine deploy. See acceptance criterion #5 above.
+- **MCP skill composer transport:** BQ-direct via `agents/utils/enterprise_data.py`
+  instead of HTTP-via-MCP-server. The Cloud Run MCP servers (sap/maximo/fdp)
+  are still deployed as a tech demo but aren't on the critical path. The
+  toolbox-fronted container has an unresolved uvicorn startup issue documented
+  in `docs/architecture.md` once that file lands.
+- **Gemini 3 preview model routing:** preview models live on the `global`
+  endpoint, not `us-central1`. `agents/utils/global_gemini.GlobalGemini`
+  subclass routes model calls to `global` while keeping Agent Engine +
+  Memory Bank on `us-central1`. CLAUDE.md captures the pattern.
 
 ---
 

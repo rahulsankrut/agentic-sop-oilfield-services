@@ -43,26 +43,51 @@ APPROVAL_HISTORY = MemoryTopic(
 )
 
 
-BLOCKER_PATTERNS = MemoryTopic(
-    custom_memory_topic=CustomMemoryTopic(
-        label="blocker_patterns",
-        description="""Track recurring procurement blockers so the agent can flag them earlier.
+def _skin_customer_label() -> str:
+    """Customer name for memory topic example fragments. Falls back to the
+    in-house default if the skin loader can't be reached."""
+    try:
+        from agents.utils.skin_loader import get_active_skin  # noqa: PLC0415
 
-        Extract:
-        - Blocker category (budget, customer auth, certification, regulatory)
-        - Frequency in the current basin / customer combination
-        - Resolution path that worked
+        sc = get_active_skin().scenario("cargo-plane")
+        if sc.customer_account_name:
+            return sc.customer_account_name
+    except Exception:  # noqa: BLE001
+        pass
+    return "Gulf Petroleum"
 
-        Format: "Blocker: category={cat}, customer={c}, resolution={r}"
-        Example: "Blocker: category=budget, customer=Gulf Petroleum, resolution=tier-2 approval"
-        """,
+
+def _build_blocker_patterns(customer_label: str) -> MemoryTopic:
+    example = (
+        f"\"Blocker: category=budget, customer={customer_label}, "
+        f"resolution=tier-2 approval\""
     )
-)
+    return MemoryTopic(
+        custom_memory_topic=CustomMemoryTopic(
+            label="blocker_patterns",
+            description=f"""Track recurring procurement blockers so the agent can flag them earlier.
+
+            Extract:
+            - Blocker category (budget, customer auth, certification, regulatory)
+            - Frequency in the current basin / customer combination
+            - Resolution path that worked
+
+            Format: "Blocker: category={{cat}}, customer={{c}}, resolution={{r}}"
+            Example: {example}
+            """,
+        )
+    )
 
 
 def create_procurement_approval_memory_topics() -> MemoryBankCustomizationConfig:
-    """Build the Memory Bank customization config used by the Procurement Gate."""
-    return MemoryBankCustomizationConfig(memory_topics=[APPROVAL_HISTORY, BLOCKER_PATTERNS])
+    """Build the Memory Bank customization config used by the Procurement Gate.
+
+    Reads the active customer skin at call time so the topic descriptions'
+    example fragments match the skinned customer.
+    """
+    return MemoryBankCustomizationConfig(
+        memory_topics=[APPROVAL_HISTORY, _build_blocker_patterns(_skin_customer_label())]
+    )
 
 
 def create_memory_service(

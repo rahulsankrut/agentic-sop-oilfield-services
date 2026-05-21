@@ -459,7 +459,14 @@ Apply the same pattern to:
 - MCP toolset is `from google.adk.tools.mcp_tool import McpToolset` (not `MCPClient` — that's the 1.x ghost name).
 - Function nodes that take `ctx: Context` get it auto-injected by the Workflow runtime (no manual passing).
 
-### Step 3 — Switch Orchestrator deploy to `A2aAgent`
+### Step 3 — Switch Orchestrator deploy to `A2aAgent` [SUPERSEDED — see banner at top]
+
+> **NOTE (2026-05-21):** The SHIPPED PATTERN banner at the top of this file
+> supersedes this step. We did NOT wrap the Orchestrator in A2aAgent.
+> `agents/orchestrator_agent/deploy.py` deploys via `AdkApp` and the canvas
+> consumes `<resource>:streamQuery` via the same-origin Next.js proxy at
+> `canvas/src/app/api/orchestrator/stream/route.ts`. The code samples below
+> are kept as a historical record of the path we considered.
 
 The Orchestrator currently deploys as `AdkApp(agent=root_agent, app_name="capacity_orchestrator_agent")` (see `src/orchestrator_agent/runtime/deploy.py`). For SSE streaming, switch to the A2A wrapper pattern Procurement already uses.
 
@@ -986,7 +993,13 @@ export default function CargoPlaneScenarioPage() {
 }
 ```
 
-### Step 7 — Integration test
+### Step 7 — Integration test [SUPERSEDED]
+
+> **NOTE (2026-05-21):** This step's integration test consumed
+> `/a2a/v1/message:stream` — superseded by direct streamQuery smokes
+> (see `scripts/smoke_cargo_plane.py` for the data-flow probe and the
+> repo-root live smoke runs in the May 2026 commit history). The script
+> below is preserved as a historical record of the path we considered.
 
 `tests/integration/test_live_sse.py`:
 

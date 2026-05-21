@@ -162,8 +162,8 @@ def test_identify_blockers_clean(monkeypatch):
     cert hours remaining; we patch out the WO endpoint for this case
     to assert the clean-path behavior of `identify_blockers`.
     """
-    monkeypatch.setattr(sourcing.mcp_client, "fdp_list_customer_restrictions", lambda cid: [])
-    monkeypatch.setattr(sourcing.mcp_client, "maximo_get_open_workorders", lambda *a, **kw: [])
+    monkeypatch.setattr(sourcing.ed, "fdp_list_customer_restrictions", lambda cid: [])
+    monkeypatch.setattr(sourcing.ed, "maximo_get_open_workorders", lambda *a, **kw: [])
     blockers = sourcing.identify_blockers("TX-007", "gulf-petroleum", "TX-007-LGS-001")
     assert blockers == []
 
@@ -177,7 +177,7 @@ def test_identify_blockers_customer_restriction(monkeypatch):
     (the v1 seeder only handles `v?_substitution_accepted` keys).
     """
     monkeypatch.setattr(
-        sourcing.mcp_client,
+        sourcing.ed,
         "fdp_list_customer_restrictions",
         lambda cid: [
             {
@@ -193,7 +193,7 @@ def test_identify_blockers_customer_restriction(monkeypatch):
 
 def test_identify_blockers_unknown_equipment(monkeypatch):
     """An equipment id that no Maximo ASSET row matches → 'not found' blocker."""
-    monkeypatch.setattr(sourcing.mcp_client, "fdp_list_customer_restrictions", lambda cid: [])
+    monkeypatch.setattr(sourcing.ed, "fdp_list_customer_restrictions", lambda cid: [])
     blockers = sourcing.identify_blockers("TX-007", "gulf-petroleum", "TX-007-NOWHERE-999")
     assert any("not found" in b for b in blockers)
 

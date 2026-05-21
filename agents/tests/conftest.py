@@ -252,61 +252,24 @@ def _mock_session_service(request: pytest.FixtureRequest):
 
 @pytest.fixture(autouse=True)
 def _mock_mcp_http(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
-    """Route agents.utils.mcp_client HTTP calls through FastAPI TestClient.
+    """No-op fixture preserved for back-compat after the MCP refactor.
 
-    Skill tools migrated in TASK-16 Steps 8-11 use `agents.utils.mcp_client`
-    helpers that hit the SAP / Maximo / FDP FastAPI backends over HTTP.
-    For unit tests we don't want to spin up uvicorn servers; instead we
-    monkey-patch the client's two underlying request functions
-    (`_do_get`, `_do_post`) to dispatch through a per-backend
-    `fastapi.testclient.TestClient` against the in-process app.
+    Before TASK-MCP-REFACTOR (2026-05-21) this routed mcp_client HTTP
+    calls through `fastapi.testclient.TestClient` against the in-process
+    FastAPI backends. After the refactor, skill composers go BQ-direct
+    via ``agents.utils.enterprise_data`` and ``mcp_client`` is a thin
+    deprecation shim. Tests that need data control now mock the specific
+    ``enterprise_data`` function on their target tools-module
+    (e.g. ``monkeypatch.setattr(sourcing.ed, 'fdp_list_customer_restrictions',
+    ...)``). Tests that don't mock will hit live BigQuery — ADC required.
 
-    Integration tests (`agents/tests/integration/`) are skipped — they
-    hit real Cloud Run / Agent Engine over real HTTP.
+    The fixture is retained as a no-op so any future test that depends on
+    its presence by name still sees something. Integration tests bypass
+    it as before.
     """
     if _is_integration_test(request):
         yield
         return
-
-    # Lazy imports — these modules pull in the BQ client which the earlier
-    # autouse fixtures have mocked, so they're cheap.
-    try:
-        from fastapi.testclient import TestClient  # type: ignore[import-not-found]
-
-        from agents.utils import mcp_client  # noqa: PLC0415
-        from mcp_servers.fdp.backend.main import app as fdp_app  # noqa: PLC0415
-        from mcp_servers.maximo.backend.main import app as maximo_app  # noqa: PLC0415
-        from mcp_servers.sap.backend.main import app as sap_app  # noqa: PLC0415
-    except ImportError:
-        yield
-        return
-
-    clients = {
-        mcp_client.SAP_MCP_URL: TestClient(sap_app),
-        mcp_client.MAXIMO_MCP_URL: TestClient(maximo_app),
-        mcp_client.FDP_MCP_URL: TestClient(fdp_app),
-    }
-
-    def _fake_get(base_url: str, path: str, params: dict | None = None):
-        client = clients.get(base_url)
-        if client is None:
-            return None
-        resp = client.get(path, params=params or {})
-        if resp.status_code == 404:
-            return None
-        resp.raise_for_status()
-        return resp.json()
-
-    def _fake_post(base_url: str, path: str, payload: dict | None = None):
-        client = clients.get(base_url)
-        if client is None:
-            return None
-        resp = client.post(path, json=payload or {})
-        if resp.status_code == 404:
-            return None
-        resp.raise_for_status()
-        return resp.json()
-
-    monkeypatch.setattr(mcp_client, "_do_get", _fake_get)
-    monkeypatch.setattr(mcp_client, "_do_post", _fake_post)
+    # No mutations — mcp_client._do_get/_do_post are no-op stubs in the
+    # deprecation shim, and the BQ-direct path doesn't route through them.
     yield

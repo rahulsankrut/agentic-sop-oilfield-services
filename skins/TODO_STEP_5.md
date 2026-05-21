@@ -1,9 +1,31 @@
-# TASK-13 Step 5 — Agent prompt templating (DEFERRED)
+# TASK-13 Step 5 — Agent prompt templating ✅ COMPLETED 2026-05-21
 
-This file tracks the agent-side splice points that **were intentionally
-left untouched** in the TASK-13 implementation. Step 5 of the spec
-("Template the agents' prompts and Memory Profiles") is queued for a
-follow-up task.
+This file originally tracked the agent-side splice points that were
+intentionally left untouched in the initial TASK-13 implementation.
+Step 5 of the spec ("Template the agents' prompts and Memory Profiles")
+is now complete. The historical splice-point inventory below is
+preserved for archaeology; **all functional splices have been applied**.
+
+Summary of what landed:
+
+| Splice point | Status |
+|---|---|
+| `agents/orchestrator_agent/nodes/parse_request.py` | Reads `skin.taxonomy.hero_asset` + `skin.scenario("cargo-plane")` |
+| `agents/orchestrator_agent/nodes/finalize.py` | `_skin_fallback_hub()` reads `skin.scenario("cargo-plane")` naive-origin |
+| `agents/orchestrator_agent/services/memory_manager.py` | `_skin_examples()` + per-topic builders read skin at runtime |
+| `agents/procurement_approval_agent/agent_card.py` | `_build_examples()` reads skin |
+| `agents/procurement_approval_agent/services/memory_manager.py` | `_skin_customer_label()` + `_build_blocker_patterns()` read skin |
+| `agents/orchestrator_agent/nodes/{equivalence_lookup,sourcing_logistics}.py` | Prompts in `prompts.py` are skin-neutral (no `Tool X`/`Luanda` literals) |
+| `agents/orchestrator_agent/nodes/resolve_asset.py` | Docstring example only — no functional hardcoded id |
+| Skill `tools.py` files | Docstring examples only — runtime behavior queries BQ (cross_system_aliases) |
+
+Cross-skin verification: `agents/tests/unit/test_skin_splice.py` (5
+behavioral tests) covers default→Luanda/Darwin and
+halliburton→Búzios/Singapore.
+
+---
+
+Historical splice-point inventory (preserved):
 
 The TASK-13 build delivered:
 
