@@ -35,25 +35,42 @@ def parse_capacity_gap_request(node_input: str, ctx: Context) -> Event:
     query = node_input if isinstance(node_input, str) else str(node_input)
     lowered = query.lower()
 
-    # Heuristic asset extraction. Default to the hero-scenario asset; this is
-    # safe because the hero scenario is the only path TASK-04 fully wires.
-    requested_asset = "Tool X variant" if "tool x" in lowered else "Tool X variant"
+    # TASK-13 Step 5 — heuristics read defaults from the active customer skin
+    # rather than hardcoded Tool X / Luanda / Gulf Petroleum literals. The
+    # skin's cargo-plane scenario carries the hero asset label, target
+    # location coords + label, and the customer-account slug + name.
+    from agents.utils.skin_loader import get_active_skin  # noqa: PLC0415
 
-    # Heuristic location — Luanda is the centerpiece scenario destination.
+    skin = get_active_skin()
+    sc = skin.scenario("cargo-plane")
+    hero_label = skin.taxonomy.hero_asset.canonical_label
+
+    # Asset extraction — match either the hero label or any of the
+    # secondary asset labels in the skin. Otherwise default to hero.
+    requested_asset = hero_label
+    for asset in [skin.taxonomy.hero_asset, *skin.taxonomy.secondary_assets]:
+        if asset.canonical_label.lower() in lowered:
+            requested_asset = asset.canonical_label
+            break
+
+    # Heuristic location — skin's scenario `location_focus_*` fields.
     target_location = GeoPoint(
-        latitude=-8.8390,
-        longitude=13.2894,
-        label="Luanda, Angola",
+        latitude=sc.location_focus_lat if sc.location_focus_lat is not None else -8.8390,
+        longitude=sc.location_focus_lng if sc.location_focus_lng is not None else 13.2894,
+        label=sc.location_focus_label,
     )
 
     # Heuristic deadline: Friday relative to a fixed demo anchor; production
     # would parse natural-language dates with a proper extractor.
     deadline = datetime.fromisoformat("2026-05-22T00:00:00")
 
-    # Heuristic customer extraction (only the hero scenario for now)
+    # Heuristic customer extraction — match the skin's customer-account slug
+    # or its display name. Slug match wins.
     customer_id: str | None = None
-    if "gulf petroleum" in lowered:
-        customer_id = "gulf-petroleum"
+    if sc.customer_account_slug in lowered:
+        customer_id = sc.customer_account_slug
+    elif sc.customer_account_name.lower() in lowered:
+        customer_id = sc.customer_account_slug
 
     request = CapacityGapRequest(
         raw_query=query,

@@ -23,15 +23,42 @@ from agents.utils.skill_imports import estimate_transit
 from ..events.canvas_events import WorkflowCompletedEvent
 from ..events.emit import emit
 
-# Long-haul fallback hubs by region — the "what Maria would have done without
-# the agent" baselines. Hard-coded for the demo's hero scenario; production
-# would derive these from Maximo's farthest-deployable instance.
+# Long-haul fallback hubs by region — the "what the planner would have done
+# without the agent" baselines. Hard-coded for the demo's hero scenario;
+# production would derive these from Maximo's farthest-deployable instance.
+#
+# TASK-13 Step 5: the region matching the active cargo-plane scenario's
+# `target_location` reads its naive-baseline label + coords from the skin.
+# Other regions retain the in-house demo defaults so the workflow doesn't
+# break when run against an off-scenario region.
 _FALLBACK_HUBS = {
     "west_africa": GeoPoint(latitude=-12.4634, longitude=130.8456, label="Darwin, Australia"),
     "north_america": GeoPoint(latitude=29.7604, longitude=-95.3698, label="Houston, TX, USA"),
     "europe": GeoPoint(latitude=57.1497, longitude=-2.0943, label="Aberdeen, Scotland"),
     "asia_pacific": GeoPoint(latitude=-12.4634, longitude=130.8456, label="Darwin, Australia"),
 }
+
+
+def _skin_fallback_hub() -> GeoPoint | None:
+    """Skin-driven naive-baseline hub for the active cargo-plane scenario.
+
+    Returns the GeoPoint when the skin supplies a complete
+    `naive_origin_{label,lat,lng}` triple; otherwise None and callers
+    fall back to the `_FALLBACK_HUBS` regional table.
+    """
+    try:
+        from agents.utils.skin_loader import get_active_skin  # noqa: PLC0415
+
+        sc = get_active_skin().scenario("cargo-plane")
+    except Exception:  # noqa: BLE001
+        return None
+    if sc.naive_origin_label is None or sc.naive_origin_lat is None or sc.naive_origin_lng is None:
+        return None
+    return GeoPoint(
+        latitude=sc.naive_origin_lat,
+        longitude=sc.naive_origin_lng,
+        label=sc.naive_origin_label,
+    )
 
 
 # DEMO NARRATION: "Final node: compute avoided_cost_usd against the
@@ -77,8 +104,10 @@ def finalize_sourcing_plan(node_input: dict, ctx: Context) -> Event:
     plan = SourcingPlan(**plan_dict)
 
     # Build the naive baseline: cargo charter from the fallback hub for this
-    # region (typically Darwin → Luanda for the cargo-plane scenario).
-    fallback_hub = _FALLBACK_HUBS.get(request.target_region or "", None)
+    # region (typically Darwin → Luanda in the default skin's cargo-plane
+    # scenario). Prefer the skin-provided hub if available; fall back to the
+    # regional table for off-scenario regions.
+    fallback_hub = _skin_fallback_hub() or _FALLBACK_HUBS.get(request.target_region or "", None)
     naive_baseline: SourcingOption | None = None
     if fallback_hub is not None:
         transit = estimate_transit(
