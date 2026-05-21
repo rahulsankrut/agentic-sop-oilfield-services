@@ -2,7 +2,7 @@
 
 Same shape as ``src/forecast_review_agent/runtime/deploy.py`` — programmatic
 deploy with ``extra_packages`` so the runtime can import ``src.schemas``,
-``src.utils.*``. No A2A wrapping (called directly from Gemini Enterprise).
+``agents.utils.*``. No A2A wrapping (called directly from Gemini Enterprise).
 
 Usage:
     poetry run python -m agents.capacity_planning_agent.deploy

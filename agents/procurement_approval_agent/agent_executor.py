@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class ProcurementApprovalExecutor(AgentExecutor):
-    """Execute simulation review requests via A2A protocol."""
+    """Execute procurement-approval review requests via A2A protocol."""
 
     def __init__(self):
         self.agent = None
@@ -92,7 +92,7 @@ class ProcurementApprovalExecutor(AgentExecutor):
             )
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
-        """Execute a simulation review request via A2A protocol."""
+        """Execute a procurement-approval review request via A2A protocol."""
         if self.agent is None:
             self._init_agent()
 

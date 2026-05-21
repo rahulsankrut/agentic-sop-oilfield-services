@@ -2,11 +2,11 @@
 
 Wires Memory Bank with oilfield-domain custom topics so the Orchestrator
 learns across sessions (sourcing decisions, planner preferences, basin
-context). Mirrors the marathon planner's auto_save_memories pattern from
+context). Mirrors the marathon-planner reference repo's auto_save_memories pattern from
 the reference repo, with topics rewritten for the S&OP domain.
 
 Memory Bank is regional (us-central1). The model layer can use a different
-region via `src.utils.global_gemini.GlobalGemini` — the dual-location pattern
+region via `agents.utils.global_gemini.GlobalGemini` — the dual-location pattern
 keeps Memory Bank on us-central1 while model calls go to 'global'. This
 module reads AGENT_ENGINE_LOCATION (or GOOGLE_CLOUD_LOCATION as fallback)
 to construct the Memory Bank service with the right region.
@@ -205,6 +205,33 @@ def create_memory_service(
 # ============================================================================
 # CALLBACK — wired into LlmAgent(after_agent_callback=auto_save_memories)
 # ============================================================================
+#
+# `_cached_memory_service` is module-scoped so we don't pay the channel-setup
+# + ADC-refresh cost on every agent turn (code-review MED #12). Memory Bank's
+# `add_session_to_memory` underneath the cached service is still per-call; we
+# just stop reconstructing the client.
+
+
+_cached_memory_service: VertexAiMemoryBankService | None = None
+
+
+def _get_memory_service() -> VertexAiMemoryBankService | None:
+    global _cached_memory_service  # noqa: PLW0603 — small intentional cache
+    if _cached_memory_service is not None:
+        return _cached_memory_service
+    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    location = os.environ.get("AGENT_ENGINE_LOCATION") or os.environ.get(
+        "GOOGLE_CLOUD_LOCATION", "us-central1"
+    )
+    agent_engine_id = os.environ.get("AGENT_ENGINE_ID")
+    if not agent_engine_id:
+        return None
+    _cached_memory_service = VertexAiMemoryBankService(
+        project=project_id,
+        location=location,
+        agent_engine_id=agent_engine_id,
+    )
+    return _cached_memory_service
 
 
 async def auto_save_memories(callback_context: "CallbackContext") -> None:
@@ -213,21 +240,10 @@ async def auto_save_memories(callback_context: "CallbackContext") -> None:
     No-op if AGENT_ENGINE_ID is unset (local dev). Catches exceptions so a
     Memory Bank outage cannot kill an agent turn.
     """
-    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
-    location = os.environ.get("AGENT_ENGINE_LOCATION") or os.environ.get(
-        "GOOGLE_CLOUD_LOCATION", "us-central1"
-    )
-    agent_engine_id = os.environ.get("AGENT_ENGINE_ID")
-
-    if not agent_engine_id:
+    memory_service = _get_memory_service()
+    if memory_service is None:
         return
-
     try:
-        memory_service = VertexAiMemoryBankService(
-            project=project_id,
-            location=location,
-            agent_engine_id=agent_engine_id,
-        )
         await memory_service.add_session_to_memory(callback_context._invocation_context.session)
     except Exception as e:
         # DEMO NARRATION: "Memory Bank failures don't block the agent's response —

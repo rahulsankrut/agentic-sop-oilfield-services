@@ -29,7 +29,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from google.adk import Context, Event
@@ -176,7 +176,7 @@ async def _gateway_call_tool(toolset: Any, tool_name: str, **arguments: Any) -> 
 class _CanvasEmitter:
     """Accumulates canvas events emitted during the parallel queries node.
 
-    We can't repeatedly call :func:`src.orchestrator_agent.events.emit.emit`
+    We can't repeatedly call :func:`agents.orchestrator_agent.events.emit.emit`
     because it re-reads ``ctx.state`` on each call — the state delta from a
     previous emit isn't visible yet within the same node execution. Instead
     we accumulate in-memory and produce a final state delta at the end.
@@ -239,9 +239,9 @@ async def _call_with_emit(
             via_gateway=via_gateway,
         )
     )
-    started = datetime.utcnow()
+    started = datetime.now(timezone.utc)  # noqa: UP017
     result = await coro_factory()
-    duration_ms = int((datetime.utcnow() - started).total_seconds() * 1000)
+    duration_ms = int((datetime.now(timezone.utc) - started).total_seconds() * 1000)  # noqa: UP017
     emitter.add(
         MCPCallCompletedEvent(
             workflow_id=emitter.workflow_id(),
@@ -490,7 +490,7 @@ async def parallel_system_queries(node_input: dict, ctx: Context) -> Event:
     """
     request = CapacityGapRequest(**node_input)
     emitter = _CanvasEmitter(ctx)
-    node_started = datetime.utcnow()
+    node_started = datetime.now(timezone.utc)  # noqa: UP017
 
     # DEMO NARRATION: "Notice the trace — and the canvas. Four parallel MCP
     # calls light up as pills, one per system. The canvas is consuming
@@ -518,21 +518,39 @@ async def parallel_system_queries(node_input: dict, ctx: Context) -> Event:
         try:
             aggregated = await _via_agent_gateway(request, emitter)
             path_label = "agent-gateway"
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             # Surface gateway failures loudly in logs, but DON'T silently
             # fall back to in-process — the demo's whole point is that the
             # call went through Gateway. A fallback here would mask a
             # broken Gateway policy as a successful run.
+            #
+            # Code-review MED #22: emit node.completed (with an error
+            # output_summary) before re-raising so the canvas spinner
+            # transitions to "failed" rather than hanging on
+            # node.started. The exception still propagates and fails the
+            # workflow.
             logger.exception(
                 "Agent Gateway call failed; re-raising to fail the node: %s",
                 exc,
+            )
+            node_duration_ms = int(
+                (datetime.now(timezone.utc) - node_started).total_seconds() * 1000  # noqa: UP017
+            )
+            emitter.add(
+                NodeCompletedEvent(
+                    workflow_id=emitter.workflow_id(),
+                    session_id=emitter.session_id(),
+                    node_name="parallel_system_queries",
+                    duration_ms=node_duration_ms,
+                    output_summary=f"Agent Gateway call failed: {type(exc).__name__}",
+                )
             )
             raise
     else:
         aggregated = await _via_in_process_skills(request, emitter)
         path_label = "in-process"
 
-    node_duration_ms = int((datetime.utcnow() - node_started).total_seconds() * 1000)
+    node_duration_ms = int((datetime.now(timezone.utc) - node_started).total_seconds() * 1000)  # noqa: UP017
     emitter.add(
         NodeCompletedEvent(
             workflow_id=emitter.workflow_id(),

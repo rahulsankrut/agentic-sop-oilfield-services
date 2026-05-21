@@ -137,7 +137,9 @@ def build_direct_plan(node_input: dict) -> Event:
         # Persist plan into ctx.state so finalize + route_on_procurement_
         # threshold can find it after the sourcing_logistics / plan_evaluator
         # LLMs clobber node_input with their own structured outputs.
-        state={"plan": plan_dict, "path": "direct"},
+        # `original_plan` preserves the deterministic build for audit comparison
+        # against subsequent LLM-refined revisions (code-review MED #19).
+        state={"plan": plan_dict, "original_plan": plan_dict, "path": "direct"},
     )
 
 
@@ -255,7 +257,9 @@ def build_equivalent_plan(node_input: dict, ctx: Context) -> Event:
             "equivalent_candidate": candidate,
         },
         # Persist plan to ctx.state — same reason as build_direct_plan.
-        state={"plan": plan_dict, "path": "equivalence"},
+        # `original_plan` preserves the deterministic build for audit
+        # comparison (code-review MED #19).
+        state={"plan": plan_dict, "original_plan": plan_dict, "path": "equivalence"},
     )
 
 

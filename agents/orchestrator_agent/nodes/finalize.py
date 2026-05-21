@@ -6,7 +6,7 @@ Last node before END. Pure-Python compute over the structured plan that
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from google.adk import Context, Event
 
@@ -114,7 +114,14 @@ def finalize_sourcing_plan(node_input: dict, ctx: Context) -> Event:  # noqa: PL
     if started_iso:
         try:
             started_at = datetime.fromisoformat(started_iso)
-            duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+            # `started_at` is from `datetime.fromisoformat(started_iso)`
+            # which is naive when the ISO string lacks tz; use the same
+            # shape on the now side to keep the arithmetic consistent.
+            if started_at.tzinfo is None:
+                now = datetime.now(timezone.utc).replace(tzinfo=None)  # noqa: UP017
+            else:
+                now = datetime.now(timezone.utc)  # noqa: UP017
+            duration_ms = int((now - started_at).total_seconds() * 1000)
         except (TypeError, ValueError):
             duration_ms = 0
 

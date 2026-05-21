@@ -126,7 +126,19 @@ def route_on_evaluation_score(node_input: dict, ctx: Context) -> Event:
     else:
         route = REVISE
         new_iteration = iteration + 1
-        forward = {**node_input, "iteration_count": new_iteration}
+        # Code-review MED #14: revise_plan's prompt says it receives
+        # {plan, evaluation, iteration_count}. node_input is the
+        # PlanEvaluation dict (LLM clobbered it). Re-wrap from ctx.state
+        # so the LLM sees what its instruction promises.
+        try:
+            current_plan = ctx.state.get("plan") or {}
+        except Exception:  # noqa: BLE001
+            current_plan = {}
+        forward = {
+            "plan": current_plan,
+            "evaluation": evaluation_dict,
+            "iteration_count": new_iteration,
+        }
         # Persist iteration_count into ctx.state via the Event's state
         # delta — the next plan_evaluator invocation reads it from there.
         state_delta_extra["iteration_count"] = new_iteration

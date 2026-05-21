@@ -10,7 +10,7 @@ carry a ``type`` literal discriminator so the canvas reducer can dispatch
 via tagged union.
 
 Workflow nodes emit these by appending to ``ctx.state['canvas_events']``
-via :func:`src.orchestrator_agent.events.emit.emit`. The canvas SSE
+via :func:`agents.orchestrator_agent.events.emit.emit`. The canvas SSE
 client (``canvas/src/lib/agent-stream.ts``) drains new entries off
 each ADK chunk on the deployed Orchestrator's ``streamQuery`` endpoint.
 """
@@ -18,7 +18,7 @@ each ADK chunk on the deployed Orchestrator's ``streamQuery`` endpoint.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -38,7 +38,9 @@ class BaseEvent(BaseModel):
     """Common envelope for every canvas event."""
 
     event_id: str = Field(default_factory=_new_id)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),  # noqa: UP017
+    )
     workflow_id: str
     session_id: str
 

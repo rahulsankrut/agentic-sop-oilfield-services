@@ -101,7 +101,7 @@ assert abs(sum(CRITERION_WEIGHTS.values()) - 1.0) < 1e-4, "Weights must sum to 1
 
 
 # DEMO NARRATION: "The Plan Evaluator is an LLM-as-Judge — same pattern Google
-# showed in the Next '26 keynote marathon demo. Seven criteria specific to
+# showed in the Next '26 keynote marathon-planner demo. Seven criteria specific to
 # oilfield services: safety, customer compatibility, logistics feasibility,
 # cost, equivalence confidence, regulatory, schedule. Each weighted, all
 # aggregated into an overall_score the Orchestrator iterates against."

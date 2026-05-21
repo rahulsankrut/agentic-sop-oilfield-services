@@ -3,7 +3,7 @@
 Lazy-loads the ``procurement-prerequisites`` skill via SkillToolset. The
 agent is otherwise toolless — it's a fast deterministic gate, not a
 multi-system orchestrator. ``preload_memory`` is added at the LlmAgent
-level in ``core/agent.py``.
+level in ``agent.py``.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def _load_skills() -> list:
 def get_tools() -> list:
     """Procurement Gate tool list: SkillToolset + per-function tools.
 
-    preload_memory is added at the LlmAgent level in core/agent.py, not here.
+    preload_memory is added at the LlmAgent level in agent.py, not here.
     """
     skills = _load_skills()
     skill_toolset = SkillToolset(skills=skills) if skills else None

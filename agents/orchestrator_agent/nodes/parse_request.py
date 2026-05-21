@@ -7,7 +7,7 @@ zoom the map and mark the target location.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from google.adk import Context, Event
 
@@ -15,6 +15,43 @@ from agents.schemas import CapacityGapRequest, GeoPoint
 
 from ..events.canvas_events import CapacityGapDetectedEvent
 from ..events.emit import emit
+
+_WEEKDAY_NAMES = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
+}
+
+
+def _infer_deadline(lowered: str, default_phrase: str) -> datetime:
+    """Pick the next matching weekday from `lowered`, or fall back to
+    `default_phrase` (e.g. 'by Friday') from the skin's scenario config.
+
+    Recognises: literal weekday names, 'tomorrow', 'eod' / 'end of day',
+    'next week'. Anything else falls back to 7 days from now.
+
+    Returns a naive datetime at 00:00 of the target date — matches the
+    legacy hardcoded shape so downstream code doesn't have to care
+    about tz.
+    """
+    now = datetime.now(timezone.utc).replace(tzinfo=None, hour=0, minute=0, second=0, microsecond=0)  # noqa: UP017
+    haystack = lowered + " " + default_phrase.lower()
+
+    if "tomorrow" in haystack:
+        return now + timedelta(days=1)
+    if "eod" in haystack or "end of day" in haystack:
+        return now
+    if "next week" in haystack:
+        return now + timedelta(days=7)
+
+    for name, idx in _WEEKDAY_NAMES.items():
+        if name in haystack:
+            days_ahead = (idx - now.weekday()) % 7
+            if days_ahead == 0:
+                days_ahead = 7  # 'Friday' on a Friday means next Friday
+            return now + timedelta(days=days_ahead)
+
+    # Last resort.
+    return now + timedelta(days=7)
 
 
 # DEMO NARRATION: "First node: parsing Maria's request into a structured form.
@@ -60,9 +97,14 @@ def parse_capacity_gap_request(node_input: str, ctx: Context) -> Event:
         label=sc.location_focus_label,
     )
 
-    # Heuristic deadline: Friday relative to a fixed demo anchor; production
-    # would parse natural-language dates with a proper extractor.
-    deadline = datetime.fromisoformat("2026-05-22T00:00:00")
+    # Heuristic deadline parse (code-review MED #13).
+    # Production would use a proper NL date extractor; we look for a few
+    # demo-relevant tokens in the lowercased input and pick the next
+    # matching weekday from today. Falls back to the skin's
+    # `deadline_phrase` heuristic (Friday for cargo-plane), or, last
+    # resort, ~7 days from now. The previous hardcoded
+    # `2026-05-22T00:00:00` would silently win regardless of input.
+    deadline = _infer_deadline(lowered, sc.deadline_phrase or "by Friday")
 
     # Heuristic customer extraction — match the skin's customer-account slug
     # or its display name. Slug match wins.

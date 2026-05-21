@@ -81,19 +81,33 @@ def create_memory_service(
     )
 
 
-async def auto_save_memories(callback_context: "CallbackContext") -> None:
-    """Persist session into Memory Bank after each turn (no-op locally)."""
+_cached_memory_service: VertexAiMemoryBankService | None = None
+
+
+def _get_memory_service() -> VertexAiMemoryBankService | None:
+    """Module-cached Memory Bank client. Code-review MED #12."""
+    global _cached_memory_service  # noqa: PLW0603
+    if _cached_memory_service is not None:
+        return _cached_memory_service
     project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
     location = os.environ.get("AGENT_ENGINE_LOCATION") or os.environ.get(
         "GOOGLE_CLOUD_LOCATION", "us-central1"
     )
     agent_engine_id = os.environ.get("AGENT_ENGINE_ID")
     if not agent_engine_id:
+        return None
+    _cached_memory_service = VertexAiMemoryBankService(
+        project=project_id, location=location, agent_engine_id=agent_engine_id
+    )
+    return _cached_memory_service
+
+
+async def auto_save_memories(callback_context: "CallbackContext") -> None:
+    """Persist session into Memory Bank after each turn (no-op locally)."""
+    memory_service = _get_memory_service()
+    if memory_service is None:
         return
     try:
-        memory_service = VertexAiMemoryBankService(
-            project=project_id, location=location, agent_engine_id=agent_engine_id
-        )
         await memory_service.add_session_to_memory(callback_context._invocation_context.session)
     except Exception as e:
         logger.warning("Failed to save memories: %s", e)

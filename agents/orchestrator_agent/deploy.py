@@ -1,14 +1,14 @@
 """Deploy the Capacity Orchestrator Agent to Vertex AI Agent Engine.
 
 Deployed as ``AdkApp``. The Orchestrator's Workflow nodes emit canvas
-events into ``ctx.state["canvas_events"]`` via ``src.orchestrator_agent.
+events into ``ctx.state["canvas_events"]`` via ``agents.orchestrator_agent.
 events.emit``; ``AdkApp.async_stream_query`` (the body of the deployed
 ``streamQuery`` REST endpoint) yields every ADK ``Event`` including the
 ``actions.state_delta`` payload, so the canvas reads canvas events from
 that stream directly. No A2A wrap is needed on the inbound side.
 
 (The Orchestrator is still an A2A *client* of the Procurement Approval
-Agent — that lives in ``core/tools.py`` via ``RemoteA2aAgent``. We only
+Agent — that lives in ``tools.py`` via ``RemoteA2aAgent``. We only
 deploy Procurement as ``A2aAgent`` because it's the customer-facing
 demonstration of the A2A protocol, not an architectural necessity.)
 
@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 def _env_vars(agent_engine_id: str, location: str) -> dict[str, str]:
     """Build the env dict baked into the deployed runtime.
 
-    Threads sibling-agent resource names so ``core/tools.py`` can wire
+    Threads sibling-agent resource names so ``tools.py`` can wire
     the ``RemoteA2aAgent`` calling into Procurement. Per-LLM model env
-    vars carry the model selection that ``core/nodes/*.py`` reads at
+    vars carry the model selection that ``nodes/*.py`` reads at
     import time. Empty / unset values are skipped.
     """
     out: dict[str, str] = {

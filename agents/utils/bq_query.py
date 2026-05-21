@@ -25,15 +25,29 @@ from google.cloud import bigquery
 
 logger = logging.getLogger(__name__)
 
-BQ_PROJECT = os.environ.get("BQ_PROJECT") or os.environ.get(
-    "GOOGLE_CLOUD_PROJECT", "vertex-ai-demos-468803"
-)
+def _resolve_project() -> str:
+    """Resolve the BQ project at call time (not import time)."""
+    return os.environ.get("BQ_PROJECT") or os.environ.get(
+        "GOOGLE_CLOUD_PROJECT", "vertex-ai-demos-468803"
+    )
+
+
+# Module-level convenience for callers that want to interpolate the project
+# into SQL (read once at import — fine for production where env doesn't
+# change mid-process, but use `_resolve_project()` in any code that's
+# expected to honor a `monkeypatch.setenv("BQ_PROJECT", ...)` in tests).
+BQ_PROJECT = _resolve_project()
 
 
 @lru_cache(maxsize=1)
+def _client_cached(project: str) -> bigquery.Client:
+    return bigquery.Client(project=project)
+
+
 def _client() -> bigquery.Client:
-    """Lazy BQ client — created once per process."""
-    return bigquery.Client(project=BQ_PROJECT)
+    """Lazy BQ client — keyed by project so a monkey-patched env var in
+    tests gives a fresh client (code-review MED #21)."""
+    return _client_cached(_resolve_project())
 
 
 def _bq_type(v: object) -> str:

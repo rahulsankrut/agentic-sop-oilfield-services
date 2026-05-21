@@ -5,7 +5,7 @@ The deployed agent therefore must expose an A2A endpoint — which means
 wrapping the root_agent in ``vertexai.preview.reasoning_engines.A2aAgent``.
 
 That wrapping triggers the Pydantic-AgentCard ↔ protobuf bug in
-``vertexai._genai._agent_engines_utils``. ``src.utils.deploy:
+``vertexai._genai._agent_engines_utils``. ``agents.utils.deploy:
 deploy_a2a_agent_engine`` patches around it. See CLAUDE.md "Agent Engine
 deploy of A2aAgent" gotcha.
 
@@ -43,7 +43,7 @@ def deploy_procurement_approval() -> str:
     if not all([project_id, staging_bucket]):
         raise ValueError("Set GOOGLE_CLOUD_PROJECT and BUCKET_URI in .env file")
 
-    # Imports lazy so the patch in src.utils.deploy fires before vertexai's
+    # Imports lazy so the patch in agents.utils.deploy fires before vertexai's
     # buggy code path is touched.
     from .agent_card import create_procurement_approval_card
     from .agent_executor import ProcurementApprovalExecutor

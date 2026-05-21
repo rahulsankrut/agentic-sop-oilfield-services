@@ -14,7 +14,7 @@ tools.py) handles this by explicitly loading every tool function from each
 skill's ``tools.py`` and adding it as a ``FunctionTool``. This module is
 the shared version of that loader so every agent can use the same wiring.
 
-Use it from each agent's ``core/tools.py``::
+Use it from each agent's ``tools.py``::
 
     from agents.utils.skill_tools import load_skill_function_tools
 
@@ -27,7 +27,7 @@ Use it from each agent's ``core/tools.py``::
         ]
 
 ``preload_memory`` is added at the ``LlmAgent`` level in each agent's
-``core/agent.py``, not in ``get_tools()``.
+``agent.py``, not in ``get_tools()``.
 """
 
 from __future__ import annotations

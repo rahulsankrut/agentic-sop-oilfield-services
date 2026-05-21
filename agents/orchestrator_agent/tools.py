@@ -6,26 +6,20 @@ Wiring:
   (Agent Engine, A2A protocol)
 - ``PreloadMemoryTool`` for cross-session memory
 
-Mirrors the marathon planner's ``planner_agent/core/tools.py`` pattern from
+Mirrors the marathon-planner reference repo's ``planner_agent/tools.py`` pattern from
 the reference repo (``next-26-keynotes/devkey/demo-2``). SkillToolset + MCP
 tools are added in TASK-03/TASK-04.
 """
 
 import logging
 import os
-import pathlib
 
 import httpx
 from a2a.client.client import ClientConfig as A2AClientConfig
 from a2a.client.client_factory import ClientFactory as A2AClientFactory
 from a2a.types import TransportProtocol as A2ATransport
 from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
-from google.adk.skills import load_skill_from_dir
 from google.adk.tools.agent_tool import AgentTool
-from google.adk.tools.preload_memory_tool import PreloadMemoryTool
-from google.adk.tools.skill_toolset import SkillToolset
-
-from agents.utils.skill_tools import load_skill_function_tools
 
 from .auth import GoogleAuthRefresh
 from .plan_evaluator.agent import root_agent as plan_evaluator_agent
@@ -153,51 +147,11 @@ def create_procurement_approval_tool() -> AgentTool:
     return AgentTool(agent=remote)
 
 
-def _load_skills() -> list:
-    """Lazy-load every skill directory under ``orchestrator_agent/skills/``."""
-    skills_dir = pathlib.Path(__file__).parent / "skills"
-    if not skills_dir.exists():
-        return []
-    return [
-        load_skill_from_dir(d)
-        for d in sorted(skills_dir.iterdir())
-        if d.is_dir() and not d.name.startswith("_") and (d / "SKILL.md").exists()
-    ]
-
-
-def get_tools() -> list:
-    """Build the Orchestrator's tool list.
-
-    Always includes:
-    - SkillToolset wrapping the 3 Orchestrator skills (lazy-loaded by name)
-    - PreloadMemoryTool (cross-session memory hydration)
-    - Plan Evaluator (in-process AgentTool)
-
-    Optionally includes (if PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME is set):
-    - Procurement Approval Agent (A2A)
-    """
-    skills = _load_skills()
-    skill_toolset = SkillToolset(skills=skills) if skills else None
-    skills_dir = pathlib.Path(__file__).parent / "skills"
-    skill_function_tools = load_skill_function_tools(skills_dir)
-    logger.info(
-        "Loaded %d skills, %d direct function tools for Orchestrator",
-        len(skills),
-        len(skill_function_tools),
-    )
-
-    tools: list = [PreloadMemoryTool()]
-    if skill_toolset is not None:
-        tools.append(skill_toolset)
-    tools.extend(skill_function_tools)
-    tools.append(create_plan_evaluator_tool())
-
-    if os.environ.get("PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME"):
-        tools.append(create_procurement_approval_tool())
-        logger.info("Procurement Gate A2A tool enabled")
-    else:
-        logger.warning(
-            "PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME not set — Procurement Gate disabled. "
-            "Set it after deploying the procurement_approval_agent (Step 5)."
-        )
-    return tools
+# NOTE: this file used to define `_load_skills()` + `get_tools()` mirroring
+# the marathon-planner reference pattern, but the Orchestrator is a
+# `Workflow` agent — root_agent in `agent.py` doesn't consume a flat tool
+# list, it composes nodes via edges. Workflow LLM nodes (equivalence_lookup,
+# sourcing_logistics, revise_plan, plan_evaluator) each manage their own
+# `tools=` list, so `get_tools()` had no caller. Removed (code-review MED #15).
+# The two AgentTool constructors above stay because the Plan Evaluator is
+# called as an AgentTool from the Workflow's plan_evaluator_tool edge.
