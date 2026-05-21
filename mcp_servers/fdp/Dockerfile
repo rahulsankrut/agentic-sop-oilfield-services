@@ -13,13 +13,17 @@ COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 COPY backend /app/backend
+# Shared agent schemas (staged by cloudbuild.yaml). Without this COPY the
+# backend's `from agents.schemas import (...)` crashes uvicorn at startup.
+COPY agents /app/agents
 COPY config.yaml /app/config.yaml
 
 ENV DATA_DIR=/data \
     FDP_BACKEND_URL=http://127.0.0.1:8003 \
     PORT=8080 \
     LATENCY_MIN_MS=50 \
-    LATENCY_MAX_MS=200
+    LATENCY_MAX_MS=200 \
+    PYTHONPATH=/app
 
 EXPOSE 8080
 

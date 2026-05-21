@@ -28,6 +28,12 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 # Backend source.
 COPY backend /app/backend
 
+# Shared agent schemas (staged by cloudbuild.yaml step 1). The backend imports
+# `from agents.schemas import (...)` to type its responses; without this COPY
+# uvicorn crashes at import time with ModuleNotFoundError: No module named
+# 'agents'.
+COPY agents /app/agents
+
 # Toolbox config.
 COPY config.yaml /app/config.yaml
 
@@ -39,6 +45,8 @@ ENV DATA_DIR=/data \
     PORT=8080 \
     LATENCY_MIN_MS=50 \
     LATENCY_MAX_MS=200
+
+ENV PYTHONPATH=/app
 
 EXPOSE 8080
 

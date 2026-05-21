@@ -37,6 +37,13 @@ steps:
         set -euo pipefail
         cp -R data mcp_servers/sap/data
         ls mcp_servers/sap/data | head -5
+        # Stage the agents/ package — the FastAPI backend imports
+        # `from agents.schemas import (...)` for its response types. Without
+        # this, uvicorn crashes at startup. Copy schemas.py + an empty
+        # __init__.py so `agents` resolves as a package.
+        mkdir -p mcp_servers/sap/agents
+        cp agents/schemas.py mcp_servers/sap/agents/schemas.py
+        touch mcp_servers/sap/agents/__init__.py
 
   # Step 2 — build. Note: Dockerfile path is relative to the build context
   # (mcp_servers/sap), which now contains the staged `data/`.

@@ -22,6 +22,10 @@ steps:
         set -euo pipefail
         cp -R data mcp_servers/maximo/data
         ls mcp_servers/maximo/data | head -5
+        # Stage agents/ package — see mcp_servers/sap/cloudbuild.yaml.
+        mkdir -p mcp_servers/maximo/agents
+        cp agents/schemas.py mcp_servers/maximo/agents/schemas.py
+        touch mcp_servers/maximo/agents/__init__.py
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
