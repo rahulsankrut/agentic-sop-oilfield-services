@@ -1,0 +1,6 @@
+{
+  "_comment": "Derived from skins/default/customer.yaml meta block. Kept here for design tooling (Figma plugins, etc.) that wants pure JSON.",
+  "primary": "#3b82f6",
+  "secondary": "#1e293b",
+  "accent": "#10b981"
+}

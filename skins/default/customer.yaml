@@ -1,0 +1,191 @@
+# Default customer skin — SLB-style reference major.
+#
+# This is the skin shipped with the Reference Solution. Persona names,
+# customer accounts, asset terminology, and locations all match the
+# in-house rehearsal storyboards (see docs/planning/persona3_canvas_storyboard.md).
+#
+# Schema:    skins/schema/customer.schema.json
+# Validator: agents/tests/unit/test_skin_schema.py
+# Loader:    scripts/compile_skin.py  →  canvas/src/data/skin.generated.ts
+#
+# Step 5 of TASK-13 (agent-prompt templating) is DEFERRED — agent-side
+# code still uses the hardcoded strings these YAMLs describe. The TODO
+# markers in agents/orchestrator_agent/ flag the splice points.
+
+meta:
+  customer_slug: default
+  customer_name: Demo Major Services
+  customer_display_name: Demo Major
+  short_name: DEMO
+  color_primary: "#3b82f6"   # blue-500 — current canvas accent
+  color_secondary: "#1e293b" # slate-800
+  color_accent: "#10b981"    # emerald-500 — the "avoided cost" green
+  logo_path: skins/default/assets/logo.svg
+  hero_path: skins/default/assets/hero.svg
+  tagline: Agentic S&OP for oilfield services
+
+personas:
+  - id: david
+    number: 1
+    name: David Okeke
+    role: Basin Leader
+    region: West Africa
+    sop_stage: Demand sensing
+    scenario_slug: forecast-review
+    target_time_minutes: 3
+    opening_line: >-
+      Reviews Q4 ML forecast, overrides two basins with qualitative rationale
+      that gets re-ingested into the model.
+    memory_profile_user_id: david-basin-leader-west-africa
+    session_id: demo-david-forecast-review-v1
+
+  - id: tomas
+    number: 2
+    name: Tomas Reyes
+    role: Fleet Scheduler
+    region: Permian
+    sop_stage: Demand-to-supply planning
+    scenario_slug: buffer-planning
+    target_time_minutes: 3
+    opening_line: >-
+      Sets Q3 fleet buffer for ExxonMobil-Permian with probabilistic forecast
+      and explicit risk-tolerance slider.
+    memory_profile_user_id: tomas-fleet-scheduler-permian
+    session_id: demo-tomas-buffer-planning-v1
+
+  - id: maria
+    number: 3
+    name: Maria Adeyemi
+    role: OCC Planner
+    region: West Africa
+    sop_stage: Supply response
+    scenario_slug: cargo-plane
+    target_time_minutes: 5
+    opening_line: >-
+      Pivots a $420K cargo plane charter to a $40K ground transit from Lagos
+      via functional equivalence. $380K avoided.
+    memory_profile_user_id: maria-occ-planner-west-africa
+    session_id: demo-maria-cargo-plane-v1
+
+  - id: priya
+    number: 4
+    name: Priya Krishnan
+    role: Operations VP
+    region: Global
+    sop_stage: Strategic review
+    scenario_slug: deep-research
+    target_time_minutes: 2
+    opening_line: >-
+      Deep Research Agent answers "what's my West African deepwater exposure?"
+      with citation-grounded briefing.
+    memory_profile_user_id: priya-operations-vp-global
+    session_id: demo-priya-deep-research-v1
+
+  - id: rafael
+    number: 5
+    name: Rafael Santos
+    role: Citizen Developer
+    region: Permian
+    sop_stage: Self-service automation
+    scenario_slug: agent-studio
+    target_time_minutes: 2
+    opening_line: >-
+      Builds a new "rig-down notification" agent live in Agent Studio in under
+      60 seconds.
+    memory_profile_user_id: rafael-citizen-dev-permian
+    session_id: demo-rafael-agent-studio-v1
+
+  - id: ayesha
+    number: 6
+    name: Ayesha Khan
+    role: Audit Director
+    region: Global
+    sop_stage: Governance
+    scenario_slug: audit
+    target_time_minutes: 3
+    opening_line: >-
+      Audits the agent ecosystem via Agent Registry, Gateway decisions, Model
+      Armor blocks, Agent Identities.
+    memory_profile_user_id: ayesha-audit-director-global
+    session_id: demo-ayesha-audit-v1
+
+taxonomy:
+  hero_asset:
+    canonical_id: TX-001
+    canonical_label: Tool X
+    category: downhole-tool
+    manufacturer: synthetic
+    equivalent_canonical_id: TX-007
+    equivalent_canonical_label: Tool X-V7
+  secondary_assets:
+    - canonical_id: WIRE-120
+      canonical_label: 120k Wireline Unit
+      category: surface-equipment
+      manufacturer: synthetic
+    - canonical_id: RIG-LWP-B
+      canonical_label: LWP Light Workover Rig
+      category: rig
+      manufacturer: synthetic
+
+scenarios:
+  cargo-plane:
+    customer_account_slug: gulf-petroleum
+    customer_account_name: Gulf Petroleum Services
+    customer_account_short: Gulf Petroleum
+    location_focus_label: Luanda, Angola
+    location_focus_lng: 13.2343
+    location_focus_lat: -8.8383
+    naive_origin_label: Darwin, Australia
+    naive_origin_lng: 130.8456
+    naive_origin_lat: -12.4634
+    recommended_origin_label: Lagos, Nigeria
+    recommended_origin_lng: 3.3792
+    recommended_origin_lat: 6.5244
+    asset_focus_canonical_id: TX-001
+    asset_focus_label: Tool X
+    naive_cost_usd: 420000
+    recommended_cost_usd: 40000
+    avoided_cost_usd: 380000
+    deadline_phrase: by Friday
+    opening_prompt: I need a Tool X variant in Luanda by Friday — what are my options?
+    regulatory_reference: InTouch Spec §3.2
+
+  buffer-planning:
+    customer_account_slug: permian-fields
+    customer_account_name: Permian Fields Co
+    customer_account_short: Permian Fields
+    location_focus_label: Permian Basin, Texas
+    location_focus_lng: -102.0779
+    location_focus_lat: 31.8457
+    asset_focus_canonical_id: WIRE-120
+    asset_focus_label: 120k Wireline Unit
+    opening_prompt: How big a Q3 fleet buffer do I need for the Permian?
+
+terminology:
+  occ_label: Operations Control Center
+  occ_short: OCC
+  basin_unit_label: basin
+  crew_unit_label: crew
+  fleet_unit_singular: tool
+  fleet_unit_plural: tools
+  capacity_gap_term: capacity gap
+  sourcing_plan_term: sourcing plan
+  regulatory_repository: InTouch
+  audit_registry_label: Agent Registry
+
+kpi_labels:
+  - id: ots
+    label: On-time start rate
+    short_label: OTS
+    units: percent
+    target_value: 0.90
+  - id: utilization
+    label: Fleet utilization
+    short_label: Util
+    units: percent
+    target_value: 0.85
+  - id: avoided
+    label: Avoided logistics cost
+    short_label: Avoided
+    units: usd
+    target_value: null

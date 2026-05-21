@@ -5,17 +5,30 @@
  *
  * Tri-state mode (TASK-10):
  *  - "static"  — beat-by-beat scenario state from `cargoPlaneBeats` (default).
- *                Space advances, B steps back, R resets.
+ *                Space advances, B / Shift+Space steps back, R resets.
  *  - "live"    — SSE-driven from the deployed Capacity Orchestrator's A2A
- *                `message:stream` endpoint. Auto-falls back to static on
- *                connection error.
+ *                `message:stream` endpoint. Auto-falls back to replay on
+ *                connection error (TASK-12 generalization of the prior
+ *                live→static fallback).
  *  - "replay"  — pre-recorded event sequence played at original timing
  *                (`/recorded_events/cargo_plane_v1.json`). Demo safety net.
  *
  * Press `L` to cycle Static → Live → Replay → Static.
+ *
+ * TASK-12 additions on top of the TASK-10 implementation:
+ *  - Publishes into the global demo context (Backstage / Help / 1..6 hotkeys).
+ *  - Demo timer in the bottom-right corner.
+ *  - Auto-fallback now lands on Replay (not Static) and surfaces a small
+ *    audience-safe banner so the demoer doesn't have to narrate the
+ *    failure manually.
+ *  - WebSocket disconnect surfaces a `ReconnectBanner` with one-click
+ *    reconnect.
+ *  - `useRehearsalControls` replaces `useKeyboardControls`, picking up
+ *    Shift+Space, L, P out of the box.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 
 import { CanvasShell } from "@/components/layout/CanvasShell";
 import { GlobalMap } from "@/components/canvas/GlobalMap";
@@ -23,76 +36,217 @@ import { AssetMarker } from "@/components/canvas/AssetMarker";
 import { LogisticsArc } from "@/components/canvas/LogisticsArc";
 import { KnowledgeCatalogDrawer } from "@/components/canvas/KnowledgeCatalogDrawer";
 import { CostRollupBanner } from "@/components/canvas/CostRollupBanner";
+import { DemoTimer } from "@/components/demo/DemoTimer";
+import { ReconnectBanner } from "@/components/demo/ReconnectBanner";
+import { personaForPathname } from "@/data/personas";
+import { cargoPlaneBeats } from "@/data/demoScenarios";
 import { useScenario } from "@/hooks/useScenario";
-import { useKeyboardControls } from "@/hooks/useKeyboardControls";
+import { useRehearsalControls } from "@/hooks/useRehearsalControls";
 import { useLiveScenario } from "@/hooks/useLiveScenario";
 import { useReplayScenario } from "@/hooks/useReplayScenario";
+import { publishDemoState } from "@/hooks/useDemoContext";
 import type { ConnectionState } from "@/lib/agent-stream";
-import { cargoPlaneBeats } from "@/data/demoScenarios";
+import { preWarmSession } from "@/lib/preWarmSession";
+import { getPersona, getScenario } from "@/lib/skin";
 
 type Mode = "static" | "live" | "replay";
 
-// Deliberately empty: the deployed AdkApp uses ``GOOGLE_CLOUD_AGENT_ENGINE_ID``
-// as its ``app_name``, which doesn't match the seeded session's app_name in
-// TASK-07 (``capacity_orchestrator_agent``). Until the seeder is reconciled,
-// the canvas lets the runtime auto-create a fresh session per Live trigger.
-// ``preload_memory`` still hits Maria's seeded memories via ``user_id``.
+// Persona 3 (the OCC planner) + cargo-plane scenario data come from the
+// active customer skin (TASK-13). Identifiers (memoryProfileUserId,
+// sessionId) stay STABLE across skins — only display strings change.
+// MARIA_SESSION_ID is deliberately empty: see the TASK-10 implementation
+// note in the prior revision. The runtime auto-creates a session per Live
+// trigger; ``preload_memory`` still hits the persona's seeded memories
+// via ``user_id``.
+const MARIA_PERSONA = getPersona("maria");
+const CARGO_PLANE_SCENARIO = getScenario("cargo-plane");
 const MARIA_SESSION_ID = "";
-const MARIA_USER_ID = "maria-occ-planner-west-africa";
+const MARIA_USER_ID = MARIA_PERSONA.memory_profile_user_id;
 const MARIA_PROMPT =
-  "I need a Tool X variant in Luanda by Friday — what are my options?";
+  CARGO_PLANE_SCENARIO?.opening_prompt ??
+  "I need an equivalent variant on site — what are my options?";
 
 const REPLAY_PATH = "/recorded_events/cargo_plane_v1.json";
 
 export default function CargoPlaneScenarioPage() {
+  const pathname = usePathname();
+  const persona = useMemo(
+    () => personaForPathname(pathname),
+    [pathname],
+  );
+
   const [mode, setMode] = useState<Mode>("static");
+  const [paused, setPaused] = useState(false);
+  // Generation counter — bumped on R to force the live stream to redial.
+  const [liveGeneration, setLiveGeneration] = useState(0);
+  // True once the demoer has taken a meaningful action (first Space, live trigger).
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  // Banner state when the live mode falls back automatically.
+  const [autoFellBack, setAutoFellBack] = useState(false);
 
   const staticScenario = useScenario({ beats: cargoPlaneBeats });
   const liveScenario = useLiveScenario({
     scenarioName: "cargo-plane",
-    sessionId: MARIA_SESSION_ID,
+    sessionId: MARIA_SESSION_ID || `cargo-plane-${liveGeneration}`,
     userId: MARIA_USER_ID,
     userMessage: MARIA_PROMPT,
-    enabled: mode === "live",
+    enabled: mode === "live" && !paused,
     initialState: cargoPlaneBeats[0].state,
   });
   const replayScenario = useReplayScenario({
     recordingPath: REPLAY_PATH,
-    enabled: mode === "replay",
+    enabled: mode === "replay" && !paused,
     initialState: cargoPlaneBeats[0].state,
   });
 
-  // DEMO NARRATION (rehearsal controls): preserved verbatim from static mode.
-  // In live/replay mode the keys still work — they only mutate the static
-  // scenario's beat index, which is harmless when the active mode is
-  // live/replay (we don't read static state in those modes).
-  useKeyboardControls({
-    onAdvance: staticScenario.advance,
-    onStepBack: staticScenario.stepBack,
-    onReset: staticScenario.reset,
-  });
-
-  // L key cycles Static → Live → Replay → Static.
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== "l" && e.key !== "L") return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      setMode((m) =>
-        m === "static" ? "live" : m === "live" ? "replay" : "static",
-      );
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+  // First Space / first live trigger seeds startedAt.
+  const markStarted = useCallback(() => {
+    setStartedAt((prev) => prev ?? Date.now());
   }, []);
 
-  // Auto-fallback if Live errors.
+  // Pre-warm on mount + on persona-jump back.
   useEffect(() => {
-    if (mode === "live" && liveScenario.connectionState === "error") {
-      // eslint-disable-next-line no-console
-      console.warn("Live SSE failed, falling back to Static");
-      setMode("static");
+    if (!persona) return;
+    void preWarmSession(persona);
+  }, [persona]);
+
+  // Hard reset wraps the scenario reset plus mode/paused/timer flags.
+  const hardReset = useCallback(() => {
+    setMode("static");
+    setPaused(false);
+    setAutoFellBack(false);
+    setLiveGeneration((g) => g + 1);
+    setStartedAt(null);
+    staticScenario.reset();
+    if (persona) void preWarmSession(persona);
+  }, [persona, staticScenario]);
+
+  const toggleMode = useCallback(() => {
+    setAutoFellBack(false);
+    setPaused(false);
+    setMode((m) =>
+      m === "static" ? "live" : m === "live" ? "replay" : "static",
+    );
+    // Switching into live counts as a meaningful trigger.
+    if (mode === "static") markStarted();
+  }, [mode, markStarted]);
+
+  const togglePause = useCallback(() => {
+    setPaused((p) => !p);
+  }, []);
+
+  // Skip-to-end jumps the static beat cursor; live/replay don't have a
+  // meaningful "end" we can fast-forward to without skipping the canvas
+  // transitions, so we just snap the static state to the final beat.
+  // Each `advance()` is a state setter that batches inside React 18+, so
+  // running the loop N times during one event tick produces N queued
+  // updates that all collapse to the final beat index.
+  const skipToEnd = useCallback(() => {
+    const stepsLeft =
+      staticScenario.totalBeats - 1 - staticScenario.currentBeatIndex;
+    for (let i = 0; i < stepsLeft; i++) staticScenario.advance();
+  }, [staticScenario]);
+
+  // Per-scenario hotkeys: Space / Shift+Space / B / R / L / P
+  useRehearsalControls({
+    onAdvance: () => {
+      markStarted();
+      staticScenario.advance();
+    },
+    onStepBack: () => staticScenario.stepBack(),
+    onReset: hardReset,
+    onToggleMode: toggleMode,
+    onPause: togglePause,
+  });
+
+  // Auto-fallback: Live → Replay on connection error. Differs from the
+  // TASK-10 implementation which fell back to Static — Replay preserves
+  // the visual storytelling while abandoning the broken stream.
+  //
+  // The setState-in-effect lint rule fires here, but this is the canonical
+  // "external state changed; synchronize my mode" pattern: the connection
+  // state is owned by `useLiveScenario` (an external system from this
+  // component's perspective) and we need to react to its transitions.
+  useEffect(() => {
+    if (mode !== "live") return;
+    if (liveScenario.connectionState === "error") {
+      console.warn("Live SSE failed — falling back to Replay mode");
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMode("replay");
+      setAutoFellBack(true);
     }
   }, [mode, liveScenario.connectionState]);
+
+  // Workflow-timeout fallback: if Live mode connects but no canvas events
+  // arrive within 30s, switch to Replay. The reducer pre-seeds initialState
+  // from beat 0, so we can detect "still on beat 0" by checking that the
+  // live state has not produced any non-empty assets/arcs.
+  const liveHadActivity = useMemo(() => {
+    const s = liveScenario.state;
+    return s.assets.length > 0 || s.arcs.length > 0 || s.costBanner.visible;
+  }, [liveScenario.state]);
+
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (mode !== "live") {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      return;
+    }
+    if (liveHadActivity) return;
+    timeoutRef.current = setTimeout(() => {
+      console.warn(
+        "Live mode produced no activity in 30s — falling back to Replay",
+      );
+      setMode("replay");
+      setAutoFellBack(true);
+    }, 30_000);
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [mode, liveHadActivity]);
+
+  // Publish demo context for Backstage / hotkeys.
+  useEffect(() => {
+    if (!persona) return;
+    const beat = staticScenario.currentBeat;
+    const nextBeat =
+      staticScenario.currentBeatIndex < cargoPlaneBeats.length - 1
+        ? cargoPlaneBeats[staticScenario.currentBeatIndex + 1]
+        : null;
+    const cleanup = publishDemoState({
+      persona,
+      currentBeatIndex: staticScenario.currentBeatIndex,
+      totalBeats: staticScenario.totalBeats,
+      currentBeatId: beat.id,
+      narrationCue: beat.narration,
+      nextBeatId: nextBeat?.id ?? null,
+      nextNarrationCue: nextBeat?.narration ?? null,
+      mode,
+      connectionState: mode === "live" ? liveScenario.connectionState : "idle",
+      lastError:
+        mode === "live" && liveScenario.connectionState === "error"
+          ? "Live SSE stream failed — falling back to Replay."
+          : null,
+      startedAt,
+      onReset: hardReset,
+      onToggleMode: toggleMode,
+      onPause: togglePause,
+      onSkipToEnd: skipToEnd,
+    });
+    return cleanup;
+  }, [
+    persona,
+    staticScenario.currentBeatIndex,
+    staticScenario.currentBeat,
+    staticScenario.totalBeats,
+    mode,
+    liveScenario.connectionState,
+    startedAt,
+    hardReset,
+    toggleMode,
+    togglePause,
+    skipToEnd,
+  ]);
 
   const state =
     mode === "live"
@@ -101,12 +255,25 @@ export default function CargoPlaneScenarioPage() {
         ? replayScenario.state
         : staticScenario.state;
 
+  const reconnect = useCallback(() => {
+    setAutoFellBack(false);
+    setMode("live");
+    setLiveGeneration((g) => g + 1);
+  }, []);
+
+  const showReconnectBanner =
+    (mode === "live" &&
+      (liveScenario.connectionState === "closed" ||
+        liveScenario.connectionState === "error")) ||
+    autoFellBack;
+
   return (
     <CanvasShell
       drawerOpen={state.drawer.open}
       chat={
         <ChatPanel
           mode={mode}
+          paused={paused}
           connectionState={liveScenario.connectionState}
           beat={staticScenario.currentBeat}
           index={staticScenario.currentBeatIndex}
@@ -161,6 +328,7 @@ export default function CargoPlaneScenarioPage() {
 
           <ModeIndicator
             mode={mode}
+            paused={paused}
             connectionState={liveScenario.connectionState}
           />
 
@@ -168,6 +336,19 @@ export default function CargoPlaneScenarioPage() {
             <BeatIndicator
               index={staticScenario.currentBeatIndex}
               total={staticScenario.totalBeats}
+            />
+          )}
+
+          <ReconnectBanner
+            visible={showReconnectBanner}
+            variant={autoFellBack ? "fellback" : "reconnect"}
+            onReconnect={reconnect}
+          />
+
+          {persona && (
+            <DemoTimer
+              targetMinutes={persona.targetDurationMin}
+              startedAt={startedAt}
             />
           )}
         </>
@@ -178,6 +359,7 @@ export default function CargoPlaneScenarioPage() {
 
 interface ChatPanelProps {
   mode: Mode;
+  paused: boolean;
   connectionState: ConnectionState;
   beat: { id: string; narration: string };
   index: number;
@@ -193,6 +375,7 @@ interface ChatPanelProps {
  */
 function ChatPanel({
   mode,
+  paused,
   connectionState,
   beat,
   index,
@@ -202,7 +385,7 @@ function ChatPanel({
   return (
     <div className="flex h-full flex-col p-6">
       <div className="mb-4 text-[10px] uppercase tracking-[0.18em] text-white/40">
-        Maria · OCC West Africa
+        {MARIA_PERSONA.name.split(" ")[0]} · {MARIA_PERSONA.role}
       </div>
       <div className="mb-6 text-sm text-white/70">
         Gemini Enterprise chat (stand-in)
@@ -223,7 +406,7 @@ function ChatPanel({
         ) : mode === "live" ? (
           <>
             <div className="mb-2 text-[10px] uppercase tracking-wider text-white/40">
-              Live · SSE
+              Live · SSE {paused ? "· paused" : ""}
             </div>
             <div className="mb-3 text-[10px] uppercase tracking-wider text-white/30">
               connection: {connectionState}
@@ -236,7 +419,7 @@ function ChatPanel({
         ) : (
           <>
             <div className="mb-2 text-[10px] uppercase tracking-wider text-white/40">
-              Replay · pre-recorded
+              Replay · pre-recorded {paused ? "· paused" : ""}
             </div>
             <div className="mb-3 text-[10px] uppercase tracking-wider text-white/30">
               events played: {replayProgress}
@@ -248,7 +431,7 @@ function ChatPanel({
         )}
       </div>
       <div className="mt-4 text-[10px] uppercase tracking-wider text-white/40">
-        Space advance · B back · R reset · L mode
+        Space advance · Shift+Space back · R reset · L mode · P pause · \ backstage
       </div>
     </div>
   );
@@ -285,10 +468,11 @@ function BeatIndicator({ index, total }: BeatIndicatorProps) {
 
 interface ModeIndicatorProps {
   mode: Mode;
+  paused: boolean;
   connectionState: ConnectionState;
 }
 
-function ModeIndicator({ mode, connectionState }: ModeIndicatorProps) {
+function ModeIndicator({ mode, paused, connectionState }: ModeIndicatorProps) {
   const dotColor =
     mode === "live"
       ? connectionState === "open"
@@ -311,6 +495,11 @@ function ModeIndicator({ mode, connectionState }: ModeIndicatorProps) {
       {mode === "live" && (
         <div className="text-[10px] tracking-wider text-white/40">
           · {connectionState}
+        </div>
+      )}
+      {paused && (
+        <div className="text-[10px] uppercase tracking-[0.18em] text-amber-300/90">
+          · paused
         </div>
       )}
     </div>

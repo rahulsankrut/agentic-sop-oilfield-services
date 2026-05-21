@@ -28,6 +28,12 @@ import {
   gatewayDecisions,
   registryEntries,
 } from "@/data/auditMockData";
+import { getPersona } from "@/lib/skin";
+
+// Persona 6 (Audit Director) display name + role come from the active
+// customer skin. The structural facts of this page (Agent Registry,
+// Gateway, Model Armor) don't vary across skins; only her name + title do.
+const AYESHA = getPersona("ayesha");
 
 type DataMode = "mock" | "live";
 
@@ -112,7 +118,7 @@ function Header({ dataMode, refreshTick }: HeaderProps) {
     <header className="flex items-start justify-between gap-8">
       <div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/40">
-          Ayesha · Audit Director
+          {AYESHA.name.split(" ")[0]} · {AYESHA.role}
         </div>
         <h1 className="mt-2 text-3xl font-semibold text-white">
           Governance posture

@@ -4,21 +4,31 @@
  * Persona 2 (Tomas, Fleet Scheduler — Permian) — buffer planning scenario.
  *
  * Static demo mode: beat-by-beat scenario state from
- * ``bufferPlanningBeats``. Space advances, R resets, B steps back.
- * Between beats (or after the final beat), the slider is manually
- * overridable — moving it triggers a reactive chart + reconciliation
- * panel update without changing the active beat.
+ * ``bufferPlanningBeats``. Space advances, R resets, B / Shift+Space
+ * steps back. Between beats (or after the final beat), the slider is
+ * manually overridable — moving it triggers a reactive chart +
+ * reconciliation panel update without changing the active beat.
+ *
+ * TASK-12 wires this page into the demo runner: publishes into the
+ * global demo context, mounts the DemoTimer, and uses
+ * `useRehearsalControls` so the same Space / R / Shift+Space / L / P
+ * shortcuts feel identical to the cargo-plane page.
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 
 import { CanvasShell } from "@/components/layout/CanvasShell";
 import { FleetTimelineChart } from "@/components/canvas/FleetTimelineChart";
 import { RiskToleranceSlider } from "@/components/canvas/RiskToleranceSlider";
 import { BufferCostReconciliation } from "@/components/canvas/BufferCostReconciliation";
-import { useScenario } from "@/hooks/useScenario";
-import { useKeyboardControls } from "@/hooks/useKeyboardControls";
+import { DemoTimer } from "@/components/demo/DemoTimer";
 import { bufferPlanningBeats } from "@/data/bufferPlanningBeats";
+import { personaForPathname } from "@/data/personas";
+import { publishDemoState } from "@/hooks/useDemoContext";
+import { useScenario } from "@/hooks/useScenario";
+import { useRehearsalControls } from "@/hooks/useRehearsalControls";
+import { preWarmSession } from "@/lib/preWarmSession";
 import {
   bufferOptionFor,
   fracPumpScenario,
@@ -27,8 +37,20 @@ import {
 } from "@/data/fleetUtilizationData";
 
 export default function BufferPlanningScenarioPage() {
+  const pathname = usePathname();
+  const persona = useMemo(
+    () => personaForPathname(pathname),
+    [pathname],
+  );
+
   const scenario = useScenario({ beats: bufferPlanningBeats });
   const { state, currentBeat, currentBeatIndex, totalBeats } = scenario;
+
+  const [paused, setPaused] = useState(false);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const markStarted = useCallback(() => {
+    setStartedAt((prev) => prev ?? Date.now());
+  }, []);
 
   // Manual slider override — when the user drags the slider between beats,
   // this wins over `state.bufferOption`. Cleared when the beat advances so
@@ -40,12 +62,33 @@ export default function BufferPlanningScenarioPage() {
     manualOverride ?? state.bufferOption ?? "conservative";
   const currentOption = bufferOptionFor(activeTolerance);
 
+  // Pre-warm on mount.
+  useEffect(() => {
+    if (!persona) return;
+    void preWarmSession(persona);
+  }, [persona]);
+
+  const hardReset = useCallback(() => {
+    setManualOverride(null);
+    setPaused(false);
+    setStartedAt(null);
+    scenario.reset();
+    if (persona) void preWarmSession(persona);
+  }, [persona, scenario]);
+
+  const skipToEnd = useCallback(() => {
+    setManualOverride(null);
+    const stepsLeft = scenario.totalBeats - 1 - scenario.currentBeatIndex;
+    for (let i = 0; i < stepsLeft; i++) scenario.advance();
+  }, [scenario]);
+
   // DEMO NARRATION (rehearsal controls): "Same keyboard wiring as the
   // cargo-plane view — Space advances Tomas's beats. Between beats he
   // can drag the slider freely; the chart and the cost panel update
   // live without touching the storyboard cursor."
-  useKeyboardControls({
+  useRehearsalControls({
     onAdvance: () => {
+      markStarted();
       setManualOverride(null);
       scenario.advance();
     },
@@ -53,11 +96,49 @@ export default function BufferPlanningScenarioPage() {
       setManualOverride(null);
       scenario.stepBack();
     },
-    onReset: () => {
-      setManualOverride(null);
-      scenario.reset();
-    },
+    onReset: hardReset,
+    // Buffer planning is static-only for now — L is a no-op until live
+    // mode lands. Wiring the handler so the Backstage button still
+    // surfaces, but it intentionally does nothing.
+    onToggleMode: undefined,
+    onPause: () => setPaused((p) => !p),
   });
+
+  // Publish into the global demo context.
+  useEffect(() => {
+    if (!persona) return;
+    const beat = currentBeat;
+    const nextBeat =
+      currentBeatIndex < bufferPlanningBeats.length - 1
+        ? bufferPlanningBeats[currentBeatIndex + 1]
+        : null;
+    const cleanup = publishDemoState({
+      persona,
+      currentBeatIndex,
+      totalBeats,
+      currentBeatId: beat.id,
+      narrationCue: beat.narration,
+      nextBeatId: nextBeat?.id ?? null,
+      nextNarrationCue: nextBeat?.narration ?? null,
+      mode: "static",
+      connectionState: "idle",
+      lastError: null,
+      startedAt,
+      onReset: hardReset,
+      onToggleMode: null, // no live mode yet for buffer planning
+      onPause: () => setPaused((p) => !p),
+      onSkipToEnd: skipToEnd,
+    });
+    return cleanup;
+  }, [
+    persona,
+    currentBeat,
+    currentBeatIndex,
+    totalBeats,
+    startedAt,
+    hardReset,
+    skipToEnd,
+  ]);
 
   const timelineWithBuffer = useMemo(
     () => withBuffer(fracPumpScenario.timeline, currentOption.buffer_pct),
@@ -73,12 +154,13 @@ export default function BufferPlanningScenarioPage() {
           narration={currentBeat.narration}
           index={currentBeatIndex}
           total={totalBeats}
+          paused={paused}
         />
       }
       drawer={<BufferCostReconciliation option={currentOption} />}
       canvas={
         <div
-          className="flex h-full flex-col gap-6 p-8"
+          className="relative flex h-full flex-col gap-6 p-8"
           style={{ background: "var(--color-bg-base)" }}
         >
           <header>
@@ -105,6 +187,13 @@ export default function BufferPlanningScenarioPage() {
           />
 
           <BeatIndicator index={currentBeatIndex} total={totalBeats} />
+
+          {persona && (
+            <DemoTimer
+              targetMinutes={persona.targetDurationMin}
+              startedAt={startedAt}
+            />
+          )}
         </div>
       }
     />
@@ -126,9 +215,16 @@ interface ChatPanelProps {
   narration: string;
   index: number;
   total: number;
+  paused: boolean;
 }
 
-function ChatPanel({ beatId, narration, index, total }: ChatPanelProps) {
+function ChatPanel({
+  beatId,
+  narration,
+  index,
+  total,
+  paused,
+}: ChatPanelProps) {
   return (
     <div className="flex h-full flex-col p-6">
       <div className="mb-4 text-[10px] uppercase tracking-[0.18em] text-white/40">
@@ -139,7 +235,7 @@ function ChatPanel({ beatId, narration, index, total }: ChatPanelProps) {
       </div>
       <div className="flex-1 overflow-y-auto rounded-lg border border-white/10 bg-white/[0.03] p-4">
         <div className="mb-2 text-[10px] uppercase tracking-wider text-white/40">
-          Beat {index + 1} / {total}
+          Beat {index + 1} / {total} {paused ? "· paused" : ""}
         </div>
         <div className="mb-3 text-[10px] uppercase tracking-wider text-white/30">
           {beatId}
@@ -147,7 +243,7 @@ function ChatPanel({ beatId, narration, index, total }: ChatPanelProps) {
         <div className="text-sm leading-relaxed text-white/90">{narration}</div>
       </div>
       <div className="mt-4 text-[10px] uppercase tracking-wider text-white/40">
-        Space advance · B back · R reset · drag slider any time
+        Space advance · Shift+Space back · R reset · P pause · \ backstage
       </div>
     </div>
   );

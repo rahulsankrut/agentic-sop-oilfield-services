@@ -1,0 +1,189 @@
+# Halliburton-pattern customer skin.
+#
+# IMPORTANT: This skin is a SYNTHETIC pattern modeled loosely on a tier-one
+# OFS major. Persona names are fictional. Product names are generic industry
+# terminology, not proprietary product designators. Brand color is the
+# widely-recognized red associated with the segment. Distribute and demo
+# only as a "Halliburton-style reference pattern", never as an official
+# representation of the actual company.
+#
+# Schema:    skins/schema/customer.schema.json
+# Loader:    scripts/compile_skin.py  →  canvas/src/data/skin.generated.ts
+
+meta:
+  customer_slug: halliburton
+  customer_name: Reference Major (Halliburton-pattern)
+  customer_display_name: Reference Major
+  short_name: REF
+  color_primary: "#c8102e"   # Halliburton red — the widely-recognized brand red
+  color_secondary: "#1a1a1a" # near-black
+  color_accent: "#10b981"    # emerald — kept for avoided-cost legibility
+  logo_path: skins/halliburton/assets/logo.svg
+  hero_path: skins/halliburton/assets/hero.svg
+  tagline: Agentic S&OP — reference major pattern
+
+personas:
+  - id: david
+    number: 1
+    name: David Bauer
+    role: Region Manager
+    region: MENA
+    sop_stage: Demand sensing
+    scenario_slug: forecast-review
+    target_time_minutes: 3
+    opening_line: >-
+      Reviews Q4 forecast for MENA, overrides two regions with on-the-ground
+      rationale that feeds back into the model.
+    memory_profile_user_id: david-region-manager-mena
+    session_id: demo-david-forecast-review-v1
+
+  - id: tomas
+    number: 2
+    name: Tomas Kowalski
+    role: Frac Fleet Scheduler
+    region: Permian
+    sop_stage: Demand-to-supply planning
+    scenario_slug: buffer-planning
+    target_time_minutes: 3
+    opening_line: >-
+      Sets Q3 frac fleet buffer with probabilistic forecast and explicit
+      risk-tolerance slider.
+    memory_profile_user_id: tomas-frac-scheduler-permian
+    session_id: demo-tomas-buffer-planning-v1
+
+  - id: maria
+    number: 3
+    name: Marcia Vasquez
+    role: Mission Operations Center Planner
+    region: Latin America
+    sop_stage: Supply response
+    scenario_slug: cargo-plane
+    target_time_minutes: 5
+    opening_line: >-
+      Pivots a $380K air-freight charter to a $35K local ground transit via
+      functional equivalence. $345K avoided.
+    memory_profile_user_id: maria-moc-planner-latam
+    session_id: demo-maria-cargo-plane-v1
+
+  - id: priya
+    number: 4
+    name: Priya Iyer
+    role: VP Operations
+    region: Global
+    sop_stage: Strategic review
+    scenario_slug: deep-research
+    target_time_minutes: 2
+    opening_line: >-
+      Deep Research Agent answers "what's my Brazil deepwater exposure?" with
+      citation-grounded briefing.
+    memory_profile_user_id: priya-vp-operations-global
+    session_id: demo-priya-deep-research-v1
+
+  - id: rafael
+    number: 5
+    name: Rafael Mendoza
+    role: Digital Operations Engineer
+    region: Permian
+    sop_stage: Self-service automation
+    scenario_slug: agent-studio
+    target_time_minutes: 2
+    opening_line: >-
+      Builds a new "rig-down notification" agent live in Agent Studio in under
+      60 seconds.
+    memory_profile_user_id: rafael-digops-permian
+    session_id: demo-rafael-agent-studio-v1
+
+  - id: ayesha
+    number: 6
+    name: Ayesha Hassan
+    role: Director of Operational Risk
+    region: Global
+    sop_stage: Governance
+    scenario_slug: audit
+    target_time_minutes: 3
+    opening_line: >-
+      Audits the agent ecosystem via Agent Registry, Gateway decisions, Model
+      Armor blocks, Agent Identities.
+    memory_profile_user_id: ayesha-opsrisk-director-global
+    session_id: demo-ayesha-audit-v1
+
+taxonomy:
+  hero_asset:
+    canonical_id: BIT-55-001
+    canonical_label: Drill Bit 5.5"
+    category: downhole-tool
+    manufacturer: synthetic
+    equivalent_canonical_id: BIT-55-V7
+    equivalent_canonical_label: Drill Bit 5.5" (V7 variant)
+  secondary_assets:
+    - canonical_id: WIRE-120
+      canonical_label: 120k Wireline Unit
+      category: surface-equipment
+      manufacturer: synthetic
+    - canonical_id: FRAC-3000
+      canonical_label: 3000hp Frac Spread
+      category: surface-equipment
+      manufacturer: synthetic
+
+scenarios:
+  cargo-plane:
+    customer_account_slug: deepwater-ventures
+    customer_account_name: Deepwater Ventures International
+    customer_account_short: Deepwater Ventures
+    location_focus_label: Búzios Pre-salt, Brazil
+    location_focus_lng: -42.62
+    location_focus_lat: -22.84
+    naive_origin_label: Singapore
+    naive_origin_lng: 103.82
+    naive_origin_lat: 1.35
+    recommended_origin_label: Macaé, Brazil
+    recommended_origin_lng: -41.79
+    recommended_origin_lat: -22.37
+    asset_focus_canonical_id: BIT-55-001
+    asset_focus_label: Drill Bit 5.5"
+    naive_cost_usd: 380000
+    recommended_cost_usd: 35000
+    avoided_cost_usd: 345000
+    deadline_phrase: by Friday
+    opening_prompt: I need a Drill Bit 5.5" variant in Búzios by Friday — what are my options?
+    regulatory_reference: WellSite Hub Spec §3.2
+
+  buffer-planning:
+    customer_account_slug: permian-fields
+    customer_account_name: Permian Fields Co
+    customer_account_short: Permian Fields
+    location_focus_label: Permian Basin, Texas
+    location_focus_lng: -102.0779
+    location_focus_lat: 31.8457
+    asset_focus_canonical_id: FRAC-3000
+    asset_focus_label: 3000hp Frac Spread
+    opening_prompt: How big a Q3 frac spread buffer do I need for the Permian?
+
+terminology:
+  occ_label: Mission Operations Center
+  occ_short: MOC
+  basin_unit_label: operating region
+  crew_unit_label: team
+  fleet_unit_singular: tool string
+  fleet_unit_plural: tool strings
+  capacity_gap_term: capacity gap
+  sourcing_plan_term: sourcing plan
+  regulatory_repository: WellSite Hub
+  audit_registry_label: Agent Registry
+
+kpi_labels:
+  - id: ots
+    label: Stage completion rate
+    short_label: Stage
+    units: percent
+    target_value: 0.94
+  - id: utilization
+    label: Frac fleet utilization
+    short_label: Util
+    units: percent
+    target_value: 0.88
+  - id: avoided
+    label: Logistics cost avoidance
+    short_label: Avoided
+    units: usd
+    target_value: null

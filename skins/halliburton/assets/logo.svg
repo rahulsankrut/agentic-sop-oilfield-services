@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" role="img" aria-label="Halliburton-pattern logo (placeholder)">
+  <title>Halliburton-pattern logo (placeholder, not endorsed by the actual company)</title>
+  <circle cx="24" cy="24" r="22" fill="#c8102e"/>
+  <!-- Gear shape: 8 teeth in a ring + a hub. Common industrial iconography, no proprietary mark. -->
+  <g fill="#fff">
+    <rect x="22" y="4" width="4" height="6"/>
+    <rect x="22" y="38" width="4" height="6"/>
+    <rect x="4" y="22" width="6" height="4"/>
+    <rect x="38" y="22" width="6" height="4"/>
+    <rect x="9" y="9" width="4" height="6" transform="rotate(-45 11 12)"/>
+    <rect x="35" y="9" width="4" height="6" transform="rotate(45 37 12)"/>
+    <rect x="9" y="33" width="4" height="6" transform="rotate(45 11 36)"/>
+    <rect x="35" y="33" width="4" height="6" transform="rotate(-45 37 36)"/>
+    <circle cx="24" cy="24" r="10"/>
+  </g>
+  <circle cx="24" cy="24" r="4" fill="#c8102e"/>
+</svg>

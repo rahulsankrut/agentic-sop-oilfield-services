@@ -9,11 +9,12 @@
 .PHONY: deploy-procurement-gate deploy-forecast-review deploy-capacity-planning
 .PHONY: deploy-all-agents
 .PHONY: deploy teardown
-.PHONY: demo-cargo-plane demo-forecast demo-fleet-buffer demo-health
+.PHONY: demo-cargo-plane demo-forecast demo-fleet-buffer demo-health demo-preflight
 .PHONY: deploy-mcp-sap deploy-mcp-maximo deploy-mcp-fdp deploy-mcp-servers
 .PHONY: register-mcp-servers apply-gateway-policies enable-model-armor
 .PHONY: setup-memory-bank seed-demo-sessions reset-and-seed
 .PHONY: bq-create-tables
+.PHONY: use-skin
 .PHONY: clean
 
 help:
@@ -39,6 +40,8 @@ help:
 	@echo "  demo-forecast                  Run Persona 1 scenario (TASK-11)"
 	@echo "  demo-fleet-buffer              Run Persona 2 scenario (TASK-11)"
 	@echo "  demo-health                    Check endpoints (TASK-13)"
+	@echo "  demo-preflight                 Run pre-demo verification suite (TASK-12)"
+	@echo "  use-skin SKIN=<slug>           Compile a customer skin into the canvas (TASK-13)"
 	@echo "  clean                          Remove local build artifacts (keeps venv/)"
 
 setup:
@@ -166,6 +169,14 @@ demo-health:
 	@echo "Health check not yet implemented (TASK-13)"
 	@exit 1
 
+# TASK-12 Step 7 — pre-demo verification suite. Run 30-60 min before any
+# customer demo. Checks BQ row counts, GCS corpus blobs, cargo-plane smoke,
+# no-json-reads static check, and (if present) the canvas build. Two checks
+# (Memory Profiles + recent Model Armor block) are advisory STUBs until
+# v1.1. Exits 1 only on real FAILs.
+demo-preflight:
+	$(DEPLOY_PYTHON) scripts/demo_preflight.py
+
 clean:
 	rm -rf __pycache__ .pytest_cache .ruff_cache .mypy_cache build dist
 	find . -type d -name __pycache__ -not -path "./venv/*" -exec rm -rf {} + 2>/dev/null || true
@@ -253,3 +264,29 @@ enable-model-armor:
 		--source=/tmp/model_armor.resolved.yaml \
 		--project=$$GOOGLE_CLOUD_PROJECT \
 		--location=$${GOOGLE_CLOUD_LOCATION:-$(GCLOUD_REGION)}
+
+# ---------------------------------------------------------------------------
+# TASK-13 — Customer skin compile + swap
+# ---------------------------------------------------------------------------
+#
+# Compiles skins/<slug>/customer.yaml into canvas/src/data/skin.generated.ts
+# and refreshes canvas/public/skin.json. Sets NEXT_PUBLIC_CUSTOMER_SKIN in
+# .env.skin so a subsequent `cd canvas && npm run dev` picks up the new skin.
+#
+# Usage:
+#   make use-skin SKIN=default
+#   make use-skin SKIN=halliburton
+#
+# Run from the repo root. After this target completes, re-run the canvas
+# build/dev server. If a dev server is already running, hot-reload picks up
+# the regenerated TS file automatically.
+use-skin:
+	@if [ -z "$(SKIN)" ]; then echo "Usage: make use-skin SKIN=<slug>"; exit 1; fi
+	@if [ ! -d "skins/$(SKIN)" ]; then echo "Skin not found: skins/$(SKIN)"; exit 1; fi
+	@echo "Compiling skin: $(SKIN)"
+	$(DEPLOY_PYTHON) scripts/compile_skin.py --skin $(SKIN)
+	@echo "NEXT_PUBLIC_CUSTOMER_SKIN=$(SKIN)" > .env.skin
+	@echo ""
+	@echo "Skin compiled. To rebuild the canvas with this skin:"
+	@echo "  cd canvas && NEXT_PUBLIC_CUSTOMER_SKIN=$(SKIN) npm run build"
+	@echo "Or just restart the dev server — hot-reload picks up skin.generated.ts."

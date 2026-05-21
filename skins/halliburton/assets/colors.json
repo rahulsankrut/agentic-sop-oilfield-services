@@ -1,0 +1,6 @@
+{
+  "_comment": "Derived from skins/halliburton/customer.yaml meta block. Brand red is the publicly-known Halliburton-pattern red; logo and product names in this skin are synthetic.",
+  "primary": "#c8102e",
+  "secondary": "#1a1a1a",
+  "accent": "#10b981"
+}
