@@ -36,8 +36,8 @@ def deploy_forecast_review() -> str:
 
     from vertexai.preview.reasoning_engines import AdkApp
 
-    from ..agent import root_agent
-    from ..services.memory_manager import create_forecast_review_memory_topics
+    from .agent import root_agent
+    from .services.memory_manager import create_forecast_review_memory_topics
 
     adk_app = AdkApp(agent=root_agent, enable_tracing=False)
 

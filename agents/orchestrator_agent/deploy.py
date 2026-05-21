@@ -86,8 +86,8 @@ def deploy_orchestrator() -> str:
     # Lazy import — heavy ADK + Workflow graph; keeps module-load fast.
     from vertexai.preview.reasoning_engines import AdkApp
 
-    from ..agent import root_agent
-    from ..services.memory_manager import create_orchestrator_memory_topics
+    from .agent import root_agent
+    from .services.memory_manager import create_orchestrator_memory_topics
 
     adk_app = AdkApp(agent=root_agent, enable_tracing=False)
     memory_config = create_orchestrator_memory_topics()

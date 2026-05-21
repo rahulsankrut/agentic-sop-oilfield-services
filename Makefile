@@ -105,16 +105,16 @@ lint:
 DEPLOY_PYTHON := venv-deploy-310/bin/python
 
 deploy-procurement-gate:
-	$(DEPLOY_PYTHON) -m agents.procurement_approval_agent.runtime.deploy
+	$(DEPLOY_PYTHON) -m agents.procurement_approval_agent.deploy
 
 deploy-forecast-review:
-	$(DEPLOY_PYTHON) -m agents.forecast_review_agent.runtime.deploy
+	$(DEPLOY_PYTHON) -m agents.forecast_review_agent.deploy
 
 deploy-capacity-planning:
-	$(DEPLOY_PYTHON) -m agents.capacity_planning_agent.runtime.deploy
+	$(DEPLOY_PYTHON) -m agents.capacity_planning_agent.deploy
 
 deploy-orchestrator:
-	$(DEPLOY_PYTHON) -m agents.orchestrator_agent.runtime.deploy
+	$(DEPLOY_PYTHON) -m agents.orchestrator_agent.deploy
 
 # Alias kept for TASK-01 backward compatibility
 deploy-orchestrator-skeleton: deploy-orchestrator

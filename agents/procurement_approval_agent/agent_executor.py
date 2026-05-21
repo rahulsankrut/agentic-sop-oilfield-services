@@ -16,8 +16,8 @@ from a2a.utils.errors import ServerError
 from google.adk import Runner
 from google.genai import types
 
-from ..services.memory_manager import create_memory_service
-from ..services.session_manager import SessionManager, create_session_service
+from .services.memory_manager import create_memory_service
+from .services.session_manager import SessionManager, create_session_service
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class ProcurementApprovalExecutor(AgentExecutor):
             try:
                 from procurement_approval_agent.agent import root_agent
             except ImportError:
-                from ..agent import root_agent
+                from .agent import root_agent
 
             project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
             location = os.environ.get("AGENT_ENGINE_LOCATION") or os.environ.get(

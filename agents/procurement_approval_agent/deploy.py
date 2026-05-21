@@ -22,7 +22,7 @@ from vertexai.preview.reasoning_engines import A2aAgent
 
 from agents.utils.deploy import deploy_a2a_agent_engine
 
-from ..services.memory_manager import create_procurement_approval_memory_topics
+from .services.memory_manager import create_procurement_approval_memory_topics
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 load_dotenv()
