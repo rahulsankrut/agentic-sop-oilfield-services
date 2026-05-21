@@ -188,10 +188,14 @@ def find_functional_equivalents(canonical_id: str) -> list[dict]:
 
         {"canonical_id": "<id>", "confidence": <float>,
          "rationale_source": "<doc ref>",
-         "customer_compatibility_overrides": [...]}
+         "customer_compatibility_overrides": [...],
+         "citation": {"corpus": "intouch", "doc_uri": "gs://...", ...} | None}
 
     ``customer_compatibility_overrides`` is parsed from the JSON column in
-    ``oilfield_kc.functional_equivalences``.
+    ``oilfield_kc.functional_equivalences``. ``citation`` (TASK-17) points
+    at the real InTouch-corpus PDF anchoring this equivalence — a USPTO
+    patent, Equinor doc, or OSTI report — keyed by the substitute's
+    canonical_id in ``data/anchors/intouch_corpus.json``.
     """
     # DEMO NARRATION: "This is where the cargo-plane scenario pivots. The agent
     # reaches into Knowledge Catalog's functional_equivalence relationships and
@@ -205,6 +209,9 @@ def find_functional_equivalents(canonical_id: str) -> list[dict]:
         """,
         {"cid": canonical_id},
     )
+    # Lazy-import to keep the skill's top-of-file imports lean.
+    from agents.utils.corpus_manifests import intouch_citation_for  # noqa: PLC0415
+
     results: list[dict] = []
     for row in rows:
         other = (
@@ -220,12 +227,17 @@ def find_functional_equivalents(canonical_id: str) -> list[dict]:
                 overrides = []
         else:
             overrides = overrides_raw or []
+        # TASK-17: attach the real-doc citation for the substitute (preferred)
+        # — falls back to the source canonical_id if no anchor exists for the
+        # substitute. Either is grounded in the same equivalence rationale.
+        citation = intouch_citation_for(other) or intouch_citation_for(canonical_id)
         results.append(
             {
                 "canonical_id": other,
                 "confidence": float(row.get("CONFIDENCE") or 0.0),
                 "rationale_source": row.get("RATIONALE_SOURCE"),
                 "customer_compatibility_overrides": overrides,
+                "citation": citation,
             }
         )
     return sorted(results, key=lambda r: r["confidence"], reverse=True)

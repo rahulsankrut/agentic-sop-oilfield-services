@@ -33,9 +33,11 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Iterable
 from datetime import date, datetime, timedelta, timezone
+
+UTC = timezone.utc  # Python 3.10 compat (datetime.UTC is 3.11+)
 from pathlib import Path
-from typing import Iterable
 
 from google.cloud import bigquery
 
@@ -124,6 +126,7 @@ def _excel_rows(path: Path) -> Iterable[dict]:
     suffix = path.suffix.lower()
     if suffix in {".xlsx", ".xlsm"}:
         from openpyxl import load_workbook  # type: ignore[import-not-found]
+
         wb = load_workbook(path, read_only=True, data_only=True)
         sheet = next(
             (wb[name] for name in wb.sheetnames if "pivot" in name.lower()),
@@ -132,6 +135,7 @@ def _excel_rows(path: Path) -> Iterable[dict]:
         rows = sheet.iter_rows(values_only=True)
     elif suffix == ".xlsb":
         from pyxlsb import open_workbook  # type: ignore[import-not-found]
+
         wb = open_workbook(str(path))
         sheet_name = next(
             (n for n in wb.sheets if "pivot" in n.lower()),
@@ -215,7 +219,7 @@ def main() -> int:
         return 2
 
     client = bigquery.Client(project=PROJECT)
-    started = datetime.now(tz=timezone.utc)
+    started = datetime.now(tz=UTC)
 
     job = client.load_table_from_json(
         rows,
@@ -226,7 +230,7 @@ def main() -> int:
         ),
     )
     job.result()
-    ended = datetime.now(tz=timezone.utc)
+    ended = datetime.now(tz=UTC)
     log.info("loaded %d rows into %s", job.output_rows or 0, TABLE)
 
     audit_job = client.load_table_from_json(

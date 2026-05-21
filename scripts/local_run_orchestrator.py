@@ -50,6 +50,7 @@ def _patch_orchestrator_model() -> None:
     test_model = os.environ.get("LOCAL_MODEL", "gemini-2.5-pro")
     test_location = os.environ.get("LOCAL_MODEL_LOCATION", "us-central1")
     from agents.orchestrator_agent.core.agent import root_agent
+
     from agents.utils.global_gemini import GlobalGemini
 
     root_agent.model = GlobalGemini(model=test_model, location=test_location)
@@ -107,8 +108,7 @@ async def main(prompt: str) -> None:
 
     full_text = "".join(final_text_parts)
     print(
-        f"\nSummary: {n_calls} tool calls, {n_resps} responses, "
-        f"final text {len(full_text)} chars",
+        f"\nSummary: {n_calls} tool calls, {n_resps} responses, final text {len(full_text)} chars",
         flush=True,
     )
     print(f"\nFinal output:\n{full_text[:2500]}", flush=True)

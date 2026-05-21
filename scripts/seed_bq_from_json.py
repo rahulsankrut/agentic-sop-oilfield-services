@@ -53,6 +53,8 @@ import json
 import logging
 import re
 from datetime import date, datetime, timezone
+
+UTC = timezone.utc  # Python 3.10 compat (datetime.UTC is 3.11+)
 from pathlib import Path
 from typing import Any
 
@@ -111,7 +113,7 @@ def slug(s: str, maxlen: int = 25) -> str:
 def lgort_code(label: str) -> str:
     """SAP storage-location code (4 chars). Derived from location label."""
     # Take the first word, uppercase, pad/truncate to 4
-    first = re.sub(r"[^a-zA-Z]+", "", label.split(",")[0])[:3].upper()
+    first = re.sub(r"[^a-zA-Z]+", "", label.split(",", maxsplit=1)[0])[:3].upper()
     return (first + "1")[:4]
 
 
@@ -172,18 +174,27 @@ def load_data() -> dict[str, Any]:
     if uspto_path.exists():
         with uspto_path.open() as f:
             d["uspto_patents"] = json.load(f)
-        log.info("loaded data/anchors/uspto_patents.json (%d real patents)", len(d["uspto_patents"]))
+        log.info(
+            "loaded data/anchors/uspto_patents.json (%d real patents)", len(d["uspto_patents"])
+        )
     else:
-        log.warning("data/anchors/uspto_patents.json missing — manufacturer/intro_year will fall back to JSON kernel")
+        log.warning(
+            "data/anchors/uspto_patents.json missing — manufacturer/intro_year will fall back to JSON kernel"
+        )
 
     d["sec_edgar"] = {}
     sec_path = anchors_dir / "sec_edgar_customers.json"
     if sec_path.exists():
         with sec_path.open() as f:
             d["sec_edgar"] = json.load(f)
-        log.info("loaded data/anchors/sec_edgar_customers.json (%d real customer filings)", len(d["sec_edgar"]))
+        log.info(
+            "loaded data/anchors/sec_edgar_customers.json (%d real customer filings)",
+            len(d["sec_edgar"]),
+        )
     else:
-        log.warning("data/anchors/sec_edgar_customers.json missing — KNA1 address/country will fall back to JSON kernel")
+        log.warning(
+            "data/anchors/sec_edgar_customers.json missing — KNA1 address/country will fall back to JSON kernel"
+        )
 
     d["bls_qcew"] = {}
     bls_path = anchors_dir / "bls_qcew_workforce.json"
@@ -192,14 +203,18 @@ def load_data() -> dict[str, Any]:
             d["bls_qcew"] = json.load(f)
         log.info("loaded data/anchors/bls_qcew_workforce.json (%d basins)", len(d["bls_qcew"]))
     else:
-        log.warning("data/anchors/bls_qcew_workforce.json missing — ZHR_WORKFORCE will lack BLS data")
+        log.warning(
+            "data/anchors/bls_qcew_workforce.json missing — ZHR_WORKFORCE will lack BLS data"
+        )
 
     d["bsee_workorders"] = {}
     bsee_path = anchors_dir / "bsee_workorders.json"
     if bsee_path.exists():
         with bsee_path.open() as f:
             d["bsee_workorders"] = json.load(f)
-        log.info("loaded data/anchors/bsee_workorders.json (%d WO anchors)", len(d["bsee_workorders"]))
+        log.info(
+            "loaded data/anchors/bsee_workorders.json (%d WO anchors)", len(d["bsee_workorders"])
+        )
     else:
         log.warning("data/anchors/bsee_workorders.json missing — WORKORDER will lack BSEE refs")
 
@@ -212,7 +227,7 @@ def load_data() -> dict[str, Any]:
 
 
 def now_iso() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
 def _shorten_assignee(name: str | None) -> str | None:
@@ -228,10 +243,10 @@ def _shorten_assignee(name: str | None) -> str | None:
     upper = name.upper()
     knowns = [
         ("SCHLUMBERGER", "Schlumberger"),
-        ("HALLIBURTON",  "Halliburton"),
+        ("HALLIBURTON", "Halliburton"),
         ("BAKER HUGHES", "Baker Hughes"),
         ("NATIONAL OILWELL", "NOV"),
-        ("WEATHERFORD",  "Weatherford"),
+        ("WEATHERFORD", "Weatherford"),
     ]
     for needle, short in knowns:
         if needle in upper:
@@ -249,45 +264,51 @@ def build_oilfield_kc_canonical_assets(d: dict[str, Any]) -> list[dict]:
     for a in d["canonical_assets"]:
         spec = a.get("specifications", {})
         anchor = patents.get(a["canonical_id"], {})
-        rows.append({
-            "CANONICAL_ID": a["canonical_id"],
-            "CANONICAL_LABEL": a["canonical_label"],
-            "CATEGORY": a["category"],
-            "SUBCATEGORY": a.get("subcategory"),
-            "OPERATING_TEMP_MAX_C": spec.get("operating_temp_max_c"),
-            "OPERATING_PRESSURE_MAX_PSI": spec.get("operating_pressure_max_psi"),
-            "OUTER_DIAMETER_IN": spec.get("outer_diameter_in"),
-            # REAL from USPTO patent assignee; fall back to JSON kernel if anchor missing.
-            "MANUFACTURER": _shorten_assignee(anchor.get("assignee")) or a.get("manufacturer"),
-            # REAL from USPTO patent filing_year; fall back to JSON kernel.
-            "INTRODUCED_YEAR": anchor.get("filing_year") or a.get("introduced_year"),
-        })
+        rows.append(
+            {
+                "CANONICAL_ID": a["canonical_id"],
+                "CANONICAL_LABEL": a["canonical_label"],
+                "CATEGORY": a["category"],
+                "SUBCATEGORY": a.get("subcategory"),
+                "OPERATING_TEMP_MAX_C": spec.get("operating_temp_max_c"),
+                "OPERATING_PRESSURE_MAX_PSI": spec.get("operating_pressure_max_psi"),
+                "OUTER_DIAMETER_IN": spec.get("outer_diameter_in"),
+                # REAL from USPTO patent assignee; fall back to JSON kernel if anchor missing.
+                "MANUFACTURER": _shorten_assignee(anchor.get("assignee")) or a.get("manufacturer"),
+                # REAL from USPTO patent filing_year; fall back to JSON kernel.
+                "INTRODUCED_YEAR": anchor.get("filing_year") or a.get("introduced_year"),
+            }
+        )
     return rows
 
 
 def build_oilfield_kc_cross_system_aliases(d: dict[str, Any]) -> list[dict]:
     rows = []
     for cid, m in d["cross_system_aliases"].items():
-        rows.append({
-            "CANONICAL_ID": cid,
-            "SAP_MATNR": m.get("sap_material_number"),
-            "MAXIMO_ITEMNUM": m.get("maximo_equipment_id"),
-            "FDP_CONFIG_ID": m.get("fdp_config_id"),
-            "INTOUCH_SPEC_REFS": m.get("intouch_spec_refs", []),
-        })
+        rows.append(
+            {
+                "CANONICAL_ID": cid,
+                "SAP_MATNR": m.get("sap_material_number"),
+                "MAXIMO_ITEMNUM": m.get("maximo_equipment_id"),
+                "FDP_CONFIG_ID": m.get("fdp_config_id"),
+                "INTOUCH_SPEC_REFS": m.get("intouch_spec_refs", []),
+            }
+        )
     return rows
 
 
 def build_oilfield_kc_functional_equivalences(d: dict[str, Any]) -> list[dict]:
     rows = []
     for fe in d["functional_equivalences"]:
-        rows.append({
-            "CANONICAL_ID_A": fe["canonical_id_a"],
-            "CANONICAL_ID_B": fe["canonical_id_b"],
-            "CONFIDENCE": fe["confidence"],
-            "RATIONALE_SOURCE": fe.get("rationale_source"),
-            "CUSTOMER_OVERRIDES": json.dumps(fe.get("customer_compatibility_overrides", [])),
-        })
+        rows.append(
+            {
+                "CANONICAL_ID_A": fe["canonical_id_a"],
+                "CANONICAL_ID_B": fe["canonical_id_b"],
+                "CONFIDENCE": fe["confidence"],
+                "RATIONALE_SOURCE": fe.get("rationale_source"),
+                "CUSTOMER_OVERRIDES": json.dumps(fe.get("customer_compatibility_overrides", [])),
+            }
+        )
     return rows
 
 
@@ -300,20 +321,22 @@ def build_sap_mara(d: dict[str, Any]) -> list[dict]:
         if matnr is None:
             continue
         year = a.get("introduced_year") or 2020
-        rows.append({
-            "MANDT": "100",
-            "MATNR": matnr,
-            "ERSDA": f"{year}-01-01",
-            "ERNAM": "SYSTEM",
-            "LAEDA": f"{year}-01-01",
-            "AENAM": "SYSTEM",
-            "MTART": mtart_for(a["category"]),
-            "MBRSH": "M",
-            "MATKL": matkl_for(a.get("subcategory", "")),
-            "MEINS": "EA",
-            "BISMT": None,
-            "LVORM": False,
-        })
+        rows.append(
+            {
+                "MANDT": "100",
+                "MATNR": matnr,
+                "ERSDA": f"{year}-01-01",
+                "ERNAM": "SYSTEM",
+                "LAEDA": f"{year}-01-01",
+                "AENAM": "SYSTEM",
+                "MTART": mtart_for(a["category"]),
+                "MBRSH": "M",
+                "MATKL": matkl_for(a.get("subcategory", "")),
+                "MEINS": "EA",
+                "BISMT": None,
+                "LVORM": False,
+            }
+        )
     return rows
 
 
@@ -333,12 +356,14 @@ def build_sap_makt(d: dict[str, Any]) -> list[dict]:
         # SAP MAKT.MAKTX is CHAR(40) — truncate; if the patent title is too
         # long for 40, prefix the kernel label for readability.
         maktx = (real_title or a["canonical_label"])[:40]
-        rows.append({
-            "MANDT": "100",
-            "MATNR": matnr,
-            "SPRAS": "E",
-            "MAKTX": maktx,
-        })
+        rows.append(
+            {
+                "MANDT": "100",
+                "MATNR": matnr,
+                "SPRAS": "E",
+                "MAKTX": maktx,
+            }
+        )
     return rows
 
 
@@ -350,15 +375,17 @@ def build_sap_marc(d: dict[str, Any]) -> list[dict]:
         matnr = aliases.get(a["canonical_id"], {}).get("sap_material_number")
         if matnr is None:
             continue
-        rows.append({
-            "MANDT": "100",
-            "MATNR": matnr,
-            "WERKS": "PT01",
-            "DISPO": "001",
-            "DISMM": "PD",
-            "BESKZ": "F",
-            "LVORM": False,
-        })
+        rows.append(
+            {
+                "MANDT": "100",
+                "MATNR": matnr,
+                "WERKS": "PT01",
+                "DISPO": "001",
+                "DISMM": "PD",
+                "BESKZ": "F",
+                "LVORM": False,
+            }
+        )
     return rows
 
 
@@ -369,15 +396,17 @@ def build_sap_mbew(d: dict[str, Any]) -> list[dict]:
         matnr = aliases.get(a["canonical_id"], {}).get("sap_material_number")
         if matnr is None:
             continue
-        rows.append({
-            "MANDT": "100",
-            "MATNR": matnr,
-            "BWKEY": "PT01",
-            "VPRSV": "S",
-            "STPRS": stprs_for(a["category"], a.get("subcategory", "")),
-            "PEINH": 1,
-            "WAERS": "USD",
-        })
+        rows.append(
+            {
+                "MANDT": "100",
+                "MATNR": matnr,
+                "BWKEY": "PT01",
+                "VPRSV": "S",
+                "STPRS": stprs_for(a["category"], a.get("subcategory", "")),
+                "PEINH": 1,
+                "WAERS": "USD",
+            }
+        )
     return rows
 
 
@@ -394,15 +423,19 @@ def build_sap_mard(d: dict[str, Any]) -> list[dict]:
         werks = REGION_TO_WERKS.get(region, "PT01")
         lgort = lgort_code(inv["location"]["label"])
         # LABST=1 when status indicates the asset is on hand; 0 when in use elsewhere.
-        labst = 1.0 if inv["status"] in ("available", "available_after_recert", "in_repair") else 0.0
-        rows.append({
-            "MANDT": "100",
-            "MATNR": matnr,
-            "WERKS": werks,
-            "LGORT": lgort,
-            "LABST": labst,
-            "INSME": 0.0,
-        })
+        labst = (
+            1.0 if inv["status"] in ("available", "available_after_recert", "in_repair") else 0.0
+        )
+        rows.append(
+            {
+                "MANDT": "100",
+                "MATNR": matnr,
+                "WERKS": werks,
+                "LGORT": lgort,
+                "LABST": labst,
+                "INSME": 0.0,
+            }
+        )
     return rows
 
 
@@ -421,27 +454,31 @@ def build_sap_kna1(d: dict[str, Any]) -> list[dict]:
         ort01 = (anchor.get("city") or primary_region.replace("_", " ").title())[:35]
         # STRAS: real street from SEC filing; fall back to a generic.
         stras = (anchor.get("street1") or "1 Main St")[:35]
-        rows.append({
-            "MANDT": "100",
-            "KUNNR": kunnr_for(i),
-            "NAME1": c["name"][:35],
-            "LAND1": land1,
-            "ORT01": ort01,
-            "STRAS": stras,
-        })
+        rows.append(
+            {
+                "MANDT": "100",
+                "KUNNR": kunnr_for(i),
+                "NAME1": c["name"][:35],
+                "LAND1": land1,
+                "ORT01": ort01,
+                "STRAS": stras,
+            }
+        )
     return rows
 
 
 def build_sap_knvv(d: dict[str, Any]) -> list[dict]:
     rows = []
     for i, _c in enumerate(d["customers"]):
-        rows.append({
-            "MANDT": "100",
-            "KUNNR": kunnr_for(i),
-            "VKORG": "OFS1",
-            "VTWEG": "10",
-            "SPART": "01",
-        })
+        rows.append(
+            {
+                "MANDT": "100",
+                "KUNNR": kunnr_for(i),
+                "VKORG": "OFS1",
+                "VTWEG": "10",
+                "SPART": "01",
+            }
+        )
     return rows
 
 
@@ -456,15 +493,17 @@ def build_sap_zhr_workforce(d: dict[str, Any]) -> list[dict]:
     rows = []
     for basin, w in d["sap_workforce"].items():
         anchor = bls.get(basin, {})
-        rows.append({
-            "BASIN": basin,
-            "CREW_COUNT_AVAILABLE": w["crew_count_available"],
-            "SPECIALIST_COUNT_AVAILABLE": w["specialist_count_available"],
-            "ON_CALL_COUNT": w["on_call_count"],
-            "NAICS_211_STATE_EMPLOYMENT": anchor.get("naics_211_state_employment"),
-            "DATA_SOURCE": (anchor.get("data_source") or "Synthesized — no anchor")[:80],
-            "SNAPSHOT_DATE": today,
-        })
+        rows.append(
+            {
+                "BASIN": basin,
+                "CREW_COUNT_AVAILABLE": w["crew_count_available"],
+                "SPECIALIST_COUNT_AVAILABLE": w["specialist_count_available"],
+                "ON_CALL_COUNT": w["on_call_count"],
+                "NAICS_211_STATE_EMPLOYMENT": anchor.get("naics_211_state_employment"),
+                "DATA_SOURCE": (anchor.get("data_source") or "Synthesized — no anchor")[:80],
+                "SNAPSHOT_DATE": today,
+            }
+        )
     return rows
 
 
@@ -482,12 +521,14 @@ def build_maximo_item(d: dict[str, Any]) -> list[dict]:
         anchor = patents.get(cid, {})
         real_title = (anchor.get("title") or "").strip()
         description = (real_title or a["canonical_label"])[:100]
-        rows.append({
-            "ITEMNUM": itemnum,
-            "ITEMSETID": "SET1",
-            "DESCRIPTION": description,
-            "COMMODITYGROUP": a["category"][:16],
-        })
+        rows.append(
+            {
+                "ITEMNUM": itemnum,
+                "ITEMSETID": "SET1",
+                "DESCRIPTION": description,
+                "COMMODITYGROUP": a["category"][:16],
+            }
+        )
     return rows
 
 
@@ -501,20 +542,24 @@ def build_maximo_asset(d: dict[str, Any]) -> list[dict]:
         itemnum = aliases.get(cid, {}).get("maximo_equipment_id")
         canon = by_cid.get(cid, {})
         region = inv["location"]["region"]
-        rows.append({
-            "ASSETID": i + 1,
-            "ASSETNUM": inv["equipment_instance_id"][:25],
-            "DESCRIPTION": canon.get("canonical_label", "")[:100],
-            "STATUS": inv["status"][:16],
-            "LOCATION": slug(inv["location"]["label"]),
-            "SITEID": REGION_TO_SITEID.get(region, "DEFAULT")[:16],
-            "ORGID": "OFS",
-            "PARENT": None,
-            "ASSETTYPE": canon.get("category", "")[:16],
-            "ITEMNUM": itemnum,
-            "SERIALNUM": f"SN-{i + 1:06d}",
-            "INSTALLDATE": (canon.get("introduced_year", 2020) and f"{canon['introduced_year']}-06-15"),
-        })
+        rows.append(
+            {
+                "ASSETID": i + 1,
+                "ASSETNUM": inv["equipment_instance_id"][:25],
+                "DESCRIPTION": canon.get("canonical_label", "")[:100],
+                "STATUS": inv["status"][:16],
+                "LOCATION": slug(inv["location"]["label"]),
+                "SITEID": REGION_TO_SITEID.get(region, "DEFAULT")[:16],
+                "ORGID": "OFS",
+                "PARENT": None,
+                "ASSETTYPE": canon.get("category", "")[:16],
+                "ITEMNUM": itemnum,
+                "SERIALNUM": f"SN-{i + 1:06d}",
+                "INSTALLDATE": (
+                    canon.get("introduced_year", 2020) and f"{canon['introduced_year']}-06-15"
+                ),
+            }
+        )
     return rows
 
 
@@ -534,10 +579,13 @@ def _nearest_wpi_port(client, lat: float, lon: float) -> tuple[int, str] | None:
     LIMIT 1
     """
     from google.cloud import bigquery as bq  # noqa: PLC0415 — local to avoid top-level dep
-    job_config = bq.QueryJobConfig(query_parameters=[
-        bq.ScalarQueryParameter("lat", "FLOAT64", lat),
-        bq.ScalarQueryParameter("lon", "FLOAT64", lon),
-    ])
+
+    job_config = bq.QueryJobConfig(
+        query_parameters=[
+            bq.ScalarQueryParameter("lat", "FLOAT64", lat),
+            bq.ScalarQueryParameter("lon", "FLOAT64", lon),
+        ]
+    )
     rows = list(client.query(sql, job_config=job_config).result())
     if not rows or rows[0]["dist_km"] > 200:
         return None
@@ -551,6 +599,7 @@ def build_maximo_locations(d: dict[str, Any]) -> list[dict]:
     """
     # Lazy: use the module-level client if the caller injected it; else create
     from google.cloud import bigquery as bq  # noqa: PLC0415
+
     client = bq.Client(project=PROJECT)
 
     seen: dict[tuple, dict] = {}
@@ -562,7 +611,13 @@ def build_maximo_locations(d: dict[str, Any]) -> list[dict]:
         key = (siteid, location)
         if key in seen:
             continue
-        ltype = "STOREROOM" if any(w in loc["label"].lower() for w in ("storage", "depot", "shop", "yard", "warehouse")) else "OPERATING"
+        ltype = (
+            "STOREROOM"
+            if any(
+                w in loc["label"].lower() for w in ("storage", "depot", "shop", "yard", "warehouse")
+            )
+            else "OPERATING"
+        )
         lat, lon = loc.get("latitude"), loc.get("longitude")
         port_num: int | None = None
         port_name: str | None = None
@@ -625,19 +680,23 @@ def build_maximo_invbalances(d: dict[str, Any]) -> list[dict]:
         region = inv["location"]["region"]
         siteid = REGION_TO_SITEID.get(region, "DEFAULT")[:16]
         location = slug(inv["location"]["label"])
-        physcnt = 1.0 if inv["status"] in ("available", "available_after_recert", "in_repair") else 0.0
-        rows.append({
-            "ITEMNUM": itemnum,
-            "ITEMSETID": "SET1",
-            "LOCATION": location,
-            "SITEID": siteid,
-            "BINNUM": f"A{(i % 5) + 1}",
-            "LOTNUM": None,
-            "CONDITIONCODE": "REFURB" if inv["status"] == "available_after_recert" else "NEW",
-            "PHYSCNT": physcnt,
-            "PHYSCNTDATE": today,
-            "CURBAL": physcnt,
-        })
+        physcnt = (
+            1.0 if inv["status"] in ("available", "available_after_recert", "in_repair") else 0.0
+        )
+        rows.append(
+            {
+                "ITEMNUM": itemnum,
+                "ITEMSETID": "SET1",
+                "LOCATION": location,
+                "SITEID": siteid,
+                "BINNUM": f"A{(i % 5) + 1}",
+                "LOTNUM": None,
+                "CONDITIONCODE": "REFURB" if inv["status"] == "available_after_recert" else "NEW",
+                "PHYSCNT": physcnt,
+                "PHYSCNTDATE": today,
+                "CURBAL": physcnt,
+            }
+        )
     return rows
 
 
@@ -673,21 +732,23 @@ def build_maximo_workorder(d: dict[str, Any]) -> list[dict]:
         anchor = bsee.get(inv["equipment_instance_id"]) or bsee.get("__repair_default__") or {}
         report_date = (anchor.get("incident_date") or now_iso()[:10]) + "T00:00:00+00:00"
 
-        rows.append({
-            "WONUM": f"WO-{i + 1:06d}",
-            "SITEID": siteid,
-            "ASSETNUM": inv["equipment_instance_id"][:25],
-            "LOCATION": slug(inv["location"]["label"]),
-            "STATUS": "INPRG",
-            "WORKTYPE": worktype,
-            "REPORTDATE": report_date,
-            "SCHEDSTART": None,
-            "ACTSTART": None,
-            "ESTLABHRS": est,
-            "ACTLABHRS": act,
-            "BSEE_LEASE_REF": (anchor.get("lease_number") or "")[:16] or None,
-            "BSEE_INCIDENT_DATE": anchor.get("incident_date"),
-        })
+        rows.append(
+            {
+                "WONUM": f"WO-{i + 1:06d}",
+                "SITEID": siteid,
+                "ASSETNUM": inv["equipment_instance_id"][:25],
+                "LOCATION": slug(inv["location"]["label"]),
+                "STATUS": "INPRG",
+                "WORKTYPE": worktype,
+                "REPORTDATE": report_date,
+                "SCHEDSTART": None,
+                "ACTSTART": None,
+                "ESTLABHRS": est,
+                "ACTLABHRS": act,
+                "BSEE_LEASE_REF": (anchor.get("lease_number") or "")[:16] or None,
+                "BSEE_INCIDENT_DATE": anchor.get("incident_date"),
+            }
+        )
     return rows
 
 
@@ -701,13 +762,15 @@ def build_fdp_customer_config(d: dict[str, Any]) -> list[dict]:
             matnr = aliases.get(canonical_id, {}).get("sap_material_number")
             if matnr is None:
                 continue
-            rows.append({
-                "CUSTOMER_ID": customer_id,
-                "MATNR": matnr,
-                "APPROVED": cfg.get("approved", False),
-                "NOTES": (cfg.get("notes") or "")[:500],
-                "EFFECTIVE_DATE": today,
-            })
+            rows.append(
+                {
+                    "CUSTOMER_ID": customer_id,
+                    "MATNR": matnr,
+                    "APPROVED": cfg.get("approved", False),
+                    "NOTES": (cfg.get("notes") or "")[:500],
+                    "EFFECTIVE_DATE": today,
+                }
+            )
     return rows
 
 
@@ -747,12 +810,14 @@ def build_fdp_approved_substitutions(d: dict[str, Any]) -> list[dict]:
                 matnr_sub = aliases.get(sub_canonical, {}).get("sap_material_number")
                 if matnr_orig is None or matnr_sub is None:
                     continue
-                rows.append({
-                    "CUSTOMER_ID": customer_id,
-                    "MATNR_ORIGINAL": matnr_orig,
-                    "MATNR_SUBSTITUTE": matnr_sub,
-                    "ACCEPTED": bool(v),
-                })
+                rows.append(
+                    {
+                        "CUSTOMER_ID": customer_id,
+                        "MATNR_ORIGINAL": matnr_orig,
+                        "MATNR_SUBSTITUTE": matnr_sub,
+                        "ACCEPTED": bool(v),
+                    }
+                )
     return rows
 
 

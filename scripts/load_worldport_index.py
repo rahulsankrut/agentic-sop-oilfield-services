@@ -40,8 +40,10 @@ import io
 import logging
 import sys
 import urllib.request
+from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Iterable
+
+UTC = timezone.utc  # Python 3.10 compat (datetime.UTC is 3.11+)
 
 from google.cloud import bigquery
 
@@ -162,7 +164,7 @@ def main() -> int:
     )
     args = p.parse_args()
 
-    started = datetime.now(tz=timezone.utc)
+    started = datetime.now(tz=UTC)
 
     if args.file:
         with open(args.file, encoding="utf-8-sig") as f:
@@ -187,7 +189,7 @@ def main() -> int:
         ),
     )
     job.result()
-    ended = datetime.now(tz=timezone.utc)
+    ended = datetime.now(tz=UTC)
     log.info("loaded %d rows into %s", job.output_rows or 0, TABLE)
 
     audit_job = client.load_table_from_json(

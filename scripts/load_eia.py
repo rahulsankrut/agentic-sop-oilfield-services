@@ -41,6 +41,8 @@ import logging
 import sys
 import urllib.request
 from datetime import date, datetime, timezone
+
+UTC = timezone.utc  # Python 3.10 compat (datetime.UTC is 3.11+)
 from pathlib import Path
 
 from google.cloud import bigquery
@@ -100,6 +102,7 @@ GAS_FORMATIONS = {
 # ---------------------------------------------------------------------------
 # Excel parsing
 # ---------------------------------------------------------------------------
+
 
 def _fetch_steo(url: str, out: Path) -> None:
     log.info("downloading STEO bulk Excel from %s ...", url)
@@ -163,18 +166,20 @@ def _build_rows(steo_path: Path) -> list[dict]:
     for basin, month in sorted(keys, key=lambda k: (k[1], k[0])):
         oil_bpd = oil.get((basin, month))
         gas_bcfd = gas.get((basin, month))
-        rows.append({
-            "REPORT_MONTH": month.isoformat(),
-            "BASIN": basin[:20],
-            # 10a rigs are monthly averages — fractional is intentional, preserved.
-            "ACTIVE_RIGS": rigs.get((basin, month)),
-            # 10b tight oil ships in million bbl/day → convert to bbl/day (int).
-            "OIL_PROD_BPD": int(oil_bpd * 1_000_000) if oil_bpd is not None else None,
-            # 10b shale gas ships in Bcf/day → convert to Mcf/day (×1,000,000).
-            "GAS_PROD_MCFD": int(gas_bcfd * 1_000_000) if gas_bcfd is not None else None,
-            # STEO doesn't include the DPR's new-well productivity series anymore.
-            "RIG_PRODUCTIVITY_NEW_WELL_OIL_BPD": None,
-        })
+        rows.append(
+            {
+                "REPORT_MONTH": month.isoformat(),
+                "BASIN": basin[:20],
+                # 10a rigs are monthly averages — fractional is intentional, preserved.
+                "ACTIVE_RIGS": rigs.get((basin, month)),
+                # 10b tight oil ships in million bbl/day → convert to bbl/day (int).
+                "OIL_PROD_BPD": int(oil_bpd * 1_000_000) if oil_bpd is not None else None,
+                # 10b shale gas ships in Bcf/day → convert to Mcf/day (×1,000,000).
+                "GAS_PROD_MCFD": int(gas_bcfd * 1_000_000) if gas_bcfd is not None else None,
+                # STEO doesn't include the DPR's new-well productivity series anymore.
+                "RIG_PRODUCTIVITY_NEW_WELL_OIL_BPD": None,
+            }
+        )
     log.info("built %d (basin, month) rows", len(rows))
     return rows
 
@@ -182,6 +187,7 @@ def _build_rows(steo_path: Path) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
+
 
 def _audit_row(source: str, row_count: int, started: datetime, ended: datetime) -> dict:
     return {
@@ -207,7 +213,7 @@ def main() -> int:
     )
     args = p.parse_args()
 
-    started = datetime.now(tz=timezone.utc)
+    started = datetime.now(tz=UTC)
 
     if args.file:
         steo_path = args.file
@@ -232,7 +238,7 @@ def main() -> int:
         ),
     )
     job.result()
-    ended = datetime.now(tz=timezone.utc)
+    ended = datetime.now(tz=UTC)
     log.info("loaded %d rows into %s", job.output_rows or 0, TABLE)
 
     audit_job = client.load_table_from_json(

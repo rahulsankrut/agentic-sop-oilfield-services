@@ -48,71 +48,99 @@ log = logging.getLogger(__name__)
 # with frac-related patent") rather than silently NULLing the row.
 ASSET_QUERIES: dict[str, list[tuple[str, str, int, int]]] = {
     # downhole_tool / drilling_motor
-    "TX-001":    [("SCHLUMBERGER", "drilling motor",     2014, 2018)],
-    "TX-007":    [("SCHLUMBERGER", "drilling motor",     2019, 2024)],
-    "DM-805":    [("HALLIBURTON",  "drilling motor",     2014, 2018)],
-    "DM-810":    [("HALLIBURTON",  "drilling motor",     2019, 2025),
-                  ("HALLIBURTON",  "directional drilling", 2019, 2025)],
+    "TX-001": [("SCHLUMBERGER", "drilling motor", 2014, 2018)],
+    "TX-007": [("SCHLUMBERGER", "drilling motor", 2019, 2024)],
+    "DM-805": [("HALLIBURTON", "drilling motor", 2014, 2018)],
+    "DM-810": [
+        ("HALLIBURTON", "drilling motor", 2019, 2025),
+        ("HALLIBURTON", "directional drilling", 2019, 2025),
+    ],
     # downhole_tool / mwd_lwd
-    "MWD-300":   [("HALLIBURTON",  "measurement while drilling", 2014, 2020)],
-    "MWD-310":   [("HALLIBURTON",  "measurement while drilling", 2021, 2025),
-                  ("HALLIBURTON",  "downhole telemetry",         2021, 2025),
-                  ("HALLIBURTON",  "mwd",                        2021, 2025)],
-    "LWD-420":   [("BAKER HUGHES", "logging",                    2017, 2022)],
+    "MWD-300": [("HALLIBURTON", "measurement while drilling", 2014, 2020)],
+    "MWD-310": [
+        ("HALLIBURTON", "measurement while drilling", 2021, 2025),
+        ("HALLIBURTON", "downhole telemetry", 2021, 2025),
+        ("HALLIBURTON", "mwd", 2021, 2025),
+    ],
+    "LWD-420": [("BAKER HUGHES", "logging", 2017, 2022)],
     # downhole_tool / bha
-    "BHA-DRL-3": [("SCHLUMBERGER", "bottom hole assembly",       2017, 2022)],
+    "BHA-DRL-3": [("SCHLUMBERGER", "bottom hole assembly", 2017, 2022)],
     # wireline_tool / logging
-    "WIRE-100":  [("SCHLUMBERGER", "wireline logging",  2011, 2017)],
-    "WIRE-120":  [("SCHLUMBERGER", "wireline logging",  2018, 2023)],
+    "WIRE-100": [("SCHLUMBERGER", "wireline logging", 2011, 2017)],
+    "WIRE-120": [("SCHLUMBERGER", "wireline logging", 2018, 2023)],
     # completions / flow_control (bridge plugs + safety valves)
-    "CMP-500":   [("SCHLUMBERGER", "bridge plug",        2015, 2020)],
-    "CMP-510":   [("SCHLUMBERGER", "bridge plug",        2021, 2025),
-                  ("HALLIBURTON",  "bridge plug",        2021, 2025)],
-    "SAFE-VAL-1":[("BAKER HUGHES", "subsurface safety valve", 2014, 2019),
-                  ("SCHLUMBERGER", "safety valve",            2014, 2019)],
-    "SAFE-VAL-2":[("SCHLUMBERGER", "subsurface safety valve", 2020, 2024)],
+    "CMP-500": [("SCHLUMBERGER", "bridge plug", 2015, 2020)],
+    "CMP-510": [
+        ("SCHLUMBERGER", "bridge plug", 2021, 2025),
+        ("HALLIBURTON", "bridge plug", 2021, 2025),
+    ],
+    "SAFE-VAL-1": [
+        ("BAKER HUGHES", "subsurface safety valve", 2014, 2019),
+        ("SCHLUMBERGER", "safety valve", 2014, 2019),
+    ],
+    "SAFE-VAL-2": [("SCHLUMBERGER", "subsurface safety valve", 2020, 2024)],
     # completions / isolation
-    "PKR-220":   [("BAKER HUGHES", "production packer",  2014, 2019)],
+    "PKR-220": [("BAKER HUGHES", "production packer", 2014, 2019)],
     # completions / perforating
-    "PERF-GUN-2":[("SCHLUMBERGER", "perforating gun",    2015, 2020)],
-    "PERF-GUN-4":[("HALLIBURTON",  "perforating gun",    2015, 2020)],
+    "PERF-GUN-2": [("SCHLUMBERGER", "perforating gun", 2015, 2020)],
+    "PERF-GUN-4": [("HALLIBURTON", "perforating gun", 2015, 2020)],
     # artificial_lift / esp
-    "ESP-450":   [("BAKER HUGHES", "electric submersible pump", 2012, 2017)],
-    "ESP-460":   [("BAKER HUGHES", "electric submersible pump", 2018, 2023)],
+    "ESP-450": [("BAKER HUGHES", "electric submersible pump", 2012, 2017)],
+    "ESP-460": [("BAKER HUGHES", "electric submersible pump", 2018, 2023)],
     # artificial_lift / pcp
-    "PCP-700":   [("HALLIBURTON",  "progressive cavity",  2013, 2024),
-                  ("BAKER HUGHES", "cavity pump",         2013, 2024),
-                  ("SCHLUMBERGER", "progressive cavity",  2013, 2024)],
+    "PCP-700": [
+        ("HALLIBURTON", "progressive cavity", 2013, 2024),
+        ("BAKER HUGHES", "cavity pump", 2013, 2024),
+        ("SCHLUMBERGER", "progressive cavity", 2013, 2024),
+    ],
     # surface_equipment / cementing
-    "PUMP-CMT-A":[("HALLIBURTON",  "cementing",          2014, 2020),
-                  ("SCHLUMBERGER", "cementing pump",     2014, 2020)],
-    "PUMP-CMT-B":[("HALLIBURTON",  "cementing pump",     2020, 2025),
-                  ("HALLIBURTON",  "cementing",          2020, 2025)],
+    "PUMP-CMT-A": [
+        ("HALLIBURTON", "cementing", 2014, 2020),
+        ("SCHLUMBERGER", "cementing pump", 2014, 2020),
+    ],
+    "PUMP-CMT-B": [
+        ("HALLIBURTON", "cementing pump", 2020, 2025),
+        ("HALLIBURTON", "cementing", 2020, 2025),
+    ],
     # surface_equipment / coiled_tubing
-    "CT-500":    [("SCHLUMBERGER", "coiled tubing",      2014, 2020),
-                  ("HALLIBURTON",  "coiled tubing",      2014, 2020),
-                  ("BAKER HUGHES", "coiled tubing",      2014, 2020)],
-    "CT-520":    [("SCHLUMBERGER", "coiled tubing",      2020, 2025),
-                  ("HALLIBURTON",  "coiled tubing",      2020, 2025)],
+    "CT-500": [
+        ("SCHLUMBERGER", "coiled tubing", 2014, 2020),
+        ("HALLIBURTON", "coiled tubing", 2014, 2020),
+        ("BAKER HUGHES", "coiled tubing", 2014, 2020),
+    ],
+    "CT-520": [
+        ("SCHLUMBERGER", "coiled tubing", 2020, 2025),
+        ("HALLIBURTON", "coiled tubing", 2020, 2025),
+    ],
     # surface_equipment / hydraulic_fracturing
-    "FRAC-PUMP-A":[("HALLIBURTON", "hydraulic fracturing pump", 2015, 2020),
-                   ("HALLIBURTON", "frac pump",                 2015, 2020),
-                   ("HALLIBURTON", "fracturing",                2015, 2020)],
-    "FRAC-PUMP-B":[("HALLIBURTON", "fracturing pump",    2021, 2025)],
+    "FRAC-PUMP-A": [
+        ("HALLIBURTON", "hydraulic fracturing pump", 2015, 2020),
+        ("HALLIBURTON", "frac pump", 2015, 2020),
+        ("HALLIBURTON", "fracturing", 2015, 2020),
+    ],
+    "FRAC-PUMP-B": [("HALLIBURTON", "fracturing pump", 2021, 2025)],
     # surface_equipment / workover
-    "RIG-LWP-A": [("SCHLUMBERGER", "workover rig",       2014, 2020),
-                  ("HALLIBURTON",  "workover",           2014, 2020),
-                  ("BAKER HUGHES", "well intervention",  2014, 2020)],
-    "RIG-LWP-B": [("SCHLUMBERGER", "workover",           2020, 2025),
-                  ("HALLIBURTON",  "well intervention",  2020, 2025)],
+    "RIG-LWP-A": [
+        ("SCHLUMBERGER", "workover rig", 2014, 2020),
+        ("HALLIBURTON", "workover", 2014, 2020),
+        ("BAKER HUGHES", "well intervention", 2014, 2020),
+    ],
+    "RIG-LWP-B": [
+        ("SCHLUMBERGER", "workover", 2020, 2025),
+        ("HALLIBURTON", "well intervention", 2020, 2025),
+    ],
     # sensing / distributed_acoustic
-    "FBG-DAS":   [("SCHLUMBERGER", "distributed acoustic sensing", 2016, 2024),
-                  ("SCHLUMBERGER", "fiber optic acoustic",         2016, 2024),
-                  ("HALLIBURTON",  "distributed acoustic",         2016, 2024)],
+    "FBG-DAS": [
+        ("SCHLUMBERGER", "distributed acoustic sensing", 2016, 2024),
+        ("SCHLUMBERGER", "fiber optic acoustic", 2016, 2024),
+        ("HALLIBURTON", "distributed acoustic", 2016, 2024),
+    ],
     # sensing / distributed_temperature
-    "FBG-DTS":   [("SCHLUMBERGER", "distributed temperature sensing", 2014, 2024),
-                  ("SCHLUMBERGER", "fiber optic temperature",         2014, 2024),
-                  ("HALLIBURTON",  "distributed temperature",         2014, 2024)],
+    "FBG-DTS": [
+        ("SCHLUMBERGER", "distributed temperature sensing", 2014, 2024),
+        ("SCHLUMBERGER", "fiber optic temperature", 2014, 2024),
+        ("HALLIBURTON", "distributed temperature", 2014, 2024),
+    ],
 }
 
 
@@ -137,20 +165,33 @@ LIMIT 1
 """
 
 
-def _fetch_patent(client: bigquery.Client, canonical_id: str,
-                  assignee: str, keyword: str, year_min: int, year_max: int) -> dict | None:
+def _fetch_patent(
+    client: bigquery.Client,
+    canonical_id: str,
+    assignee: str,
+    keyword: str,
+    year_min: int,
+    year_max: int,
+) -> dict | None:
     """Return one real patent matching the criteria, or None if no match."""
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("ymin", "INT64", int(f"{year_min}0101")),
             bigquery.ScalarQueryParameter("ymax", "INT64", int(f"{year_max}1231")),
             bigquery.ScalarQueryParameter("assignee_pat", "STRING", f"%{assignee}%"),
-            bigquery.ScalarQueryParameter("kw_pat",       "STRING", f"%{keyword.lower()}%"),
+            bigquery.ScalarQueryParameter("kw_pat", "STRING", f"%{keyword.lower()}%"),
         ],
     )
     rows = list(client.query(PATENT_QUERY, job_config=job_config).result())
     if not rows:
-        log.warning("  %s: no match for (%s, %s, %d-%d)", canonical_id, assignee, keyword, year_min, year_max)
+        log.warning(
+            "  %s: no match for (%s, %s, %d-%d)",
+            canonical_id,
+            assignee,
+            keyword,
+            year_min,
+            year_max,
+        )
         return None
     r = rows[0]
     return {
@@ -175,8 +216,13 @@ def main() -> int:
                 break
         if patent:
             anchors[canonical_id] = patent
-            log.info("  %-12s → %s (%d) — %s", canonical_id, patent["publication_number"],
-                     patent["filing_year"], patent["title"][:60])
+            log.info(
+                "  %-12s → %s (%d) — %s",
+                canonical_id,
+                patent["publication_number"],
+                patent["filing_year"],
+                patent["title"][:60],
+            )
 
     ANCHOR_OUT.parent.mkdir(parents=True, exist_ok=True)
     with ANCHOR_OUT.open("w") as f:

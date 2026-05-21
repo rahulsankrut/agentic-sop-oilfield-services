@@ -88,9 +88,7 @@ class McpRegistration:
     tags: tuple[str, ...] = ()
 
     def resource_path(self) -> str:
-        return (
-            f"projects/{PROJECT}/locations/{LOCATION}/mcpServers/{self.server_id}"
-        )
+        return f"projects/{PROJECT}/locations/{LOCATION}/mcpServers/{self.server_id}"
 
     def to_payload(self) -> dict[str, Any]:
         """Build the REST request body.
@@ -256,9 +254,7 @@ def _registry_request(
         return None
 
     with httpx.Client(timeout=30.0) as client:
-        return client.request(
-            method, url, headers=headers, params=params, json=json_body
-        )
+        return client.request(method, url, headers=headers, params=params, json=json_body)
 
 
 def _get_or_none(reg: McpRegistration) -> dict[str, Any] | None:
@@ -285,9 +281,7 @@ def _create(reg: McpRegistration) -> dict[str, Any] | None:
         return None
     if resp.status_code in (200, 201):
         return resp.json()
-    raise RuntimeError(
-        f"Create failed for {reg.server_id}: {resp.status_code} {resp.text}"
-    )
+    raise RuntimeError(f"Create failed for {reg.server_id}: {resp.status_code} {resp.text}")
 
 
 def _update(reg: McpRegistration) -> dict[str, Any] | None:
@@ -296,9 +290,7 @@ def _update(reg: McpRegistration) -> dict[str, Any] | None:
         "PATCH",
         reg.resource_path(),
         params={
-            "updateMask": ",".join(
-                ["displayName", "description", "mcpEndpoint", "labels", "tags"]
-            ),
+            "updateMask": ",".join(["displayName", "description", "mcpEndpoint", "labels", "tags"]),
         },
         json_body=reg.to_payload(),
     )
@@ -306,9 +298,7 @@ def _update(reg: McpRegistration) -> dict[str, Any] | None:
         return None
     if resp.status_code in (200, 201):
         return resp.json()
-    raise RuntimeError(
-        f"Update failed for {reg.server_id}: {resp.status_code} {resp.text}"
-    )
+    raise RuntimeError(f"Update failed for {reg.server_id}: {resp.status_code} {resp.text}")
 
 
 # ---------------------------------------------------------------------------

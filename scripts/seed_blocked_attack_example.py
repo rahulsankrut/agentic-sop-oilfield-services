@@ -191,8 +191,8 @@ def send_attack() -> int:
         "entry tagged modelArmor.blocked=true. Query:"
     )
     logger.info(
-        '  gcloud logging read \'jsonPayload.modelArmor.blocked=true\' '
-        '--project=%s --limit=5 --freshness=10m',
+        "  gcloud logging read 'jsonPayload.modelArmor.blocked=true' "
+        "--project=%s --limit=5 --freshness=10m",
         PROJECT or "<project>",
     )
     return 0

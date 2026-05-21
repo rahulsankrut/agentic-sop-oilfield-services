@@ -44,13 +44,13 @@ log = logging.getLogger(__name__)
 BASIN_SHARES: dict[str, dict[str, float]] = {
     # Permian Basin sits across W Texas + SE New Mexico
     "permian": {
-        "48000": 0.55,   # Texas — Permian is roughly half of TX O&G employment
-        "35000": 0.85,   # New Mexico — overwhelmingly Permian Delaware Basin
+        "48000": 0.55,  # Texas — Permian is roughly half of TX O&G employment
+        "35000": 0.85,  # New Mexico — overwhelmingly Permian Delaware Basin
     },
     # Gulf of Mexico = TX + LA offshore + ports; LA is much smaller HQ-wise
     "gulf_of_mexico": {
-        "48000": 0.10,   # Texas — small offshore-attributable share
-        "22000": 0.65,   # Louisiana — most of state O&G is GoM-adjacent
+        "48000": 0.10,  # Texas — small offshore-attributable share
+        "22000": 0.65,  # Louisiana — most of state O&G is GoM-adjacent
     },
 }
 
@@ -66,7 +66,9 @@ BLS_URL = f"https://data.bls.gov/cew/data/api/{YEAR}/a/industry/211.csv"
 def _fetch_bls() -> dict[str, int]:
     """Return {area_fips: annual_avg_emplvl} for state-level private O&G ext."""
     log.info("downloading BLS QCEW NAICS 211 (annual %d) from %s", YEAR, BLS_URL)
-    req = urllib.request.Request(BLS_URL, headers={"User-Agent": "agentic-sop-oilfield-services rahulsankrut@gmail.com"})
+    req = urllib.request.Request(
+        BLS_URL, headers={"User-Agent": "agentic-sop-oilfield-services rahulsankrut@gmail.com"}
+    )
     with urllib.request.urlopen(req, timeout=60) as resp:
         text = resp.read().decode("utf-8")
     out: dict[str, int] = {}
@@ -82,10 +84,7 @@ def main() -> int:
     state_emp = _fetch_bls()
     anchors: dict[str, dict] = {}
     for basin, shares in BASIN_SHARES.items():
-        employed = sum(
-            int(state_emp.get(fips, 0) * share)
-            for fips, share in shares.items()
-        )
+        employed = sum(int(state_emp.get(fips, 0) * share) for fips, share in shares.items())
         components = {fips: state_emp.get(fips, 0) for fips in shares}
         anchors[basin] = {
             "naics_211_state_employment": employed,
@@ -93,9 +92,12 @@ def main() -> int:
             "shares_by_fips": shares,
             "data_source": f"BLS QCEW {YEAR} NAICS 211 (Oil & Gas Extraction)",
         }
-        log.info("  %-15s  → %d employees  (from %s)",
-                 basin, employed,
-                 ", ".join(f"{fips}:{state_emp.get(fips,0)}*{share}" for fips, share in shares.items()))
+        log.info(
+            "  %-15s  → %d employees  (from %s)",
+            basin,
+            employed,
+            ", ".join(f"{fips}:{state_emp.get(fips, 0)}*{share}" for fips, share in shares.items()),
+        )
     for basin in FOREIGN_BASINS:
         anchors[basin] = {
             "naics_211_state_employment": None,

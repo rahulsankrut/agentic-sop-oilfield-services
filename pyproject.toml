@@ -49,6 +49,13 @@ select = ["E", "F", "I", "N", "B", "UP", "PL"]
 #   numeric thresholds (e.g. weight-sum tolerance 1e-4).
 ignore = ["PLC0415", "PLR2004"]
 
+[tool.ruff.lint.per-file-ignores]
+# Builder/loader scripts in scripts/ contain long realistic data strings
+# (real patent titles, SEC contract titles, BSEE incident descriptions)
+# and large main() ingestion functions. E501 line-length + PLR0915/0913
+# complexity rules don't add value there.
+"scripts/*.py" = ["E501", "PLR0913", "PLR0915"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["agents/tests"]

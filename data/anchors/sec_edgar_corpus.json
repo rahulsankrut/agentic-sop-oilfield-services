@@ -1,0 +1,235 @@
+{
+  "0001047469-11-006736:a2205021zex-10_11.htm": {
+    "content_type": "text/html",
+    "contract_title": "Master Services Agreement (SandRidge Energy template)",
+    "contract_type": "MSA",
+    "filename": "sandridge-energy-inc__0001047469-11-006736__MSA.html",
+    "filer_cik": "0001349436",
+    "filer_name": "SandRidge Energy Inc",
+    "filing_year": 2011,
+    "gcs_uri": "gs://oilfield-services-unstructured/mcc_contracts/sandridge-energy-inc__0001047469-11-006736__MSA.html",
+    "keywords": [
+      "Mid-Continent",
+      "Permian",
+      "template",
+      "scope of work",
+      "indemnity"
+    ],
+    "side": "operator",
+    "size_bytes": 303051,
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1349436/000104746911006736/a2205021zex-10_11.htm"
+  },
+  "0001104659-14-061586:a14-19182_1ex99d1.htm": {
+    "content_type": "text/html",
+    "contract_title": "Triangle Petroleum — disclosure referencing Master Service Agreement (Bakken oilfield services)",
+    "contract_type": "MSA-letter",
+    "filename": "triangle-petroleum-corp__0001104659-14-061586__MSA-letter.html",
+    "filer_cik": "0001281922",
+    "filer_name": "Triangle Petroleum Corp",
+    "filing_year": 2014,
+    "gcs_uri": "gs://oilfield-services-unstructured/mcc_contracts/triangle-petroleum-corp__0001104659-14-061586__MSA-letter.html",
+    "keywords": [
+      "Bakken",
+      "North Dakota",
+      "completions",
+      "press release"
+    ],
+    "side": "operator",
+    "size_bytes": 61813,
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1281922/000110465914061586/a14-19182_1ex99d1.htm"
+  },
+  "0001104659-17-013824:a16-23818_1ex10d3.htm": {
+    "content_type": "text/html",
+    "contract_title": "Master Service Agreement — Hyperdynamics (Guinea offshore)",
+    "contract_type": "MSA",
+    "filename": "hyperdynamics-corp__0001104659-17-013824__MSA.html",
+    "filer_cik": "0000937136",
+    "filer_name": "Hyperdynamics Corp",
+    "filing_year": 2017,
+    "gcs_uri": "gs://oilfield-services-unstructured/mcc_contracts/hyperdynamics-corp__0001104659-17-013824__MSA.html",
+    "keywords": [
+      "West Africa",
+      "Guinea",
+      "offshore",
+      "exploration"
+    ],
+    "side": "operator",
+    "size_bytes": 423926,
+    "source_url": "https://www.sec.gov/Archives/edgar/data/937136/000110465917013824/a16-23818_1ex10d3.htm"
+  },
+  "0001104659-21-032885:tm218011d3_ex99-1.htm": {
+    "content_type": "text/html",
+    "contract_title": "Bonanza Creek Energy press release referencing Master Services Agreement",
+    "contract_type": "MSA-letter",
+    "filename": "bonanza-creek-energy-inc__0001104659-21-032885__MSA-letter.html",
+    "filer_cik": "0001509589",
+    "filer_name": "Bonanza Creek Energy Inc",
+    "filing_year": 2021,
+    "gcs_uri": "gs://oilfield-services-unstructured/mcc_contracts/bonanza-creek-energy-inc__0001104659-21-032885__MSA-letter.html",
+    "keywords": [
+      "DJ Basin",
+      "Colorado",
+      "merger",
+      "Civitas"
+    ],
+    "side": "operator",
+    "size_bytes": 2185732,
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1509589/000110465921032885/tm218011d3_ex99-1.htm"
+  },
+  "0001193125-11-172128:dex1026.htm": {
+    "content_type": "text/html",
+    "contract_title": "Master Services Agreement — Great White Energy Services (vendor template)",
+    "contract_type": "MSA",
+    "filename": "great-white-energy-services-inc__0001193125-11-172128__MSA.html",
+    "filer_cik": "0001509696",
+    "filer_name": "Great White Energy Services Inc",
+    "filing_year": 2011,
+    "gcs_uri": "gs://oilfield-services-unstructured/mcc_contracts/great-white-energy-services-inc__0001193125-11-172128__MSA.html",
+    "keywords": [
+      "pressure pumping",
+      "completions",
+      "vendor",
+      "small-cap"
+    ],
+    "side": "vendor",
+    "size_bytes": 164212,
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1509696/000119312511172128/dex1026.htm"
+  },
+  "0001193125-13-033148:d466231dex102.htm": {
+    "content_type": "text/html",
+    "contract_title": "Master Field Services Agreement between Diamondback E&P LLC and Bison Drilling and Field Services LLC",
+    "contract_type": "MFSA",
+    "filename": "diamondback-energy-inc__0001193125-13-033148__MFSA.html",
+    "filer_cik": "0001539838",
+    "filer_name": "Diamondback Energy Inc",
+    "filing_year": 2013,
+    "gcs_uri": "gs://oilfield-services-unstructured/mcc_contracts/diamondback-energy-inc__0001193125-13-033148__MFSA.html",
+    "keywords": [
+      "Permian",
+      "drilling",
+      "completions",
+      "indemnity",
+      "insurance",
+      "WSIA"
+    ],
+    "side": "operator",
+    "size_bytes": 130329,
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1539838/000119312513033148/d466231dex102.htm"
+  },
+  "0001193125-14-220143:d735822dex105.htm": {
+    "content_type": "text/html",
+    "contract_title": "Master Service Agreement — DNOW L.P. / National Oilwell Varco L.P.",
+    "contract_type": "MSA",
+    "filename": "dnow-inc__0001193125-14-220143__MSA.html",
+    "filer_cik": "0001599617",
+    "filer_name": "DNOW Inc",
+    "filing_year": 2014,
+    "gcs_uri": "gs://oilfield-services-unstructured/mcc_contracts/dnow-inc__0001193125-14-220143__MSA.html",
+    "keywords": [
+      "distribution",
+      "NOV",
+      "equipment",
+      "vendor",
+      "supply"
+    ],
+    "side": "vendor",
+    "size_bytes": 37412,
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1599617/000119312514220143/d735822dex105.htm"
+  },
+  "0001193125-14-350455:d753416dex1017.htm": {
+    "content_type": "text/html",
+    "contract_title": "Master Field Services Agreement — Mammoth Energy Partners LP",
+    "contract_type": "MFSA",
+    "filename": "mammoth-energy-partners-lp__0001193125-14-350455__MFSA.html",
+    "filer_cik": "0001599613",
+    "filer_name": "Mammoth Energy Partners LP",
+    "filing_year": 2014,
+    "gcs_uri": "gs://oilfield-services-unstructured/mcc_contracts/mammoth-energy-partners-lp__0001193125-14-350455__MFSA.html",
+    "keywords": [
+      "pressure pumping",
+      "completions",
+      "MLP",
+      "vendor"
+    ],
+    "side": "vendor",
+    "size_bytes": 112696,
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1599613/000119312514350455/d753416dex1017.htm"
+  },
+  "0001193125-16-700981:d222950dex103.htm": {
+    "content_type": "text/html",
+    "contract_title": "Master Services Agreement (Mammoth Energy Services — Stingray Pressure Pumping)",
+    "contract_type": "MSA",
+    "filename": "mammoth-energy-services-inc__0001193125-16-700981__MSA.html",
+    "filer_cik": "0001679268",
+    "filer_name": "Mammoth Energy Services Inc",
+    "filing_year": 2016,
+    "gcs_uri": "gs://oilfield-services-unstructured/mcc_contracts/mammoth-energy-services-inc__0001193125-16-700981__MSA.html",
+    "keywords": [
+      "pressure pumping",
+      "Stingray",
+      "completions",
+      "vendor"
+    ],
+    "side": "vendor",
+    "size_bytes": 80733,
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1679268/000119312516700981/d222950dex103.htm"
+  },
+  "0001193125-16-700981:d222950dex107.htm": {
+    "content_type": "text/html",
+    "contract_title": "Master Field Services Agreement (Mammoth Energy Partners / Gulfport Energy)",
+    "contract_type": "MFSA",
+    "filename": "mammoth-energy-services-inc__0001193125-16-700981__MFSA.html",
+    "filer_cik": "0001679268",
+    "filer_name": "Mammoth Energy Services Inc",
+    "filing_year": 2016,
+    "gcs_uri": "gs://oilfield-services-unstructured/mcc_contracts/mammoth-energy-services-inc__0001193125-16-700981__MFSA.html",
+    "keywords": [
+      "pressure pumping",
+      "completion",
+      "Utica",
+      "vendor template"
+    ],
+    "side": "vendor",
+    "size_bytes": 117504,
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1679268/000119312516700981/d222950dex107.htm"
+  },
+  "0001532930-14-000028:ex107.htm": {
+    "content_type": "text/html",
+    "contract_title": "Master Services Agreement Letter — Seventy Seven Energy / Chesapeake Operating",
+    "contract_type": "MSA-letter",
+    "filename": "seventy-seven-energy-inc__0001532930-14-000028__MSA-letter.html",
+    "filer_cik": "0001532930",
+    "filer_name": "Seventy Seven Energy Inc",
+    "filing_year": 2014,
+    "gcs_uri": "gs://oilfield-services-unstructured/mcc_contracts/seventy-seven-energy-inc__0001532930-14-000028__MSA-letter.html",
+    "keywords": [
+      "Chesapeake",
+      "drilling",
+      "vendor",
+      "spinoff",
+      "letter"
+    ],
+    "side": "vendor",
+    "size_bytes": 18129,
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1532930/000153293014000028/ex107.htm"
+  },
+  "0001539838-13-000004:dbex10351stamendmenttomast.htm": {
+    "content_type": "text/html",
+    "contract_title": "First Amendment to Master Field Services Agreement (Diamondback E&P LLC / Bison Drilling and Field Services LLC)",
+    "contract_type": "MSA-amendment",
+    "filename": "diamondback-energy-inc__0001539838-13-000004__MSA-amendment.html",
+    "filer_cik": "0001539838",
+    "filer_name": "Diamondback Energy Inc",
+    "filing_year": 2013,
+    "gcs_uri": "gs://oilfield-services-unstructured/mcc_contracts/diamondback-energy-inc__0001539838-13-000004__MSA-amendment.html",
+    "keywords": [
+      "Permian",
+      "amendment",
+      "drilling",
+      "field services"
+    ],
+    "side": "operator",
+    "size_bytes": 36939,
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1539838/000153983813000004/dbex10351stamendmenttomast.htm"
+  }
+}

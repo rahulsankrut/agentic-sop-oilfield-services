@@ -1,0 +1,209 @@
+{
+  "DISTRICT-GB-783-20260307": {
+    "pdf_filename": "gb-783-wt-offshore-07-mar-2026.pdf",
+    "gcs_uri": "gs://oilfield-services-unstructured/bsee_incidents/gb-783-wt-offshore-07-mar-2026.pdf",
+    "source_url": "https://www.bsee.gov/sites/bsee.gov/files/2026-04/W%26T%207Mar2026%20GB%20783_Redacted.pdf",
+    "title": "W&T Offshore — GB 783 — Required Evacuation / LTA",
+    "report_type": "district",
+    "lease_number": "G11573",
+    "area_block": "GB 783",
+    "incident_date": "2026-03-07",
+    "incident_year": 2026,
+    "accident_type": "Required Evacuation, LTA (>3 days)",
+    "keywords": [
+      "required evacuation",
+      "lta",
+      "injury",
+      "offshore"
+    ]
+  },
+  "DISTRICT-GB-959-20251014": {
+    "pdf_filename": "gb-959-shell-14-oct-2025.pdf",
+    "gcs_uri": "gs://oilfield-services-unstructured/bsee_incidents/gb-959-shell-14-oct-2025.pdf",
+    "source_url": "https://www.bsee.gov/sites/bsee.gov/files/2026-03/GB%20959%20Shell%2014-Oct-2025.pdf",
+    "title": "Shell — GB 959 — Required Evacuation / Lifting",
+    "report_type": "district",
+    "lease_number": "G30876",
+    "area_block": "GB 959",
+    "incident_date": "2025-10-14",
+    "incident_year": 2025,
+    "accident_type": "Required Evacuation, LTA (>3 days), Other Lifting Device, Injury",
+    "keywords": [
+      "required evacuation",
+      "lifting",
+      "lta",
+      "injury"
+    ]
+  },
+  "DISTRICT-KC-785-20251123": {
+    "pdf_filename": "kc-785-llog-23-nov-2025.pdf",
+    "gcs_uri": "gs://oilfield-services-unstructured/bsee_incidents/kc-785-llog-23-nov-2025.pdf",
+    "source_url": "https://www.bsee.gov/sites/bsee.gov/files/2026-03/KC%20785%20LLOG%2023-Nov-2025.pdf",
+    "title": "LLOG — KC 785 — Other Lifting",
+    "report_type": "district",
+    "lease_number": "G25806",
+    "area_block": "KC 785",
+    "incident_date": "2025-11-23",
+    "incident_year": 2025,
+    "accident_type": "Other Lifting",
+    "keywords": [
+      "crane",
+      "lifting",
+      "rigging"
+    ]
+  },
+  "DISTRICT-WD-152-20250827": {
+    "pdf_filename": "wd-152-renaissance-27-aug-2025.pdf",
+    "gcs_uri": "gs://oilfield-services-unstructured/bsee_incidents/wd-152-renaissance-27-aug-2025.pdf",
+    "source_url": "https://www.bsee.gov/sites/bsee.gov/files/2025-12/WD%20152%20Renaissance%2027-Aug-2025.pdf",
+    "title": "Renaissance — WD 152 — Crane / Incident >$25k",
+    "report_type": "district",
+    "lease_number": "G37455",
+    "area_block": "WD 152",
+    "incident_date": "2025-08-27",
+    "incident_year": 2025,
+    "accident_type": "Crane, Incident > $25k",
+    "keywords": [
+      "crane",
+      "equipment damage",
+      "rigging"
+    ]
+  },
+  "DISTRICT-VK-989-20260108": {
+    "pdf_filename": "vk-989-talos-energy-08-jan-2026.pdf",
+    "gcs_uri": "gs://oilfield-services-unstructured/bsee_incidents/vk-989-talos-energy-08-jan-2026.pdf",
+    "source_url": "https://www.bsee.gov/sites/bsee.gov/files/2026-03/VK%20989%20Talos%20Energy%2008-Jan-2026_0.pdf",
+    "title": "Talos Energy — VK 989 — Fire",
+    "report_type": "district",
+    "lease_number": "G06898",
+    "area_block": "VK 989",
+    "incident_date": "2026-01-08",
+    "incident_year": 2026,
+    "accident_type": "Fire",
+    "keywords": [
+      "fire",
+      "hot work",
+      "ignition"
+    ]
+  },
+  "DISTRICT-MP-300B-20251126": {
+    "pdf_filename": "mp-300b-cantium-26-nov-2025.pdf",
+    "gcs_uri": "gs://oilfield-services-unstructured/bsee_incidents/mp-300b-cantium-26-nov-2025.pdf",
+    "source_url": "https://www.bsee.gov/sites/bsee.gov/files/2026-03/MP%20300-B%20Cantium%2026-NOV-2025.pdf",
+    "title": "Cantium — MP 300-B — Fire",
+    "report_type": "district",
+    "lease_number": "G01317",
+    "area_block": "MP 300-B",
+    "incident_date": "2025-11-26",
+    "incident_year": 2025,
+    "accident_type": "Fire",
+    "keywords": [
+      "fire",
+      "platform fire"
+    ]
+  },
+  "DISTRICT-MC-300-20250529": {
+    "pdf_filename": "mc-300-murphy-exploration-29-may-2025.pdf",
+    "gcs_uri": "gs://oilfield-services-unstructured/bsee_incidents/mc-300-murphy-exploration-29-may-2025.pdf",
+    "source_url": "https://www.bsee.gov/sites/bsee.gov/files/2026-01/MC%20300%20Murphy%20Exploration%2029-May-2025.pdf",
+    "title": "Murphy Exploration — MC 300 — Pollution / EDS",
+    "report_type": "district",
+    "lease_number": "G22868",
+    "area_block": "MC 300",
+    "incident_date": "2025-05-29",
+    "incident_year": 2025,
+    "accident_type": "Pollution - Emergency Disconnect Sequence",
+    "keywords": [
+      "pollution",
+      "spill",
+      "emergency disconnect"
+    ]
+  },
+  "DISTRICT-SP-62C-20251103": {
+    "pdf_filename": "sp-62c-gom-shelf-03-nov-2025.pdf",
+    "gcs_uri": "gs://oilfield-services-unstructured/bsee_incidents/sp-62c-gom-shelf-03-nov-2025.pdf",
+    "source_url": "https://www.bsee.gov/sites/bsee.gov/files/2026-01/SP%2062-C%20GOM%20Shelf%20%2003-Nov-2025.pdf",
+    "title": "GOM Shelf — SP 62-C — Shutdown from Gas Release",
+    "report_type": "district",
+    "lease_number": "G01294",
+    "area_block": "SP 62-C",
+    "incident_date": "2025-11-03",
+    "incident_year": 2025,
+    "accident_type": "Shutdown from Gas Release - Incident >$25K",
+    "keywords": [
+      "gas release",
+      "well control",
+      "shutdown"
+    ]
+  },
+  "DISTRICT-WR-249-20250428": {
+    "pdf_filename": "wr-249-ev2010r-28-apr-2025.pdf",
+    "gcs_uri": "gs://oilfield-services-unstructured/bsee_incidents/wr-249-ev2010r-28-apr-2025.pdf",
+    "source_url": "https://www.bsee.gov/sites/bsee.gov/files/2025-11/EV2010R%20-%20WR%20249.pdf",
+    "title": "WR 249 — Injury, Explosion, Incident >$25k",
+    "report_type": "district",
+    "lease_number": "G30369",
+    "area_block": "WR 249",
+    "incident_date": "2025-04-28",
+    "incident_year": 2025,
+    "accident_type": "Injury, Explosion, Incident > $25k",
+    "keywords": [
+      "explosion",
+      "injury",
+      "equipment damage"
+    ]
+  },
+  "DISTRICT-EI-259C-20251003": {
+    "pdf_filename": "ei-259-white-fleet-03-oct-2025.pdf",
+    "gcs_uri": "gs://oilfield-services-unstructured/bsee_incidents/ei-259-white-fleet-03-oct-2025.pdf",
+    "source_url": "https://www.bsee.gov/sites/bsee.gov/files/2026-01/EI%20259%20White%20Fleet%2003_OCT_2025.pdf",
+    "title": "White Fleet — EI 259 C — Required Evacuation / LTA",
+    "report_type": "district",
+    "lease_number": "G00985",
+    "area_block": "EI 259 C",
+    "incident_date": "2025-10-03",
+    "incident_year": 2025,
+    "accident_type": "Required Evacuation, LTA (>3 days)",
+    "keywords": [
+      "injury",
+      "lta",
+      "evacuation"
+    ]
+  },
+  "PANEL-GB-426-20210403": {
+    "pdf_filename": "gb-426-shell-03-apr-2021.pdf",
+    "gcs_uri": "gs://oilfield-services-unstructured/bsee_incidents/gb-426-shell-03-apr-2021.pdf",
+    "source_url": "https://www.bsee.gov/sites/bsee.gov/files/gb-426-shell-03-apr-2021.pdf",
+    "title": "Shell — GB 426 — Panel Investigation Report",
+    "report_type": "panel",
+    "lease_number": "",
+    "area_block": "GB 426",
+    "incident_date": "2021-04-03",
+    "incident_year": 2021,
+    "accident_type": "Panel investigation (offshore incident)",
+    "keywords": [
+      "panel",
+      "shell",
+      "offshore",
+      "investigation"
+    ]
+  },
+  "PANEL-HIA-379B-20150420": {
+    "pdf_filename": "hi-a-379-b-wt-offshore-20-apr-2015.pdf",
+    "gcs_uri": "gs://oilfield-services-unstructured/bsee_incidents/hi-a-379-b-wt-offshore-20-apr-2015.pdf",
+    "source_url": "https://www.bsee.gov/sites/bsee.gov/files/reports/incident-and-investigations/hi-a-379-b-w-and-t-offshore-20-apr-2015.pdf",
+    "title": "W&T Offshore — HI A 379 B — Panel Investigation Report",
+    "report_type": "panel",
+    "lease_number": "",
+    "area_block": "HI A 379 B",
+    "incident_date": "2015-04-20",
+    "incident_year": 2015,
+    "accident_type": "Panel investigation (offshore incident)",
+    "keywords": [
+      "panel",
+      "wt-offshore",
+      "offshore",
+      "investigation"
+    ]
+  }
+}

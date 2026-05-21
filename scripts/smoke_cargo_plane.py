@@ -51,15 +51,18 @@ from pathlib import Path
 # Skill directories use hyphens (kebab-case per the SKILL.md contract), not
 # valid Python module names. Same load pattern as `agents/tests/unit/test_skills.py`.
 _REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_REPO))  # make `from agents.X import ...` work when skill modules pull schemas
+sys.path.insert(
+    0, str(_REPO)
+)  # make `from agents.X import ...` work when skill modules pull schemas
 
 # Route mcp_client HTTP through in-process FastAPI TestClient — same trick as
 # the unit-test conftest. Avoids needing uvicorn servers for the smoke.
 from fastapi.testclient import TestClient  # noqa: E402
+
 from agents.utils import mcp_client  # noqa: E402
-from mcp_servers.sap.backend.main import app as sap_app  # noqa: E402
-from mcp_servers.maximo.backend.main import app as maximo_app  # noqa: E402
 from mcp_servers.fdp.backend.main import app as fdp_app  # noqa: E402
+from mcp_servers.maximo.backend.main import app as maximo_app  # noqa: E402
+from mcp_servers.sap.backend.main import app as sap_app  # noqa: E402
 
 _clients = {
     mcp_client.SAP_MCP_URL: TestClient(sap_app),
@@ -122,63 +125,129 @@ def main() -> int:
 
     # 1) KC bridge
     r = asset_eq.resolve_canonical_asset("Tool X")
-    results.append(_passed("resolve_canonical_asset('Tool X') → TX-001",
-                           r and r.get("canonical_id") == "TX-001",
-                           detail=str(r.get("canonical_id") if r else "None")))
+    results.append(
+        _passed(
+            "resolve_canonical_asset('Tool X') → TX-001",
+            r and r.get("canonical_id") == "TX-001",
+            detail=str(r.get("canonical_id") if r else "None"),
+        )
+    )
 
     # 2) Functional equivalence
     eqs = asset_eq.find_functional_equivalents("TX-001")
     has_tx007 = any(e.get("canonical_id") == "TX-007" for e in eqs)
-    results.append(_passed("find_functional_equivalents('TX-001') includes TX-007",
-                           has_tx007, detail=f"got {len(eqs)} equivalents"))
+    results.append(
+        _passed(
+            "find_functional_equivalents('TX-001') includes TX-007",
+            has_tx007,
+            detail=f"got {len(eqs)} equivalents",
+        )
+    )
+
+    # 2b) TASK-17 — citation attached, points at a real GCS PDF
+    tx007_eq = next((e for e in eqs if e.get("canonical_id") == "TX-007"), {})
+    cite = tx007_eq.get("citation") or {}
+    cite_ok = (cite.get("doc_uri") or "").startswith(
+        "gs://oilfield-services-unstructured/intouch_specs/"
+    )
+    results.append(
+        _passed(
+            "TX-007 equivalence carries an intouch_corpus citation",
+            cite_ok,
+            detail=cite.get("doc_uri", "no citation"),
+        )
+    )
 
     # 3) Customer scoring (no restriction, base ~0.92)
     score = asset_eq.score_equivalence_confidence("TX-001", "TX-007", "gulf-petroleum")
-    results.append(_passed("score_equivalence_confidence ≈ 0.92 (gulf-petroleum, no restriction)",
-                           0.88 < score < 0.95, detail=f"score={score}"))
+    results.append(
+        _passed(
+            "score_equivalence_confidence ≈ 0.92 (gulf-petroleum, no restriction)",
+            0.88 < score < 0.95,
+            detail=f"score={score}",
+        )
+    )
 
     # 4) SAP workforce — real BLS reference field
     wf = ent_sys.query_sap_workforce("permian")
-    wf_ok = (wf.get("crew_count_available", 0) > 0)
-    results.append(_passed("query_sap_workforce('permian') returns crew counts",
-                           wf_ok, detail=f"crew={wf.get('crew_count_available')}"))
+    wf_ok = wf.get("crew_count_available", 0) > 0
+    results.append(
+        _passed(
+            "query_sap_workforce('permian') returns crew counts",
+            wf_ok,
+            detail=f"crew={wf.get('crew_count_available')}",
+        )
+    )
 
     # 5) SAP material — real USPTO patent title
     # query_intouch_specs returns intouch refs; we want to exercise the SAP
     # MCP path. Use the mcp_client directly for one assertion.
     from agents.utils import mcp_client
+
     mm = mcp_client.sap_get_material_master("MAT-67899")
     mm_ok = mm and "drilling" in (mm.get("description") or "").lower()
-    results.append(_passed("sap.get_material_master(MAT-67899) returns real patent title",
-                           mm_ok, detail=str(mm.get("description") if mm else "None")))
+    results.append(
+        _passed(
+            "sap.get_material_master(MAT-67899) returns real patent title",
+            mm_ok,
+            detail=str(mm.get("description") if mm else "None"),
+        )
+    )
 
     # 6) SAP customer — real SEC EDGAR address
     cust = mcp_client.sap_get_customer("0000100004")
     cust_ok = cust and cust.get("ort01", "").upper() == "MIDLAND"
-    results.append(_passed("sap.get_customer(0000100004) returns MIDLAND (real Diamondback addr)",
-                           cust_ok, detail=str(cust.get("ort01") if cust else "None")))
+    results.append(
+        _passed(
+            "sap.get_customer(0000100004) returns MIDLAND (real Diamondback addr)",
+            cust_ok,
+            detail=str(cust.get("ort01") if cust else "None"),
+        )
+    )
 
     # 7) Maximo by region — WPI port snap
     assets = mcp_client.maximo_query_assets_by_region("EQ-12399", "west_africa")
-    has_lagos = any("lagos" in (a.get("location", {}).get("description", "")).lower() for a in assets)
-    results.append(_passed("maximo.query_assets_by_region(EQ-12399, west_africa) → Lagos",
-                           has_lagos, detail=f"got {len(assets)} assets"))
+    has_lagos = any(
+        "lagos" in (a.get("location", {}).get("description", "")).lower() for a in assets
+    )
+    results.append(
+        _passed(
+            "maximo.query_assets_by_region(EQ-12399, west_africa) → Lagos",
+            has_lagos,
+            detail=f"got {len(assets)} assets",
+        )
+    )
 
     # 8) Maximo open WOs — BSEE-anchored
     wos = mcp_client.maximo_get_open_workorders("TX-007-LGS-001", "LAGOS")
     bsee_ok = any(w.get("est_lab_hrs") for w in wos)
-    results.append(_passed("maximo.get_open_workorders(TX-007-LGS-001, LAGOS) returns recert WO",
-                           bsee_ok, detail=f"got {len(wos)} WOs"))
+    results.append(
+        _passed(
+            "maximo.get_open_workorders(TX-007-LGS-001, LAGOS) returns recert WO",
+            bsee_ok,
+            detail=f"got {len(wos)} WOs",
+        )
+    )
 
     # 9) FDP restrictions
     restrictions = mcp_client.fdp_list_customer_restrictions("north-atlantic-resources")
-    results.append(_passed("fdp.list_customer_restrictions(north-atlantic-resources) → 1+ row",
-                           len(restrictions) >= 1, detail=f"{len(restrictions)} restrictions"))
+    results.append(
+        _passed(
+            "fdp.list_customer_restrictions(north-atlantic-resources) → 1+ row",
+            len(restrictions) >= 1,
+            detail=f"{len(restrictions)} restrictions",
+        )
+    )
 
     # 10) Sourcing identify_blockers — exercise the migrated function
     blockers = sourcing.identify_blockers("TX-007", "gulf-petroleum", "TX-007-LGS-001")
-    results.append(_passed("sourcing.identify_blockers(TX-007, gulf-petroleum, TX-007-LGS-001) returns list",
-                           isinstance(blockers, list), detail=f"{len(blockers)} blockers"))
+    results.append(
+        _passed(
+            "sourcing.identify_blockers(TX-007, gulf-petroleum, TX-007-LGS-001) returns list",
+            isinstance(blockers, list),
+            detail=f"{len(blockers)} blockers",
+        )
+    )
 
     print()
     passed = sum(results)

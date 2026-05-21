@@ -83,6 +83,10 @@ class SourcingOption(BaseModel):
     customer_compatibility: bool
     workforce_available: bool
     blockers: list[str] = Field(default_factory=list)
+    # TASK-17: real-doc citations grounding this option (InTouch spec for
+    # the asset class, BSEE incident for safety reference, etc.). The
+    # canvas renders these as click-through "View source" chips.
+    citations: list[Citation] = Field(default_factory=list)
 
 
 class SourcingPlan(BaseModel):
@@ -153,6 +157,8 @@ class EquivalentAssetCandidate(BaseModel):
     rationale_source: str  # spec / InTouch reference grounding the choice
     rationale_summary: str  # 1-2 sentence justification
     equipment_instance_id: str | None = None  # if the LLM identified a concrete instance
+    # TASK-17: real-doc citations the LLM grounded the equivalence in.
+    citations: list[Citation] = Field(default_factory=list)
 
 
 # ============================================================================
@@ -184,6 +190,9 @@ class PlanEvaluation(BaseModel):
     criterion_scores: list[CriterionScore]
     findings: list[str] = Field(default_factory=list)
     revision_recommended: bool = False
+    # TASK-17: BSEE incident reports + MCC contract citations that grounded
+    # criterion scores (especially safety_compliance + regulatory_compliance).
+    citations: list[Citation] = Field(default_factory=list)
 
 
 # ============================================================================
@@ -198,6 +207,9 @@ class ProcurementApproval(BaseModel):
     approved: bool
     blockers: list[str] = Field(default_factory=list)
     audit_trail_url: str | None = None
+    # TASK-17: real MSA citations grounding the procurement decision
+    # (master service agreement clauses, indemnity, insurance limits, etc.).
+    citations: list[Citation] = Field(default_factory=list)
 
 
 # ============================================================================
@@ -263,6 +275,33 @@ class CanvasEventEnvelope(BaseModel):
     request_id: str
     timestamp: datetime
     payload: dict
+
+
+# ============================================================================
+# Document citations (TASK-17 — unstructured pillar)
+#
+# Skill tools attach `list[Citation]` to their structured outputs so the agent
+# (and the canvas) can surface "agent grounded in this real PDF" alongside
+# every decision. The GCS URI points at the actual PDF in the unstructured
+# corpus; the canvas can render a click-through.
+# ============================================================================
+
+
+class Citation(BaseModel):
+    """One reference to a real document in the unstructured corpus.
+
+    Corpus values: "bsee" (incident reports), "mcc" (SEC EDGAR contracts),
+    "intouch" (USPTO/Equinor/OSTI technical docs). `doc_uri` is a GCS URI
+    like `gs://oilfield-services-unstructured/intouch_specs/uspto-...pdf`.
+    """
+
+    corpus: str
+    doc_id: str
+    doc_uri: str | None = None  # gs://... GCS URI
+    title: str
+    publisher: str = ""
+    year: int = 0
+    snippet: str | None = None  # Optional Vertex AI Search-derived passage
 
 
 # ============================================================================

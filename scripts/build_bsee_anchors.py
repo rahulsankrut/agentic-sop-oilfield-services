@@ -43,7 +43,9 @@ BSEE_ZIP_URL = "https://www.data.bsee.gov/Other/Files/IncInvRawData.zip"
 
 def _fetch_bsee_incidents() -> list[dict]:
     log.info("downloading BSEE Incident Investigations raw data from %s", BSEE_ZIP_URL)
-    req = urllib.request.Request(BSEE_ZIP_URL, headers={"User-Agent": "agentic-sop-oilfield-services rahulsankrut@gmail.com"})
+    req = urllib.request.Request(
+        BSEE_ZIP_URL, headers={"User-Agent": "agentic-sop-oilfield-services rahulsankrut@gmail.com"}
+    )
     with urllib.request.urlopen(req, timeout=60) as resp:
         zipped = resp.read()
     log.info("downloaded %.1f KiB", len(zipped) / 1024)
@@ -104,9 +106,12 @@ def main() -> int:
             "accident_type": pick["ACCIDENT_TYPE"].strip()[:200],
             "panel_district": pick["PANEL_DISTRICT"].strip(),
         }
-        log.info("  TX-007-LGS-001 → BSEE lease %s on %s (%s)",
-                 pick["LEASE_NUMBER"].strip(), _to_iso_date(pick["DATE_OCCURRED"]),
-                 pick["ACCIDENT_TYPE"][:60])
+        log.info(
+            "  TX-007-LGS-001 → BSEE lease %s on %s (%s)",
+            pick["LEASE_NUMBER"].strip(),
+            _to_iso_date(pick["DATE_OCCURRED"]),
+            pick["ACCIDENT_TYPE"][:60],
+        )
 
     # 2) Any other "in_repair" asset — REPAIR workflow after a crane/lift event.
     pick = _pick(rows, ["crane", "lifting"])
@@ -120,9 +125,12 @@ def main() -> int:
             "accident_type": pick["ACCIDENT_TYPE"].strip()[:200],
             "panel_district": pick["PANEL_DISTRICT"].strip(),
         }
-        log.info("  __repair_default__ → BSEE lease %s on %s (%s)",
-                 pick["LEASE_NUMBER"].strip(), _to_iso_date(pick["DATE_OCCURRED"]),
-                 pick["ACCIDENT_TYPE"][:60])
+        log.info(
+            "  __repair_default__ → BSEE lease %s on %s (%s)",
+            pick["LEASE_NUMBER"].strip(),
+            _to_iso_date(pick["DATE_OCCURRED"]),
+            pick["ACCIDENT_TYPE"][:60],
+        )
 
     ANCHOR_OUT.parent.mkdir(parents=True, exist_ok=True)
     with ANCHOR_OUT.open("w") as f:

@@ -30,7 +30,9 @@ import sys
 import urllib.request
 from pathlib import Path
 
-ANCHOR_OUT = Path(__file__).resolve().parent.parent / "data" / "anchors" / "sec_edgar_customers.json"
+ANCHOR_OUT = (
+    Path(__file__).resolve().parent.parent / "data" / "anchors" / "sec_edgar_customers.json"
+)
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
@@ -44,31 +46,33 @@ log = logging.getLogger(__name__)
 CUSTOMER_TO_CIK: dict[str, tuple[str, str, str]] = {
     # gulf-petroleum (West Africa + Gulf of Mexico)
     #   → Murphy Oil Corp (NYSE:MUR) — GoM + historical West Africa
-    "gulf-petroleum":           ("0000717423", "US", "Murphy Oil — GoM + Eagle Ford + historical West Africa"),
-
+    "gulf-petroleum": (
+        "0000717423",
+        "US",
+        "Murphy Oil — GoM + Eagle Ford + historical West Africa",
+    ),
     # north-atlantic-resources (North Sea)
     #   → Hess Corp (NYSE:HES) — Bakken/GoM + historical North Sea
-    "north-atlantic-resources": ("0000004447", "US", "Hess Corp — Bakken/GoM + historical North Sea"),
-
+    "north-atlantic-resources": (
+        "0000004447",
+        "US",
+        "Hess Corp — Bakken/GoM + historical North Sea",
+    ),
     # bohai-energy (Bohai + South China Sea)
     #   → CNOOC Limited (NYSE:CEO; delisted 2021 but filings remain)
-    "bohai-energy":             ("0001095595", "HK", "CNOOC Limited — Bohai + South China Sea offshore"),
-
+    "bohai-energy": ("0001095595", "HK", "CNOOC Limited — Bohai + South China Sea offshore"),
     # permian-fields (Permian + Midland)
     #   → Diamondback Energy (NASDAQ:FANG) — pure-play Permian
-    "permian-fields":           ("0001539838", "US", "Diamondback Energy — pure-play Permian"),
-
+    "permian-fields": ("0001539838", "US", "Diamondback Energy — pure-play Permian"),
     # north-shelf-energy (North Sea + Barents Sea)
     #   → Equinor ASA (NYSE:EQNR) — Norwegian state operator
-    "north-shelf-energy":       ("0001140625", "NO", "Equinor ASA — North Sea + Barents Sea"),
-
+    "north-shelf-energy": ("0001140625", "NO", "Equinor ASA — North Sea + Barents Sea"),
     # deepwater-ventures (GoM + West Africa + Brazil)
     #   → Petrobras (NYSE:PBR) — Brazilian deepwater operator
-    "deepwater-ventures":       ("0001119639", "BR", "Petrobras — Brazil pre-salt + GoM + W. Africa"),
-
+    "deepwater-ventures": ("0001119639", "BR", "Petrobras — Brazil pre-salt + GoM + W. Africa"),
     # asia-pacific-ops (SCS + Timor + Australia NW Shelf)
     #   → Woodside Energy Group (NYSE:WDS) — Australia NW Shelf operator
-    "asia-pacific-ops":         ("0000844551", "AU", "Woodside Energy — Australia NW Shelf + Timor"),
+    "asia-pacific-ops": ("0000844551", "AU", "Woodside Energy — Australia NW Shelf + Timor"),
 }
 
 # SEC requires a descriptive User-Agent identifying the requester.
@@ -119,9 +123,14 @@ def main() -> int:
             "fiscal_year_end": sub.get("fiscalYearEnd"),
             "justification": why,
         }
-        log.info("  %-30s → %s (CIK %s, ISO=%s) %s",
-                 customer_id, anchors[customer_id]["name"], cik, iso_country,
-                 anchors[customer_id]["sic_description"] or "")
+        log.info(
+            "  %-30s → %s (CIK %s, ISO=%s) %s",
+            customer_id,
+            anchors[customer_id]["name"],
+            cik,
+            iso_country,
+            anchors[customer_id]["sic_description"] or "",
+        )
 
     ANCHOR_OUT.parent.mkdir(parents=True, exist_ok=True)
     with ANCHOR_OUT.open("w") as f:

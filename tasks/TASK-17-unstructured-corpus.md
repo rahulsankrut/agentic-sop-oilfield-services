@@ -1,5 +1,8 @@
 # TASK-17: Unstructured data — RAG corpora for incident reports, contracts, specs
 
+> **Status (2026-05-20):** Phase 1 ✅ shipped. Phase 2 prep ✅ in `scripts/setup_vertex_ai_search.py` (script ready; run when deploying RAG). All 37 PDFs across the 3 corpora are uploaded to `gs://oilfield-services-unstructured/` with anchor manifests committed; the skill tools attach real-GCS citations to their structured outputs.
+
+
 **Prerequisites:** TASK-16 (backend migration to BigQuery + custom MCP servers) complete. Skill tools already structured against real SAP/Maximo extracts; this task adds the unstructured pillar via Vertex AI Search + GCS + KC.
 
 **Stream:** Backend (corpus ingest + Vertex AI Search data store + KC entries linking structured assets to docs) + skill-tool RAG calls.

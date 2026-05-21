@@ -97,10 +97,7 @@ class AgentIdentityBinding:
         return f"{self.agent_slug}-identity"
 
     def identity_resource_path(self) -> str:
-        return (
-            f"projects/{PROJECT}/locations/{LOCATION}/agentIdentities/"
-            f"{self.identity_id()}"
-        )
+        return f"projects/{PROJECT}/locations/{LOCATION}/agentIdentities/{self.identity_id()}"
 
     def to_payload(self) -> dict[str, Any]:
         """Build the REST request body for create/update.
@@ -222,9 +219,7 @@ def _identity_request(
         return None
 
     with httpx.Client(timeout=30.0) as client:
-        return client.request(
-            method, url, headers=headers, params=params, json=json_body
-        )
+        return client.request(method, url, headers=headers, params=params, json=json_body)
 
 
 def _gcloud_fallback(binding: AgentIdentityBinding) -> None:

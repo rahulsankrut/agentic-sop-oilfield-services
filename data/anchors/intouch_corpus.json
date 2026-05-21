@@ -1,0 +1,207 @@
+{
+  "TX-001": {
+    "gcs_uri": "gs://oilfield-services-unstructured/intouch_specs/uspto-10006249-B2.pdf",
+    "pdf_filename": "uspto-10006249-B2.pdf",
+    "title": "Inverted wellbore drilling motor",
+    "source": "uspto",
+    "publication_number": "US-10006249-B2",
+    "assignee_or_publisher": "SCHLUMBERGER TECHNOLOGY CORP",
+    "year": 2015,
+    "applies_to_canonical_ids": [
+      "TX-001",
+      "TX-007"
+    ],
+    "source_url": "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/10006249",
+    "size_bytes": 694402
+  },
+  "DM-805": {
+    "gcs_uri": "gs://oilfield-services-unstructured/intouch_specs/uspto-10250103-B2.pdf",
+    "pdf_filename": "uspto-10250103-B2.pdf",
+    "title": "Electricity generation within a downhole drilling motor",
+    "source": "uspto",
+    "publication_number": "US-10250103-B2",
+    "assignee_or_publisher": "HALLIBURTON ENERGY SERVICES INC",
+    "year": 2018,
+    "applies_to_canonical_ids": [
+      "DM-805",
+      "DM-810"
+    ],
+    "source_url": "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/10250103",
+    "size_bytes": 616702
+  },
+  "MWD-300": {
+    "gcs_uri": "gs://oilfield-services-unstructured/intouch_specs/uspto-11401752-B2.pdf",
+    "pdf_filename": "uspto-11401752-B2.pdf",
+    "title": "Ruggedized centralizer for sonde-based measurement while drilling and logging while drilling tools",
+    "source": "uspto",
+    "publication_number": "US-11401752-B2",
+    "assignee_or_publisher": "HALLIBURTON ENERGY SERVICES INC",
+    "year": 2018,
+    "applies_to_canonical_ids": [
+      "MWD-300",
+      "MWD-310"
+    ],
+    "source_url": "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/11401752",
+    "size_bytes": 569882
+  },
+  "LWD-420": {
+    "gcs_uri": "gs://oilfield-services-unstructured/intouch_specs/uspto-10975690-B2.pdf",
+    "pdf_filename": "uspto-10975690-B2.pdf",
+    "title": "Distributed remote logging",
+    "source": "uspto",
+    "publication_number": "US-10975690-B2",
+    "assignee_or_publisher": "BAKER HUGHES A GE CO LLC",
+    "year": 2018,
+    "applies_to_canonical_ids": [
+      "LWD-420",
+      "BHA-DRL-3"
+    ],
+    "source_url": "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/10975690",
+    "size_bytes": 2055158
+  },
+  "WIRE-100": {
+    "gcs_uri": "gs://oilfield-services-unstructured/intouch_specs/uspto-10036212-B2.pdf",
+    "pdf_filename": "uspto-10036212-B2.pdf",
+    "title": "Rope socket assembly and wireline logging heads including same",
+    "source": "uspto",
+    "publication_number": "US-10036212-B2",
+    "assignee_or_publisher": "SCHLUMBERGER TECHNOLOGY CORP",
+    "year": 2016,
+    "applies_to_canonical_ids": [
+      "WIRE-100",
+      "WIRE-120"
+    ],
+    "source_url": "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/10036212",
+    "size_bytes": 868316
+  },
+  "CMP-500": {
+    "gcs_uri": "gs://oilfield-services-unstructured/intouch_specs/uspto-10151164-B2.pdf",
+    "pdf_filename": "uspto-10151164-B2.pdf",
+    "title": "Single-trip casing cutting and bridge plug setting",
+    "source": "uspto",
+    "publication_number": "US-10151164-B2",
+    "assignee_or_publisher": "SCHLUMBERGER TECHNOLOGY CORP",
+    "year": 2015,
+    "applies_to_canonical_ids": [
+      "CMP-500",
+      "CMP-510"
+    ],
+    "source_url": "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/10151164",
+    "size_bytes": 2309482
+  },
+  "SAFE-VAL-1": {
+    "gcs_uri": "gs://oilfield-services-unstructured/intouch_specs/uspto-9637998-B2.pdf",
+    "pdf_filename": "uspto-9637998-B2.pdf",
+    "title": "Subsea safety valve system",
+    "source": "uspto",
+    "publication_number": "US-9637998-B2",
+    "assignee_or_publisher": "SCHLUMBERGER TECHNOLOGY CORP",
+    "year": 2015,
+    "applies_to_canonical_ids": [
+      "SAFE-VAL-1",
+      "SAFE-VAL-2"
+    ],
+    "source_url": "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/9637998",
+    "size_bytes": 641776
+  },
+  "ESP-450": {
+    "gcs_uri": "gs://oilfield-services-unstructured/intouch_specs/uspto-11746645-B2.pdf",
+    "pdf_filename": "uspto-11746645-B2.pdf",
+    "title": "System and method for reservoir management using electric submersible pumps as a virtual sensor",
+    "source": "uspto",
+    "publication_number": "US-11746645-B2",
+    "assignee_or_publisher": "BAKER HUGHES ESP INC",
+    "year": 2015,
+    "applies_to_canonical_ids": [
+      "ESP-450",
+      "ESP-460",
+      "PCP-700"
+    ],
+    "source_url": "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/11746645",
+    "size_bytes": 727594
+  },
+  "PERF-GUN-2": {
+    "gcs_uri": "gs://oilfield-services-unstructured/intouch_specs/uspto-11215040-B2.pdf",
+    "pdf_filename": "uspto-11215040-B2.pdf",
+    "title": "System and methodology for minimizing perforating gun shock loads",
+    "source": "uspto",
+    "publication_number": "US-11215040-B2",
+    "assignee_or_publisher": "SCHLUMBERGER TECHNOLOGY CORP",
+    "year": 2016,
+    "applies_to_canonical_ids": [
+      "PERF-GUN-2",
+      "PERF-GUN-4"
+    ],
+    "source_url": "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/11215040",
+    "size_bytes": 634105
+  },
+  "FBG-DAS": {
+    "gcs_uri": "gs://oilfield-services-unstructured/intouch_specs/uspto-2024352852-A1.pdf",
+    "pdf_filename": "uspto-2024352852-A1.pdf",
+    "title": "Systems and methods for modeling displacement spectrums from distributed acoustic sensing of strain measurements for moment magnitude estimation",
+    "source": "uspto",
+    "publication_number": "US-2024352852-A1",
+    "assignee_or_publisher": "SCHLUMBERGER TECHNOLOGY CORP",
+    "year": 2024,
+    "applies_to_canonical_ids": [
+      "FBG-DAS",
+      "FBG-DTS"
+    ],
+    "source_url": "https://patentimages.storage.googleapis.com/f1/09/91/44df68d1ed91b1/US20240352852A1.pdf",
+    "size_bytes": 1261415
+  },
+  "equinor-open-data-user-guide": {
+    "gcs_uri": "gs://oilfield-services-unstructured/intouch_specs/equinor-open-data-user-guide.pdf",
+    "pdf_filename": "equinor-open-data-user-guide.pdf",
+    "title": "Equinor Open Data User Guide (Volve, Northern Lights, etc.)",
+    "source": "equinor",
+    "assignee_or_publisher": "Equinor ASA",
+    "year": 2018,
+    "applies_to_canonical_ids": [
+      "TX-001",
+      "TX-007",
+      "WIRE-100",
+      "WIRE-120",
+      "MWD-300",
+      "LWD-420"
+    ],
+    "source_url": "https://equinoropendata.blob.core.windows.net/userguides/Equinor%20open%20data%20-%20User%20Guide.pdf",
+    "size_bytes": 822003
+  },
+  "osti-2584141-utgom2-methods": {
+    "gcs_uri": "gs://oilfield-services-unstructured/intouch_specs/osti-2584141-utgom2-methods.pdf",
+    "pdf_filename": "osti-2584141-utgom2-methods.pdf",
+    "title": "Expedition UT-GOM2-2 Methods (subsea coring + wireline log analysis)",
+    "source": "osti",
+    "osti_id": 2584141,
+    "assignee_or_publisher": "U.S. Department of Energy / Univ. of Texas",
+    "year": 2024,
+    "applies_to_canonical_ids": [
+      "WIRE-100",
+      "WIRE-120",
+      "LWD-420",
+      "MWD-310",
+      "FBG-DAS",
+      "FBG-DTS"
+    ],
+    "source_url": "https://www.osti.gov/servlets/purl/2584141",
+    "size_bytes": 10569240
+  },
+  "osti-3023057-dynamometer": {
+    "gcs_uri": "gs://oilfield-services-unstructured/intouch_specs/osti-3023057-dynamometer.pdf",
+    "pdf_filename": "osti-3023057-dynamometer.pdf",
+    "title": "High-Temperature Dynamometer Test Stand Development (downhole motor testing)",
+    "source": "osti",
+    "osti_id": 3023057,
+    "assignee_or_publisher": "U.S. Department of Energy",
+    "year": 2024,
+    "applies_to_canonical_ids": [
+      "TX-001",
+      "TX-007",
+      "DM-805",
+      "DM-810"
+    ],
+    "source_url": "https://www.osti.gov/servlets/purl/3023057",
+    "size_bytes": 1641257
+  }
+}
