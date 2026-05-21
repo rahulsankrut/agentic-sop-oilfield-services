@@ -63,7 +63,20 @@ coverage:
 # Local pre-commit gate. Runs everything that does NOT require GCP creds or
 # infra: ruff lint + format check, then unit tests with coverage in one pass.
 # Use before pushing.
-verify: lint coverage
+verify: lint coverage verify-no-json-reads
+
+# TASK-16 Step 13 — static check that no agent production module reads
+# data/*.json directly (every path now goes through MCP / BQ).
+verify-no-json-reads:
+	$(DEPLOY_PYTHON) scripts/verify_no_json_reads.py
+
+# TASK-16 Step 13 — programmatic cargo-plane smoke (no LLM in path).
+# Exercises every migrated skill tool with the Maria scenario inputs and
+# asserts real data flows from BQ through the MCP backends. Requires the
+# BQ datasets to be populated (Steps 1-4d).
+.PHONY: smoke-cargo-plane verify-no-json-reads
+smoke-cargo-plane:
+	$(DEPLOY_PYTHON) scripts/smoke_cargo_plane.py
 
 lint:
 	$(DEPLOY_PYTHON) -m ruff check agents/
