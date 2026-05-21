@@ -1,0 +1,94 @@
+{
+  "eval_set_id": "procurement_approval_agent_evalset_v1",
+  "name": "Procurement Approval — eval set",
+  "description": "Eval set for the Procurement Approval Agent. Covers an under-threshold plan ($162K — should auto-approve), an over-threshold plan ($600K — should reject with a budget blocker), and a malformed/missing-field plan (degradation case). Live evals run against PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME via :streamQuery.",
+  "eval_cases": [
+    {
+      "eval_id": "under_threshold_auto_approves",
+      "conversation": [
+        {
+          "invocation_id": "under_threshold_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Please review this SourcingPlan for procurement approval. Authorization tier: standard.\n\n{\"request_id\": \"plan-under-001\", \"requested_asset\": \"Tool X\", \"target_location\": {\"latitude\": -8.83, \"longitude\": 13.23, \"label\": \"Luanda, Angola\"}, \"deadline\": \"2026-05-25T00:00:00Z\", \"primary_option\": {\"asset\": {\"canonical_id\": \"TX-007\", \"canonical_label\": \"Tool X-V7\"}, \"source_location\": {\"latitude\": 6.5, \"longitude\": 3.4, \"label\": \"Lagos, Nigeria\"}, \"destination\": {\"latitude\": -8.83, \"longitude\": 13.23, \"label\": \"Luanda, Angola\"}, \"transit_mode\": \"sea_freight\", \"estimated_cost_usd\": 162000, \"transit_hours\": 72.0, \"certification_hours\": 4, \"customer_compatibility\": true, \"workforce_available\": true, \"blockers\": []}, \"avoided_cost_usd\": 380000}"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"request_id\": \"plan-under-001\", \"approved\": true, \"blockers\": []}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "check_budget_threshold", "args": {}},
+              {"name": "check_certification_chain", "args": {}},
+              {"name": "check_regulatory_clearance", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "over_threshold_rejects",
+      "conversation": [
+        {
+          "invocation_id": "over_threshold_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Please review this SourcingPlan for procurement approval. Authorization tier: standard.\n\n{\"request_id\": \"plan-over-001\", \"requested_asset\": \"Tool X\", \"target_location\": {\"latitude\": -8.83, \"longitude\": 13.23, \"label\": \"Luanda, Angola\"}, \"deadline\": \"2026-05-25T00:00:00Z\", \"primary_option\": {\"asset\": {\"canonical_id\": \"TX-007\", \"canonical_label\": \"Tool X-V7\"}, \"source_location\": {\"latitude\": -12.46, \"longitude\": 130.85, \"label\": \"Darwin, Australia\"}, \"destination\": {\"latitude\": -8.83, \"longitude\": 13.23, \"label\": \"Luanda, Angola\"}, \"transit_mode\": \"cargo_charter\", \"estimated_cost_usd\": 600000, \"transit_hours\": 48.0, \"certification_hours\": 4, \"customer_compatibility\": true, \"workforce_available\": true, \"blockers\": []}, \"avoided_cost_usd\": 0}"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"request_id\": \"plan-over-001\", \"approved\": false, \"blockers\": [\"Estimated cost $600,000 exceeds the $500,000 standard-tier auto-approval threshold; route to human procurement review.\"]}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "check_budget_threshold", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "edge_malformed_plan_degrades_gracefully",
+      "conversation": [
+        {
+          "invocation_id": "edge_malformed_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Please review this SourcingPlan for procurement approval. Authorization tier: standard.\n\n{\"request_id\": \"plan-malformed-001\", \"requested_asset\": \"Tool X\"}"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"request_id\": \"plan-malformed-001\", \"approved\": false, \"blockers\": [\"SourcingPlan missing required fields (primary_option, deadline) — cannot evaluate procurement readiness.\"]}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": []
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "eval_set_id": "capacity_planning_agent_evalset_v1",
+  "name": "Capacity Planning — eval set",
+  "description": "Eval set for the Capacity Planning Agent (Persona 2 / Tomas). The agent reads probabilistic start-date distributions for a basin and returns a risk-calibrated buffer recommendation. Returns a BufferOptimization with recommended_buffer_days >= 0 and projected_on_time_rate ∈ [0, 1]. Live evals run against CAPACITY_PLANNING_AGENT_RESOURCE_NAME via :streamQuery.",
+  "eval_cases": [
+    {
+      "eval_id": "happy_path_west_africa_risk_05",
+      "conversation": [
+        {
+          "invocation_id": "west_africa_risk_05_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "What buffer do I need for the west_africa basin with risk tolerance 0.5?"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"request_id\": \"buf-wa-001\", \"basin\": \"west_africa\", \"risk_tolerance\": 0.5, \"current_buffer_days\": 14.0, \"recommended_buffer_days\": 9.5, \"projected_on_time_rate\": 0.78, \"fleet_utilization_uplift_pct\": 6.2, \"deferred_capex_usd\": 1200000}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "get_start_date_distribution", "args": {"basin": "west_africa"}},
+              {"name": "compute_optimal_buffer", "args": {}},
+              {"name": "compute_fleet_utilization_impact", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_path_permian_strict_risk",
+      "conversation": [
+        {
+          "invocation_id": "permian_strict_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Set Q3 fleet buffer for the permian basin with strict risk tolerance (0.85)."
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"request_id\": \"buf-pm-001\", \"basin\": \"permian\", \"risk_tolerance\": 0.85, \"current_buffer_days\": 14.0, \"recommended_buffer_days\": 17.0, \"projected_on_time_rate\": 0.93, \"fleet_utilization_uplift_pct\": -2.5, \"deferred_capex_usd\": 0}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "get_start_date_distribution", "args": {"basin": "permian"}},
+              {"name": "compute_optimal_buffer", "args": {}},
+              {"name": "compute_fleet_utilization_impact", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "edge_basin_without_wo_history",
+      "conversation": [
+        {
+          "invocation_id": "basin_no_history_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "What buffer do I need for the imaginary_basin with risk tolerance 0.65?"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"request_id\": \"buf-edge-001\", \"basin\": \"imaginary_basin\", \"risk_tolerance\": 0.65, \"current_buffer_days\": 14.0, \"recommended_buffer_days\": 14.0, \"projected_on_time_rate\": 0.5, \"fleet_utilization_uplift_pct\": 0.0, \"deferred_capex_usd\": 0}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "get_start_date_distribution", "args": {"basin": "imaginary_basin"}}
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

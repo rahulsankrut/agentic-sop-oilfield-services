@@ -15,6 +15,8 @@
 .PHONY: setup-memory-bank seed-demo-sessions reset-and-seed
 .PHONY: bq-create-tables
 .PHONY: use-skin
+.PHONY: evals evals-orchestrator evals-procurement evals-forecast
+.PHONY: evals-capacity evals-plan-evaluator
 .PHONY: clean
 
 help:
@@ -42,6 +44,12 @@ help:
 	@echo "  demo-health                    Check endpoints (TASK-13)"
 	@echo "  demo-preflight                 Run pre-demo verification suite (TASK-12)"
 	@echo "  use-skin SKIN=<slug>           Compile a customer skin into the canvas (TASK-13)"
+	@echo "  evals                          Run all agent eval suites (fast layer; add EVAL_FLAGS=--run-live-evals for live)"
+	@echo "  evals-orchestrator             Run Orchestrator eval suite"
+	@echo "  evals-procurement              Run Procurement Approval eval suite"
+	@echo "  evals-forecast                 Run Forecast Review eval suite"
+	@echo "  evals-capacity                 Run Capacity Planning eval suite"
+	@echo "  evals-plan-evaluator           Run Plan Evaluator eval suite"
 	@echo "  clean                          Remove local build artifacts (keeps venv/)"
 
 setup:
@@ -195,6 +203,43 @@ demo-health:
 # v1.1. Exits 1 only on real FAILs.
 demo-preflight:
 	$(DEPLOY_PYTHON) scripts/demo_preflight.py
+
+# ---------------------------------------------------------------------------
+# Agent evals (TASK-EVALS)
+# ---------------------------------------------------------------------------
+#
+# Per-agent eval suites live under agents/<agent>/evals/. Two layers:
+#   - Fast (default): schema + evalset validity. <1s, $0, safe for CI.
+#   - Live (EVAL_FLAGS=--run-live-evals): drives the deployed Reasoning Engine
+#     via :streamQuery. Requires ADC + spends Gemini tokens.
+#
+# Run with the deploy venv (Python 3.10) — agents/utils/eval_helpers.py
+# imports vertexai for the live layer. See docs/evals.md for full details.
+#
+# Examples:
+#   make evals                                    # fast layer, all agents
+#   make evals EVAL_FLAGS=--run-live-evals        # live layer, all agents
+#   make evals-orchestrator                       # fast, Orchestrator only
+#   make evals-orchestrator EVAL_FLAGS=--run-live-evals
+
+EVAL_FLAGS ?=
+
+evals: evals-orchestrator evals-procurement evals-forecast evals-capacity evals-plan-evaluator
+
+evals-orchestrator:
+	$(DEPLOY_PYTHON) -m pytest agents/orchestrator_agent/evals/ $(EVAL_FLAGS)
+
+evals-procurement:
+	$(DEPLOY_PYTHON) -m pytest agents/procurement_approval_agent/evals/ $(EVAL_FLAGS)
+
+evals-forecast:
+	$(DEPLOY_PYTHON) -m pytest agents/forecast_review_agent/evals/ $(EVAL_FLAGS)
+
+evals-capacity:
+	$(DEPLOY_PYTHON) -m pytest agents/capacity_planning_agent/evals/ $(EVAL_FLAGS)
+
+evals-plan-evaluator:
+	$(DEPLOY_PYTHON) -m pytest agents/orchestrator_agent/plan_evaluator/evals/ $(EVAL_FLAGS)
 
 clean:
 	rm -rf __pycache__ .pytest_cache .ruff_cache .mypy_cache build dist

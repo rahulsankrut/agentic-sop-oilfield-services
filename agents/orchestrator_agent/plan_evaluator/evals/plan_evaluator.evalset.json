@@ -1,0 +1,55 @@
+{
+  "eval_set_id": "plan_evaluator_evalset_v1",
+  "name": "Plan Evaluator — eval set",
+  "description": "Eval set for the bundled Plan Evaluator sub-agent. The Plan Evaluator is invoked in-process by the Capacity Orchestrator (no standalone deploy — see ADR-0003), so live evals exercise it via the Orchestrator's :streamQuery and assert that the final SourcingPlan came back at all (which means the Evaluator scored it >= the 0.85 threshold). Offline assertions check the 7-criterion weight scheme and PlanEvaluation schema conformance.",
+  "eval_cases": [
+    {
+      "eval_id": "happy_path_good_plan_scores_above_threshold",
+      "conversation": [
+        {
+          "invocation_id": "good_plan_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "I need a Tool X variant on site in Luanda, Angola by Friday. Customer: Gulf Petroleum. Authorization tier: standard. What are my options?"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"request_id\": \"plan-good-001\", \"overall_score\": 0.91, \"criterion_scores\": [{\"criterion\": \"safety_compliance\", \"score\": 0.95, \"severity\": \"low\", \"rationale\": \"Lagos source is BSEE-compliant.\"}, {\"criterion\": \"customer_compatibility\", \"score\": 0.95, \"severity\": \"low\", \"rationale\": \"Gulf Petroleum FDP accepts V7 substitution.\"}, {\"criterion\": \"logistics_feasibility\", \"score\": 0.88, \"severity\": \"low\", \"rationale\": \"Lagos→Luanda 50km is well within transit budget.\"}, {\"criterion\": \"cost_optimality\", \"score\": 0.92, \"severity\": \"low\", \"rationale\": \"$380K avoided vs cargo-charter baseline.\"}, {\"criterion\": \"equivalence_confidence\", \"score\": 0.92, \"severity\": \"low\", \"rationale\": \"InTouch §3.2 grounds TX-001 → TX-007 equivalence.\"}, {\"criterion\": \"regulatory_compliance\", \"score\": 0.88, \"severity\": \"low\", \"rationale\": \"Cross-border Lagos→Luanda permits standard.\"}, {\"criterion\": \"schedule_feasibility\", \"score\": 0.85, \"severity\": \"medium\", \"rationale\": \"Friday deadline tight but feasible with recert.\"}], \"findings\": [], \"revision_recommended\": false}"
+              }
+            ],
+            "role": "model"
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "edge_weak_plan_triggers_revision",
+      "conversation": [
+        {
+          "invocation_id": "weak_plan_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "I need a Tool X variant in Luanda by Friday. Customer: unknown shell company. Authorization tier: standard."
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"request_id\": \"plan-weak-001\", \"overall_score\": 0.62, \"criterion_scores\": [{\"criterion\": \"safety_compliance\", \"score\": 0.7, \"severity\": \"medium\", \"rationale\": \"Limited safety history with this customer.\"}, {\"criterion\": \"customer_compatibility\", \"score\": 0.3, \"severity\": \"high\", \"rationale\": \"No FDP config for this customer.\"}, {\"criterion\": \"logistics_feasibility\", \"score\": 0.8, \"severity\": \"low\", \"rationale\": \"Lagos route is feasible.\"}, {\"criterion\": \"cost_optimality\", \"score\": 0.7, \"severity\": \"medium\", \"rationale\": \"Cost reasonable but not optimal.\"}, {\"criterion\": \"equivalence_confidence\", \"score\": 0.6, \"severity\": \"medium\", \"rationale\": \"Equivalence not verified against customer specs.\"}, {\"criterion\": \"regulatory_compliance\", \"score\": 0.7, \"severity\": \"medium\", \"rationale\": \"Cross-border permits feasible.\"}, {\"criterion\": \"schedule_feasibility\", \"score\": 0.75, \"severity\": \"medium\", \"rationale\": \"Deadline achievable.\"}], \"findings\": [\"No FDP configuration on file for the named customer; substitution acceptance unverified.\"], \"revision_recommended\": true}"
+              }
+            ],
+            "role": "model"
+          }
+        }
+      ]
+    }
+  ]
+}

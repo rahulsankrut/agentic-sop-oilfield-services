@@ -1,0 +1,96 @@
+{
+  "eval_set_id": "forecast_review_agent_evalset_v1",
+  "name": "Forecast Review — eval set",
+  "description": "Eval set for the Forecast Review Agent (Persona 1 / David). The agent extracts structured rationale tags from a basin leader's freeform explanation of a forecast override. Returns a ForecastRationale with rationale_tags, freeform_text, and a confidence/significance score. Live evals run against FORECAST_REVIEW_AGENT_RESOURCE_NAME via :streamQuery.",
+  "eval_cases": [
+    {
+      "eval_id": "happy_path_q4_west_africa_override",
+      "conversation": [
+        {
+          "invocation_id": "q4_west_africa_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Q4 forecast review for the west_africa basin. override_id: ovr-wa-q4-001. The ML model projected completions revenue of $48M; I'm overriding to $36M. Reason: rig count has fallen 18% over the past 6 weeks and our largest operator (Gulf Petroleum) just deferred two completions to Q1 2027 due to permit delays."
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"override_id\": \"ovr-wa-q4-001\", \"rationale_tags\": [\"rig_count_decline\", \"operator_delay\"], \"freeform_text\": \"rig count has fallen 18% over the past 6 weeks and our largest operator (Gulf Petroleum) just deferred two completions to Q1 2027 due to permit delays.\", \"confidence\": 0.85}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "extract_rationale_tags", "args": {}},
+              {"name": "compute_override_significance", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "edge_empty_rationale",
+      "conversation": [
+        {
+          "invocation_id": "empty_rationale_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Q4 forecast review for the permian basin. override_id: ovr-pm-q4-002. Original ML forecast: $72M. Override: $65M. Reason: gut feeling, no specific signal."
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"override_id\": \"ovr-pm-q4-002\", \"rationale_tags\": [], \"freeform_text\": \"gut feeling, no specific signal.\", \"confidence\": 0.4}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "extract_rationale_tags", "args": {}},
+              {"name": "compute_override_significance", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "edge_missing_override_id",
+      "conversation": [
+        {
+          "invocation_id": "missing_id_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Forecast review — Q4 west_africa basin override. Rig count dropping fast in Angola; we lost two operators last quarter."
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"override_id\": \"unknown\", \"rationale_tags\": [\"rig_count_decline\", \"operator_delay\"], \"freeform_text\": \"Rig count dropping fast in Angola; we lost two operators last quarter.\", \"confidence\": 0.7}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "extract_rationale_tags", "args": {}}
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

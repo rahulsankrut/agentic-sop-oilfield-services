@@ -1,0 +1,108 @@
+{
+  "eval_set_id": "orchestrator_agent_evalset_v1",
+  "name": "Capacity Orchestrator — eval set",
+  "description": "Eval set for the Capacity Orchestrator Workflow. Covers the cargo-plane happy path (Persona 3 / Maria), an unknown-customer edge case, and a missing-FDP-entry degradation case. Live evals run against ORCHESTRATOR_AGENT_RESOURCE_NAME via :streamQuery. Trajectory expectations encode the Workflow path the graph should take.",
+  "eval_cases": [
+    {
+      "eval_id": "happy_path_cargo_plane",
+      "conversation": [
+        {
+          "invocation_id": "happy_path_cargo_plane_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "I need a Tool X variant on site in Luanda, Angola by Friday. Customer: Gulf Petroleum. Authorization tier: standard. What are my options?"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"requested_asset\": \"Tool X\", \"primary_option\": {\"asset\": {\"canonical_id\": \"TX-007\"}, \"source_location\": {\"label\": \"Lagos, Nigeria\"}, \"transit_mode\": \"sea_freight\", \"customer_compatibility\": true}, \"naive_baseline\": {\"transit_mode\": \"cargo_charter\"}, \"avoided_cost_usd\": 380000}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "parse_capacity_gap_request", "args": {}},
+              {"name": "resolve_canonical_asset_node", "args": {}},
+              {"name": "parallel_system_queries", "args": {}},
+              {"name": "evaluate_direct_availability", "args": {}},
+              {"name": "equivalence_lookup_agent", "args": {}},
+              {"name": "build_equivalent_plan", "args": {}},
+              {"name": "sourcing_logistics_agent", "args": {}},
+              {"name": "plan_evaluator_tool", "args": {}},
+              {"name": "finalize_sourcing_plan", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "edge_unknown_customer",
+      "conversation": [
+        {
+          "invocation_id": "edge_unknown_customer_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "I need a Tool X variant in Luanda by Friday. Customer: Unknown Imaginary Co. Authorization tier: standard."
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"requested_asset\": \"Tool X\", \"primary_option\": {\"asset\": {\"canonical_id\": \"TX-007\"}, \"customer_compatibility\": false}}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "parse_capacity_gap_request", "args": {}},
+              {"name": "resolve_canonical_asset_node", "args": {}},
+              {"name": "parallel_system_queries", "args": {}},
+              {"name": "finalize_sourcing_plan", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "edge_basin_without_history",
+      "conversation": [
+        {
+          "invocation_id": "edge_basin_without_history_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "I need a Tool X variant in the Bohai basin by next Tuesday. Customer: Gulf Petroleum. Authorization tier: standard."
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"requested_asset\": \"Tool X\", \"primary_option\": {\"asset\": {\"canonical_id\": \"TX-001\"}}}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "parse_capacity_gap_request", "args": {}},
+              {"name": "resolve_canonical_asset_node", "args": {}},
+              {"name": "parallel_system_queries", "args": {}},
+              {"name": "finalize_sourcing_plan", "args": {}}
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
