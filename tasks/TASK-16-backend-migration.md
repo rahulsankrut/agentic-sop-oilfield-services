@@ -683,11 +683,11 @@ Done = every JSON file under `data/` (excluding `intouch_docs/` and `start_date_
 
 Three sub-steps (separate confirmations because each touches an external service):
 
-- 4a. `scripts/load_bakerhughes.py` — download the Excel, write `bakerhughes_rig_count.weekly_basin`. Verify with `bq query "SELECT BASIN, MAX(WEEK_ENDING_DATE) FROM bakerhughes_rig_count.weekly_basin GROUP BY BASIN"`.
+- 4a. `scripts/load_bakerhughes.py` — accepts `--file <bh_pivot.xlsb/.xlsx>` (production path) or `--seed-demo` (publicly-known recent values). Baker Hughes' actual URL uses per-week UUIDs that change every Friday and their site is a JS-rendered SPA, so no automated URL discovery is possible. Customer-substitution path: drop their weekly pivot Excel at a known location, scheduler runs the loader. Verify with `bq query "SELECT BASIN, MAX(WEEK_ENDING_DATE) FROM bakerhughes_rig_count.weekly_basin GROUP BY BASIN"`.
 - 4b. `scripts/load_worldport_index.py` — download the CSV, write `worldport_index.ports`. Verify with `bq query "SELECT MAIN_PORT_NAME, LATITUDE, LONGITUDE FROM worldport_index.ports WHERE MAIN_PORT_NAME LIKE '%LAGOS%'"`.
-- 4c. `scripts/load_eia_steo.py` — download the Excel, write `eia_steo.basin_production`. Verify with `bq query "SELECT BASIN, MAX(REPORT_MONTH), SUM(OIL_PROD_BPD) FROM eia_steo.basin_production GROUP BY BASIN"`.
+- 4c. `scripts/load_eia.py` — hits EIA Open Data API v2 (free API key, `EIA_API_KEY` env var) for BOTH (1) STEO monthly basin production into `eia_steo.basin_production` and (2) weekly US rotary rig count series into `eia_steo.weekly_us_rigs` (new table). EIA is the automatable real-data complement to the manual-Excel Baker Hughes loader — EIA itself sources from Baker Hughes but redistributes via stable API. Verify with `bq query "SELECT BASIN, MAX(REPORT_MONTH), SUM(OIL_PROD_BPD) FROM eia_steo.basin_production GROUP BY BASIN"` + `bq query "SELECT MAX(WEEK_ENDING_DATE), MAX(RIG_COUNT) FROM eia_steo.weekly_us_rigs"`.
 
-Done = each table populated with current production data, attribution noted in `docs/architecture.md`.
+Done = each table populated with current production data, attribution noted in `docs/architecture.md`. Customer's EIA_API_KEY (free, instant signup at https://www.eia.gov/opendata/register.php) goes into `.env`.
 
 ### Step 5 — MCP server backend migration: SAP
 
