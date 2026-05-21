@@ -55,46 +55,27 @@ sys.path.insert(
     0, str(_REPO)
 )  # make `from agents.X import ...` work when skill modules pull schemas
 
-# Route mcp_client HTTP through in-process FastAPI TestClient — same trick as
-# the unit-test conftest. Avoids needing uvicorn servers for the smoke.
+# After the McpToolset refactor (2026-05), `agents.utils.mcp_client` is a
+# stub — agents now talk to MCP servers via ADK's McpToolset, not Python
+# helpers. This smoke retains the original data-flow assertions by hitting
+# the backend FastAPI apps directly via TestClient (in-process; no uvicorn).
 from fastapi.testclient import TestClient  # noqa: E402
 
-from agents.utils import mcp_client  # noqa: E402
 from mcp_servers.fdp.backend.main import app as fdp_app  # noqa: E402
 from mcp_servers.maximo.backend.main import app as maximo_app  # noqa: E402
 from mcp_servers.sap.backend.main import app as sap_app  # noqa: E402
 
-_clients = {
-    mcp_client.SAP_MCP_URL: TestClient(sap_app),
-    mcp_client.MAXIMO_MCP_URL: TestClient(maximo_app),
-    mcp_client.FDP_MCP_URL: TestClient(fdp_app),
-}
+_sap = TestClient(sap_app)
+_maximo = TestClient(maximo_app)
+_fdp = TestClient(fdp_app)
 
 
-def _fake_get(base_url, path, params=None):
-    c = _clients.get(base_url)
-    if c is None:
-        return None
-    resp = c.get(path, params=params or {})
+def _get_or_none(client: TestClient, path: str, params: dict | None = None):
+    resp = client.get(path, params=params or {})
     if resp.status_code == 404:
         return None
     resp.raise_for_status()
     return resp.json()
-
-
-def _fake_post(base_url, path, payload=None):
-    c = _clients.get(base_url)
-    if c is None:
-        return None
-    resp = c.post(path, json=payload or {})
-    if resp.status_code == 404:
-        return None
-    resp.raise_for_status()
-    return resp.json()
-
-
-mcp_client._do_get = _fake_get
-mcp_client._do_post = _fake_post
 
 
 def _load(path: str):
@@ -180,12 +161,8 @@ def main() -> int:
     )
 
     # 5) SAP material — real USPTO patent title
-    # query_intouch_specs returns intouch refs; we want to exercise the SAP
-    # MCP path. Use the mcp_client directly for one assertion.
-    from agents.utils import mcp_client
-
-    mm = mcp_client.sap_get_material_master("MAT-67899")
-    mm_ok = mm and "drilling" in (mm.get("description") or "").lower()
+    mm = _get_or_none(_sap, "/sap/v2/material_master/MAT-67899")
+    mm_ok = bool(mm) and "drilling" in (mm.get("description") or "").lower()
     results.append(
         _passed(
             "sap.get_material_master(MAT-67899) returns real patent title",
@@ -195,8 +172,8 @@ def main() -> int:
     )
 
     # 6) SAP customer — real SEC EDGAR address
-    cust = mcp_client.sap_get_customer("0000100004")
-    cust_ok = cust and cust.get("ort01", "").upper() == "MIDLAND"
+    cust = _get_or_none(_sap, "/sap/v2/customer/0000100004")
+    cust_ok = bool(cust) and (cust.get("ort01") or "").upper() == "MIDLAND"
     results.append(
         _passed(
             "sap.get_customer(0000100004) returns MIDLAND (real Diamondback addr)",
@@ -206,9 +183,16 @@ def main() -> int:
     )
 
     # 7) Maximo by region — WPI port snap
-    assets = mcp_client.maximo_query_assets_by_region("EQ-12399", "west_africa")
+    assets = (
+        _get_or_none(
+            _maximo,
+            "/maximo/v2/assets/by_region/EQ-12399",
+            params={"region": "west_africa"},
+        )
+        or []
+    )
     has_lagos = any(
-        "lagos" in (a.get("location", {}).get("description", "")).lower() for a in assets
+        "lagos" in ((a.get("location") or {}).get("description") or "").lower() for a in assets
     )
     results.append(
         _passed(
@@ -219,7 +203,7 @@ def main() -> int:
     )
 
     # 8) Maximo open WOs — BSEE-anchored
-    wos = mcp_client.maximo_get_open_workorders("TX-007-LGS-001", "LAGOS")
+    wos = _get_or_none(_maximo, "/maximo/v2/open_workorders/TX-007-LGS-001/LAGOS") or []
     bsee_ok = any(w.get("est_lab_hrs") for w in wos)
     results.append(
         _passed(
@@ -230,7 +214,9 @@ def main() -> int:
     )
 
     # 9) FDP restrictions
-    restrictions = mcp_client.fdp_list_customer_restrictions("north-atlantic-resources")
+    restrictions = (
+        _get_or_none(_fdp, "/fdp/v2/customer_restrictions/north-atlantic-resources") or []
+    )
     results.append(
         _passed(
             "fdp.list_customer_restrictions(north-atlantic-resources) → 1+ row",
