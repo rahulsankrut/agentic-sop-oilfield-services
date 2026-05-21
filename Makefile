@@ -13,6 +13,7 @@
 .PHONY: deploy-mcp-sap deploy-mcp-maximo deploy-mcp-fdp deploy-mcp-servers
 .PHONY: register-mcp-servers apply-gateway-policies enable-model-armor
 .PHONY: setup-memory-bank seed-demo-sessions reset-and-seed
+.PHONY: bq-create-tables
 .PHONY: clean
 
 help:
@@ -157,6 +158,25 @@ clean:
 	find . -type d -name __pycache__ -not -path "./venv/*" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -not -path "./venv/*" -delete 2>/dev/null || true
 	@echo "Cleaned local caches (venv/ preserved)"
+
+# ---------------------------------------------------------------------------
+# TASK-16 — BigQuery table creation
+# ---------------------------------------------------------------------------
+#
+# Datasets are created out-of-band (Step 1, idempotent `bq mk --dataset`).
+# This target creates the tables + WO_HISTORY view per scripts/bq/ddl/*.sql.
+# Idempotent — every CREATE uses IF NOT EXISTS, the view uses CREATE OR REPLACE.
+
+BQ_PROJECT ?= vertex-ai-demos-468803
+
+bq-create-tables:
+	@echo "Creating tables in $(BQ_PROJECT)..."
+	bq --project_id=$(BQ_PROJECT) query --nouse_legacy_sql < scripts/bq/ddl/sap_extract.sql
+	bq --project_id=$(BQ_PROJECT) query --nouse_legacy_sql < scripts/bq/ddl/maximo_extract.sql
+	bq --project_id=$(BQ_PROJECT) query --nouse_legacy_sql < scripts/bq/ddl/fdp_extract.sql
+	bq --project_id=$(BQ_PROJECT) query --nouse_legacy_sql < scripts/bq/ddl/oilfield_kc.sql
+	bq --project_id=$(BQ_PROJECT) query --nouse_legacy_sql < scripts/bq/ddl/public_datasets.sql
+	@echo "All tables created. Verify with: bq ls $(BQ_PROJECT):sap_extract"
 
 # ---------------------------------------------------------------------------
 # TASK-05 — MCP servers via Agent Registry + Agent Gateway
