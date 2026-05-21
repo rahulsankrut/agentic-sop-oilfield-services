@@ -92,14 +92,29 @@ def route_on_availability(node_input: dict, ctx: Context) -> Event:
 def route_on_evaluation_score(node_input: dict, ctx: Context) -> Event:
     """Route based on the Plan Evaluator's score.
 
-    Expects ``node_input`` to carry:
-    - ``evaluation``: ``PlanEvaluation`` dict from the Plan Evaluator node
-    - ``iteration_count`` (optional): how many revise loops we've taken
+    The plan_evaluator's output IS a ``PlanEvaluation`` dict (no wrapping
+    ``{"evaluation": ...}`` key), so ``node_input["overall_score"]`` is
+    where the score lives at this point in the workflow.
+    ``iteration_count`` lives in ``ctx.state`` because every LLM-output
+    boundary clobbers node_input's wrapping keys.
     """
-    evaluation = node_input.get("evaluation") or {}
-    overall_score = float(evaluation.get("overall_score", 0.0))
-    iteration = int(node_input.get("iteration_count", 0))
+    # Read overall_score from node_input directly (plan_evaluator output),
+    # with a fallback to ctx.state["evaluation"] just in case.
+    evaluation_dict = node_input if isinstance(node_input, dict) else {}
+    if "overall_score" not in evaluation_dict:
+        try:
+            evaluation_dict = ctx.state.get("evaluation", {}) or {}
+        except Exception:
+            evaluation_dict = {}
+    overall_score = float(evaluation_dict.get("overall_score", 0.0))
 
+    # iteration_count lives in ctx.state across the revise loop.
+    try:
+        iteration = int(ctx.state.get("iteration_count", 0) or 0)
+    except Exception:
+        iteration = int(node_input.get("iteration_count", 0) or 0)
+
+    state_delta_extra: dict = {}
     if overall_score >= SCORE_THRESHOLD:
         route = PROCEED
         forward = {**node_input, "accepted_reason": "score_above_threshold"}
@@ -110,7 +125,11 @@ def route_on_evaluation_score(node_input: dict, ctx: Context) -> Event:
         rationale = f"Iteration cap ({MAX_REVISION_ITERATIONS}) reached; accepting plan"
     else:
         route = REVISE
-        forward = {**node_input, "iteration_count": iteration + 1}
+        new_iteration = iteration + 1
+        forward = {**node_input, "iteration_count": new_iteration}
+        # Persist iteration_count into ctx.state via the Event's state
+        # delta — the next plan_evaluator invocation reads it from there.
+        state_delta_extra["iteration_count"] = new_iteration
         rationale = f"Score {overall_score:.2f} below threshold; requesting revision"
 
     return Event(
@@ -119,7 +138,10 @@ def route_on_evaluation_score(node_input: dict, ctx: Context) -> Event:
         ),
         route=route,
         output=forward,
-        state=_router_state(ctx, "route_on_evaluation_score", route, rationale),
+        state={
+            **_router_state(ctx, "route_on_evaluation_score", route, rationale),
+            **state_delta_extra,
+        },
     )
 
 
@@ -128,8 +150,20 @@ def route_on_evaluation_score(node_input: dict, ctx: Context) -> Event:
 # planner can self-approve. This threshold is policy, not LLM judgment — it
 # lives right here in the workflow next to the audit log."
 def route_on_procurement_threshold(node_input: dict, ctx: Context) -> Event:
-    """Route based on whether procurement approval is required."""
+    """Route based on whether procurement approval is required.
+
+    By this point in the workflow, ``node_input`` is whatever
+    route_on_evaluation_score forwarded — typically the plan_evaluator
+    output (PlanEvaluation), which doesn't carry the SourcingPlan. So
+    pull ``plan`` from ``ctx.state`` (stashed by sourcing_logistics and
+    revise_plan's after_agent_callbacks).
+    """
     plan = node_input.get("plan") or {}
+    if not plan:
+        try:
+            plan = ctx.state.get("plan", {}) or {}
+        except Exception:
+            plan = {}
     primary = (plan.get("primary_option") or {}) if isinstance(plan, dict) else {}
     cost = int(primary.get("estimated_cost_usd", 0) or 0)
     blockers = list(primary.get("blockers", []) or [])

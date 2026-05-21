@@ -9,6 +9,7 @@ Skeleton for TASK-02: the prompt instructs the model to return
 ``overall_score = 0.91`` for any plan. Real domain logic lands in TASK-03.
 """
 
+import logging as _logging
 import os
 import pathlib
 
@@ -19,12 +20,44 @@ from google.adk.tools import google_maps_grounding, preload_memory
 from google.adk.tools.skill_toolset import SkillToolset
 from google.genai.types import GenerateContentConfig, ThinkingConfig
 
-from agents.schemas import PlanEvaluation
+from agents.schemas import PlanEvaluation, SourcingPlan
 from agents.utils.global_gemini import GlobalGemini
 from agents.utils.skill_tools import load_skill_function_tools
 
 from ..services.memory_manager import auto_save_memories
 from .prompts import INSTRUCTION
+
+_logger = _logging.getLogger(__name__)
+
+
+async def _stash_evaluation_and_save_memories(callback_context):
+    """Stash PlanEvaluation into ctx.state so downstream routers can read it
+    (the LLM output replaces node_input, so the wrapping {evaluation, plan,
+    iteration_count} keys other nodes expect are not visible past this
+    boundary). Then delegate to ``auto_save_memories`` for Memory Bank.
+    """
+    try:
+        output = None
+        try:
+            output = callback_context.output
+        except Exception:
+            output = None
+        eval_dict = None
+        if isinstance(output, dict):
+            eval_dict = output
+        elif hasattr(output, "model_dump"):
+            try:
+                eval_dict = output.model_dump(mode="json")
+            except Exception:
+                eval_dict = None
+        if eval_dict:
+            try:
+                callback_context.state["evaluation"] = eval_dict
+            except Exception as exc:
+                _logger.warning("Failed to stash evaluation in state: %s", exc)
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("plan_evaluator stash failed: %s", exc)
+    await auto_save_memories(callback_context)
 
 # Lazy-load the plan-evaluation skill from this package's skills/ dir.
 _SKILLS_DIR = pathlib.Path(__file__).parent / "skills"
@@ -80,13 +113,19 @@ root_agent = LlmAgent(
         "7 weighted criteria. Returns structured PlanEvaluation."
     ),
     static_instruction=INSTRUCTION,
+    # input_schema needed because AgentTool wraps this agent — without one,
+    # AgentTool._run_async_impl falls through to `args['request']` (default
+    # convention) and KeyError's against the SourcingPlan dict we actually
+    # pass. With input_schema=SourcingPlan, ADK validates the workflow's
+    # node_input as a SourcingPlan and serializes it for the LLM cleanly.
+    input_schema=SourcingPlan,
     output_schema=PlanEvaluation,
     generate_content_config=GenerateContentConfig(
         max_output_tokens=4096,
         thinking_config=ThinkingConfig(thinking_budget=1024),
     ),
     include_contents="none",
-    after_agent_callback=auto_save_memories,
+    after_agent_callback=_stash_evaluation_and_save_memories,
     # google_maps_grounding lets the evaluator verify logistics_feasibility +
     # schedule_feasibility claims against real-world Maps data (transit times,
     # cross-border routes, port availability). Model-level GA tool, Gemini 2+.

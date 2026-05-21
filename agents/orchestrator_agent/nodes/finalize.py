@@ -65,11 +65,40 @@ def _skin_fallback_hub() -> GeoPoint | None:
 # naive-baseline option — the cargo charter Maria would have ordered without
 # the workflow. This is the number the OCC director sees on the canvas:
 # 'saved $380K vs. baseline.' Deterministic, traceable, defensible."
-def finalize_sourcing_plan(node_input: dict, ctx: Context) -> Event:
-    """Compute avoided cost and produce the final SourcingPlan envelope."""
-    request = CapacityGapRequest(**node_input["request"])
-    results = SystemQueryResults(**node_input.get("results", {}))
+def finalize_sourcing_plan(node_input: dict, ctx: Context) -> Event:  # noqa: PLR0912, PLR0915
+    """Compute avoided cost and produce the final SourcingPlan envelope.
+
+    The wrapping keys (``request``, ``results``, ``plan``) only survive the
+    workflow if no LLM node clobbered them en route. Pull from
+    ``ctx.state`` as the canonical carrier; ``node_input`` is the fallback
+    when finalize is reached via the direct path (no LLM clobber).
+    """
+    request_dict = node_input.get("request")
+    if not request_dict:
+        try:
+            request_dict = ctx.state.get("request") or {}
+        except Exception:
+            request_dict = {}
+    if not request_dict:
+        raise ValueError(
+            "finalize_sourcing_plan: no `request` in node_input or ctx.state"
+        )
+    request = CapacityGapRequest(**request_dict)
+
+    results_dict = node_input.get("results")
+    if not results_dict:
+        try:
+            results_dict = ctx.state.get("results") or {}
+        except Exception:
+            results_dict = {}
+    results = SystemQueryResults(**(results_dict or {}))
+
     plan_dict = node_input.get("plan")
+    if not plan_dict:
+        try:
+            plan_dict = ctx.state.get("plan") or None
+        except Exception:
+            plan_dict = None
 
     # Compute workflow duration from the seed timestamp recorded at start.
     workflow_id = ""

@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 _MODEL_NAME = os.getenv("SOURCING_LOGISTICS_MODEL", "gemini-3.1-pro-preview")
 
 
-async def _emit_route_events(callback_context: CallbackContext) -> None:
+async def _emit_route_events(callback_context: CallbackContext) -> None:  # noqa: PLR0912, PLR0915
     """Emit doomed + recommended route canvas events after the refinement.
 
     The refined SourcingPlan carries both the primary_option and the
@@ -108,6 +108,15 @@ async def _emit_route_events(callback_context: CallbackContext) -> None:
                 ctx.state["canvas_events"] = [*existing, *new_events]
             except Exception as exc:
                 logger.warning("Failed to write canvas_events to state: %s", exc)
+
+        # Stash the refined SourcingPlan into ctx.state — downstream nodes
+        # (route_on_procurement_threshold, finalize) need it after the
+        # plan_evaluator LLM clobbers node_input with PlanEvaluation.
+        if plan_dict:
+            try:
+                ctx.state["plan"] = plan_dict
+            except Exception as exc:
+                logger.warning("Failed to stash plan in state: %s", exc)
     except Exception as exc:  # noqa: BLE001
         logger.warning("sourcing_logistics canvas-event emit failed: %s", exc)
 
