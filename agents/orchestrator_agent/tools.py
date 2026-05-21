@@ -155,7 +155,7 @@ def create_procurement_approval_tool() -> AgentTool:
 
 def _load_skills() -> list:
     """Lazy-load every skill directory under ``orchestrator_agent/skills/``."""
-    skills_dir = pathlib.Path(__file__).parent.parent / "skills"
+    skills_dir = pathlib.Path(__file__).parent / "skills"
     if not skills_dir.exists():
         return []
     return [
@@ -178,7 +178,7 @@ def get_tools() -> list:
     """
     skills = _load_skills()
     skill_toolset = SkillToolset(skills=skills) if skills else None
-    skills_dir = pathlib.Path(__file__).parent.parent / "skills"
+    skills_dir = pathlib.Path(__file__).parent / "skills"
     skill_function_tools = load_skill_function_tools(skills_dir)
     logger.info(
         "Loaded %d skills, %d direct function tools for Orchestrator",

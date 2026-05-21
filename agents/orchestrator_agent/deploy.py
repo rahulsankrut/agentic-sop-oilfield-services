@@ -62,6 +62,10 @@ def _env_vars(agent_engine_id: str, location: str) -> dict[str, str]:
         "BSEE_ENGINE_ID",
         "MCC_ENGINE_ID",
         "INTOUCH_ENGINE_ID",
+        # MCP server URLs — for McpToolset on agents (canonical ADK MCP path).
+        "SAP_MCP_URL",
+        "MAXIMO_MCP_URL",
+        "FDP_MCP_URL",
     ):
         value = os.environ.get(var)
         if value:
@@ -138,6 +142,9 @@ def deploy_orchestrator() -> str:
                 "google-cloud-aiplatform[agent_engines,evaluation]>=1.121.0",
                 "google-adk>=2.0.0,<2.1",
                 "a2a-sdk[http-server]>=0.3.9,<1.0",
+                # Required by google.adk.tools.mcp_tool.mcp_toolset
+                # (McpToolset → SamplingCapability from `mcp` SDK).
+                "mcp>=1.0.0,<2.0",
                 "pydantic>=2.12.0",
                 "python-dotenv>=1.0.0",
             ],
