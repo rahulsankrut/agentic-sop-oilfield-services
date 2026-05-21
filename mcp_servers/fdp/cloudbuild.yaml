@@ -25,6 +25,9 @@ steps:
         mkdir -p mcp_servers/fdp/agents
         cp agents/schemas.py mcp_servers/fdp/agents/schemas.py
         touch mcp_servers/fdp/agents/__init__.py
+        # Stage shared entrypoint.
+        cp mcp_servers/entrypoint.sh mcp_servers/fdp/entrypoint.sh
+        chmod +x mcp_servers/fdp/entrypoint.sh
 
   - name: 'gcr.io/cloud-builders/docker'
     args:

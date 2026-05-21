@@ -18,8 +18,13 @@ COPY backend /app/backend
 COPY agents /app/agents
 COPY config.yaml /app/config.yaml
 
+# Shared entrypoint — see mcp_servers/sap/Dockerfile.
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 ENV DATA_DIR=/data \
     MAXIMO_BACKEND_URL=http://127.0.0.1:8002 \
+    BACKEND_PORT=8002 \
     PORT=8080 \
     LATENCY_MIN_MS=50 \
     LATENCY_MAX_MS=200 \
@@ -27,4 +32,4 @@ ENV DATA_DIR=/data \
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "uvicorn backend.main:app --host 127.0.0.1 --port 8002 & exec toolbox --tools-file /app/config.yaml --address 0.0.0.0 --port ${PORT}"]
+CMD ["/app/entrypoint.sh"]

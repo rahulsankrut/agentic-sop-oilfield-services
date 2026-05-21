@@ -44,6 +44,10 @@ steps:
         mkdir -p mcp_servers/sap/agents
         cp agents/schemas.py mcp_servers/sap/agents/schemas.py
         touch mcp_servers/sap/agents/__init__.py
+        # Stage shared entrypoint script (waits for backend port before
+        # starting toolbox, fails loudly if uvicorn crashes).
+        cp mcp_servers/entrypoint.sh mcp_servers/sap/entrypoint.sh
+        chmod +x mcp_servers/sap/entrypoint.sh
 
   # Step 2 — build. Note: Dockerfile path is relative to the build context
   # (mcp_servers/sap), which now contains the staged `data/`.

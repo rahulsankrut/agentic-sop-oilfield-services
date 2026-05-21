@@ -37,11 +37,19 @@ COPY agents /app/agents
 # Toolbox config.
 COPY config.yaml /app/config.yaml
 
+# Shared entrypoint script — staged by cloudbuild.yaml. Waits for the
+# FastAPI backend to actually listen before starting toolbox. Replaces
+# the prior `sh -c "uvicorn ... & exec toolbox ..."` which silently
+# swallowed uvicorn crashes.
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Synthetic data lives in /data inside the container; the Cloud Run / docker
 # run command should mount the repo's data/ directory there. Locally you can
 # also override with -e DATA_DIR=/some/other/path.
 ENV DATA_DIR=/data \
     SAP_BACKEND_URL=http://127.0.0.1:8001 \
+    BACKEND_PORT=8001 \
     PORT=8080 \
     LATENCY_MIN_MS=50 \
     LATENCY_MAX_MS=200
@@ -50,6 +58,4 @@ ENV PYTHONPATH=/app
 
 EXPOSE 8080
 
-# Launch both processes. Backend in background, toolbox in foreground so the
-# container exits cleanly when toolbox stops.
-CMD ["sh", "-c", "uvicorn backend.main:app --host 127.0.0.1 --port 8001 & exec toolbox --tools-file /app/config.yaml --address 0.0.0.0 --port ${PORT}"]
+CMD ["/app/entrypoint.sh"]
