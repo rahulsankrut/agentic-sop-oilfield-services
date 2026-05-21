@@ -1,61 +1,181 @@
-# genai-toolbox configuration for the SAP MCP server.
+# genai-toolbox configuration for the SAP MCP server (TASK-16 Step 5).
 #
-# This config declares one HTTP source (the synthetic FastAPI backend) and
-# the tools to expose over MCP. The toolbox binary loads this file and runs
-# as an MCP server speaking either stdio or HTTP/SSE (toolbox default).
+# Exposes the BQ-backed FastAPI backend's v2 typed endpoints as MCP tools.
+# Tool names match the spec §4 surface — `sap.<verb>_<entity>` — so a
+# customer who later swaps to a different SAP backend implementation
+# (e.g. live OData) only re-points the HTTP source, not the tool names.
+#
+# Legacy v1 tools (`sap_workforce_by_basin`, `sap_resolve_material_number`)
+# stay in the `sap_oilfield_legacy` toolset for the one-release deprecation
+# window the spec calls out.
 #
 # Run locally:
+#   uvicorn mcp_servers.sap.backend.main:app --port 8001
 #   toolbox --tools-file=mcp_servers/sap/config.yaml --port=8101
 #
 # Required env vars at runtime:
-#   SAP_BACKEND_URL — base URL of the FastAPI backend (e.g. http://localhost:8001
-#   or the Cloud Run service URL).
+#   SAP_BACKEND_URL — base URL of the FastAPI backend
+#                     (e.g. http://localhost:8001 or the Cloud Run service URL).
 
 sources:
-  sap_synthetic:
+  sap_backend:
     kind: http
     baseUrl: ${SAP_BACKEND_URL}
-    timeout: 5s
+    timeout: 10s
     headers:
       Content-Type: application/json
 
 tools:
+  # --- v2 typed tool surface (per spec §4) ---
+
+  sap_get_material_master:
+    kind: http
+    source: sap_backend
+    description: |
+      Use this when the agent has a SAP MATNR and needs the material's
+      English description, material type (FERT/ROH/HALB), material group,
+      and base unit of measure. Joins SAP MARA + MAKT (English language).
+    method: GET
+    path: /sap/v2/material_master/{matnr}
+    pathParams:
+      - name: matnr
+        type: string
+        description: SAP material number (MATNR).
+
+  sap_get_plant_data:
+    kind: http
+    source: sap_backend
+    description: |
+      Use this when the agent needs per-plant MRP data for a material —
+      MRP controller, MRP type, procurement type. Optionally filter by
+      WERKS (plant code). Returns rows from SAP MARC.
+    method: GET
+    path: /sap/v2/plant_data/{matnr}
+    pathParams:
+      - name: matnr
+        type: string
+        description: SAP material number (MATNR).
+    queryParams:
+      - name: werks
+        type: string
+        description: Optional SAP plant code (4-char WERKS).
+        required: false
+
+  sap_get_storage_location_stock:
+    kind: http
+    source: sap_backend
+    description: |
+      Use this when the agent needs to answer "is there inventory at a
+      plant" — returns SAP MARD rows with LABST > 0 (unrestricted stock)
+      per (WERKS, LGORT). Replaces the v1 inventory-availability check.
+    method: GET
+    path: /sap/v2/storage_location_stock/{matnr}
+    pathParams:
+      - name: matnr
+        type: string
+        description: SAP material number.
+
+  sap_get_standard_price:
+    kind: http
+    source: sap_backend
+    description: |
+      Use this when the agent needs to validate a cost estimate against
+      SAP's standard price (STPRS in MBEW) for a material. Guards against
+      LLM hallucinating cost figures.
+    method: GET
+    path: /sap/v2/standard_price/{matnr}
+    pathParams:
+      - name: matnr
+        type: string
+        description: SAP material number.
+
+  sap_get_customer:
+    kind: http
+    source: sap_backend
+    description: |
+      Use this when the agent has a SAP customer number (KUNNR) and needs
+      the customer's master data — name, country, city, street. Reads
+      SAP KNA1.
+    method: GET
+    path: /sap/v2/customer/{kunnr}
+    pathParams:
+      - name: kunnr
+        type: string
+        description: SAP customer number (10-char KUNNR).
+
+  sap_resolve_customer_by_name:
+    kind: http
+    source: sap_backend
+    description: |
+      Use this when the agent receives a customer name from the planner
+      (e.g. "Gulf Petroleum") and needs to resolve it to the canonical
+      SAP KUNNR before joining FDP or KNVV. Case-insensitive substring
+      match against SAP KNA1.NAME1. Replaces the v1 normalize_customer_id
+      helper.
+    method: GET
+    path: /sap/v2/customers
+    queryParams:
+      - name: name_like
+        type: string
+        description: Substring of customer name to match.
+        required: true
+
+  sap_get_workforce_by_basin:
+    kind: http
+    source: sap_backend
+    description: |
+      Use this when the planner needs to know how many crews and
+      specialists SAP shows as available in a basin before committing a
+      sourcing plan. Reads the SAP Z-table ZHR_WORKFORCE (custom
+      workforce-by-basin extract). Unknown basins return all zeros.
+    method: GET
+    path: /sap/v2/workforce/by_basin/{basin}
+    pathParams:
+      - name: basin
+        type: string
+        description: Basin slug (e.g. "permian", "west_africa", "north_sea").
+
+  # --- Legacy v1 tools (retire after one release per spec §4) ---
+
   sap_workforce_by_basin:
     kind: http
-    source: sap_synthetic
+    source: sap_backend
     description: |
-      Return SAP-tracked workforce availability counts for a basin.
-      Inputs: basin slug (e.g. "permian", "west_africa", "north_sea",
-      "gulf_of_mexico", "bohai", "south_china_sea", "asia_pacific").
-      Returns: crew_count_available, specialist_count_available,
-      on_call_count. Unknown basins return all zeros.
-      Use this when the planner needs to know how many crews and specialists
-      SAP shows as available in a basin before committing a sourcing plan.
+      DEPRECATED in favor of sap_get_workforce_by_basin. Returns the
+      legacy WorkforceByBasinResponse shape (no snapshot_date).
     method: POST
     path: /sap/workforce/by_basin
     bodyParams:
       - name: basin
         type: string
-        description: Basin slug (e.g. "permian", "west_africa").
+        description: Basin slug.
 
   sap_resolve_material_number:
     kind: http
-    source: sap_synthetic
+    source: sap_backend
     description: |
-      Resolve a SAP material number (e.g. "MAT-67890") to the canonical
-      asset record. Returns canonical_id, canonical_label, category,
-      subcategory, manufacturer, plant, and storage_location.
-      Use this when the planner has a SAP material number and needs to
-      bridge into the canonical taxonomy used by Maximo / FDP / Knowledge
-      Catalog.
+      DEPRECATED in favor of sap_get_material_master + KC lookup. Bridges
+      a SAP MATNR to the canonical asset record via the cross-system
+      alias table. Kept for one release for TASK-05 backwards compat.
     method: GET
     path: /sap/material/{sap_material_number}
     pathParams:
       - name: sap_material_number
         type: string
-        description: SAP material number (e.g. "MAT-67890").
+        description: SAP material number.
 
 toolsets:
+  # Default toolset — the v2 typed tool surface for the migrated agents.
   sap_oilfield:
+    - sap_get_material_master
+    - sap_get_plant_data
+    - sap_get_storage_location_stock
+    - sap_get_standard_price
+    - sap_get_customer
+    - sap_resolve_customer_by_name
+    - sap_get_workforce_by_basin
+
+  # Legacy toolset — anyone still on TASK-05 v1 endpoints.
+  sap_oilfield_legacy:
     - sap_workforce_by_basin
     - sap_resolve_material_number

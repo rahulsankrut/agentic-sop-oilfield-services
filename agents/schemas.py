@@ -263,3 +263,71 @@ class CanvasEventEnvelope(BaseModel):
     request_id: str
     timestamp: datetime
     payload: dict
+
+
+# ============================================================================
+# Enterprise-system response schemas (TASK-16 §4 — additive)
+#
+# These mirror real SAP / Maximo / FDP table layouts so the typed MCP tool
+# surface stays identical whether the implementation queries BigQuery (our
+# v1) or live OData/REST (a customer's production swap).
+# ============================================================================
+
+
+class SapMaterialMaster(BaseModel):
+    """SAP MARA + MAKT join — material master with English description."""
+
+    matnr: str
+    description: str | None = None
+    material_type: str
+    material_group: str | None = None
+    base_uom: str = "EA"
+
+
+class SapPlantData(BaseModel):
+    """SAP MARC — per-plant material data."""
+
+    matnr: str
+    werks: str
+    mrp_controller: str | None = None
+    mrp_type: str | None = None
+    procurement_type: str | None = None
+
+
+class SapStorageStock(BaseModel):
+    """SAP MARD — unrestricted stock at a (plant, storage location)."""
+
+    matnr: str
+    werks: str
+    lgort: str
+    unrestricted_stock: float
+    quality_inspection_stock: float = 0.0
+
+
+class SapStandardPrice(BaseModel):
+    """SAP MBEW — standard price for a material."""
+
+    matnr: str
+    stprs: float
+    peinh: int = 1
+    waers: str = "USD"
+
+
+class SapCustomer(BaseModel):
+    """SAP KNA1 — customer master general data."""
+
+    kunnr: str
+    name1: str
+    land1: str | None = None  # ISO country
+    ort01: str | None = None  # City
+    stras: str | None = None  # Street
+
+
+class SapWorkforce(BaseModel):
+    """SAP ZHR_WORKFORCE — workforce-by-basin snapshot (Z-table)."""
+
+    basin: str
+    crew_count_available: int
+    specialist_count_available: int
+    on_call_count: int
+    snapshot_date: str  # ISO date string — keep as str per CLAUDE.md gotcha

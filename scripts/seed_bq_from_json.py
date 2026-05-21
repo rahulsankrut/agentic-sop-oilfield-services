@@ -624,15 +624,22 @@ TABLES: list[tuple[str, str]] = [
 
 
 def load_to_bq(client: bigquery.Client, table_fqn: str, rows: list[dict]) -> int:
-    """Load `rows` into `<project>.<table_fqn>` with WRITE_TRUNCATE."""
+    """Load `rows` into `<project>.<table_fqn>` with WRITE_TRUNCATE.
+
+    Fetches the destination table's schema and passes it explicitly to the
+    load job. Without this, BigQuery's load-from-NDJSON path infers schema
+    from the JSON values — "001" becomes INTEGER 1, "F" becomes BOOLEAN
+    false, and the carefully-defined DDL types from Step 2 are silently
+    replaced. Passing `schema=` locks the load to the DDL contract.
+    """
     full = f"{PROJECT}.{table_fqn}"
+    table = client.get_table(full)
     job_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
         source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
-        # Don't infer schema — use the table's existing schema (DDL from Step 2).
-        schema_update_options=[],
+        schema=table.schema,
+        autodetect=False,
     )
-    # Stream rows as NDJSON to load_table_from_json
     job = client.load_table_from_json(rows, full, job_config=job_config)
     job.result()  # block until complete
     return job.output_rows or 0
