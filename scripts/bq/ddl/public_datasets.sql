@@ -54,10 +54,19 @@ CREATE TABLE IF NOT EXISTS `vertex-ai-demos-468803.bakerhughes_rig_count.dataset
 )
 OPTIONS (description = 'Loader audit table (shared across the public-dataset loaders).');
 
--- EIA STEO basin production (oil/gas + rig productivity).
+-- EIA STEO basin production + active rigs (monthly).
+--
+-- Sourced from STEO_m.xlsx (no API key) — Table 10a (active rigs per
+-- region) + Table 10b (tight oil + shale gas production per formation).
+-- STEO uses two overlapping classification schemes: "regions" in 10a vs
+-- "formations" in 10b. We denormalize both onto BASIN; rows from 10a
+-- have ACTIVE_RIGS populated, rows from 10b have OIL_PROD_BPD/
+-- GAS_PROD_MCFD. Where the same name appears in both (Bakken, Eagle
+-- Ford, Permian, Haynesville), the loader merges them into one row.
 CREATE TABLE IF NOT EXISTS `vertex-ai-demos-468803.eia_steo.basin_production` (
   REPORT_MONTH                       DATE        NOT NULL,
   BASIN                              STRING(20)  NOT NULL,
+  ACTIVE_RIGS                        NUMERIC(8,2),
   OIL_PROD_BPD                       INT64,
   GAS_PROD_MCFD                      INT64,
   RIG_PRODUCTIVITY_NEW_WELL_OIL_BPD  INT64,
@@ -65,4 +74,4 @@ CREATE TABLE IF NOT EXISTS `vertex-ai-demos-468803.eia_steo.basin_production` (
 )
 PARTITION BY REPORT_MONTH
 CLUSTER BY BASIN
-OPTIONS (description = 'EIA Short-Term Energy Outlook — monthly basin production. US Govt public domain.');
+OPTIONS (description = 'EIA STEO monthly basin data — 10a active rigs + 10b tight oil + shale gas production.');
