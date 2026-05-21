@@ -1,0 +1,20 @@
+# Terraform state and provider plugin cache.
+# Note: `.terraform.lock.hcl` is intentionally NOT ignored — it should be
+# committed to lock provider versions across operators (HashiCorp convention).
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Rendered (placeholder-resolved) copies of infra/gateway_policies.yaml and
+# infra/model_armor.yaml. These are derived artifacts — the source YAMLs at
+# `../gateway_policies.yaml` and `../model_armor.yaml` are the real source of
+# truth. Do not commit the resolved copies.
+.terraform_render/
+
+# Per-environment overrides — committed when intentional, gitignored as a
+# default to keep credentials / project ids out of public diffs.
+*.auto.tfvars
+terraform.tfvars
