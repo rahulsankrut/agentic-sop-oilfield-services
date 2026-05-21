@@ -4,7 +4,7 @@
 
 **Estimated effort:** 6-8 days for one engineer.
 
-**Stream:** Backend (data layer + BigQuery MCP wiring + FDP MCP backend + skill tools). No agent code changes outside the four `scripts/tools.py` migrations, the one-line `description` rename in `equivalence_lookup.py`, and (optionally) cleaner Pydantic response models. `mcp_servers/sap` and `mcp_servers/maximo` directories from TASK-05 are no longer used and will be removed in Step 13 — managed BigQuery MCP replaces them.
+**Stream:** Backend (data layer + 3 MCP server backends + skill tools). No agent code changes outside the four `scripts/tools.py` migrations, the one-line `description` rename in `equivalence_lookup.py`, and (optionally) cleaner Pydantic response models.
 
 ---
 
@@ -12,15 +12,15 @@
 
 A customer (SLB / Halliburton / Baker Hughes / NOV) must be able to swap our synthetic backend with their real systems by doing exactly these things and nothing else:
 
-1. **Extract from their SAP ECC / S/4HANA into BigQuery**: dump MARA, MAKT, MARC, MARD, MBEW, KNA1, KNVV, and `ZHR_WORKFORCE` (or their HR view) to BigQuery tables in their own project. Field names and types match our `sap_extract.*` DDL exactly. Load with `bq load`, Datastream for SAP, or BigQuery Omni. **The agents read SAP data via the managed BigQuery MCP server** (`https://bigquery.googleapis.com/mcp`) — there is no SAP-specific service to deploy.
-2. **Extract from their Maximo (MAS 9.x) into BigQuery**: dump ASSET, ITEM, INVENTORY, INVBALANCES, LOCATIONS, ASSETLOCATIONS, WORKORDER (and the `WO_HISTORY` view) to BigQuery. Field names and types match our `maximo_extract.*` DDL exactly. **Agents read Maximo data via the same managed BigQuery MCP server.**
-3. **Provide an FDP-equivalent extract**: a flat table of (`customer_id`, `material_number`, `approved_flag`, `accepted_substitutes[]`, `notes`). FDP is the homegrown forecasting/customer-config tool — there's no public schema, so the contract is the columns, not source-system fidelity. **Agents read FDP via our custom Cloud Run MCP server** (`mcp_servers/fdp`) which the customer redeploys pointing at their BQ tables (or fork to wrap their own REST/OData FDP-equivalent — the tool surface stays the same).
-4. **Repoint env vars**: `BQ_PROJECT` (their project ID), `BQ_DATASET_PREFIX` (their dataset naming, defaults match ours), `FDP_MCP_URL` (their FDP MCP Cloud Run URL). Grant `roles/mcp.toolUser` to the orchestrator service account.
+1. **Extract from their SAP ECC / S/4HANA into BigQuery (or their preferred substrate)**: dump MARA, MAKT, MARC, MARD, MBEW, KNA1, KNVV, and `ZHR_WORKFORCE` (or their HR view). Field names and types match our `sap_extract.*` DDL exactly. The agent reads SAP data via our custom SAP MCP server (`mcp_servers/sap`), which queries BQ in our v1. **If the customer prefers live SAP via OData** — fork the SAP MCP server and swap the BQ query inside each tool for the OData call. **The tool surface (`sap.get_material_master(matnr)`) the agent sees stays identical.**
+2. **Extract from their Maximo (MAS 9.x) into BigQuery (or fork to wrap live Maximo)**: dump ASSET, ITEM, INVENTORY, INVBALANCES, LOCATIONS, ASSETLOCATIONS, WORKORDER (and the `WO_HISTORY` view). Field names and types match our `maximo_extract.*` DDL exactly. Agent reads via our custom Maximo MCP server (`mcp_servers/maximo`). Same fork-and-rewire substitution path as SAP.
+3. **Provide an FDP-equivalent extract** (or wrap their live FDP-equivalent): a flat table of (`customer_id`, `material_number`, `approved_flag`, `accepted_substitutes[]`, `notes`). FDP is the homegrown forecasting/customer-config tool — there's no public schema, so the contract is the columns. Agent reads via our custom FDP MCP server.
+4. **Repoint env vars**: `BQ_PROJECT` (their project ID), `BQ_DATASET_PREFIX` (their dataset naming, defaults match ours), `SAP_MCP_URL` / `MAXIMO_MCP_URL` / `FDP_MCP_URL` (their three Cloud Run URLs).
 5. **Populate Knowledge Catalog**: re-run `knowledge_catalog/setup.py` against their `sap_extract.MARA` extract so Catalog Entries reference real `MATNR` values instead of our `MAT-*` placeholders.
 
 If a customer does only steps 1, 2, 4, and 5 and provides an empty FDP table, the cargo-plane scenario still runs (the customer-restriction matrix degrades to "no restrictions known"). That is the minimum-viable substitution.
 
-**Why mostly managed BigQuery MCP, FDP as the only custom MCP:** Agent Platform doesn't host arbitrary MCP server code — managed MCPs are for Google's own services (BigQuery, KC, Maps, etc.). For SAP and Maximo, the platform's strategic direction is "dump to BigQuery → consume via managed BQ MCP" — zero custom code, governed by Agent Gateway via standard IAM (`roles/bigquery.dataViewer` per dataset). For FDP, we keep one custom Cloud Run MCP server to demonstrate the wrapping pattern customers will need for any non-BQ system (e.g., a homegrown REST forecasting tool).
+**Why three custom Cloud Run MCP servers and not the managed BigQuery MCP:** The typed tool surface is the substitutability contract. `sap.get_material_master(matnr) -> SapMaterialMaster` is what the agent reasons against; what's inside the tool can be a BQ query (our demo), a live OData call (customer's prod), or a hybrid. With managed BigQuery MCP the agent's tool would be `execute_sql_readonly(...)` — that couples the agents to BigQuery as the source of truth forever, which is wrong for OFS majors who will have on-prem ECC + Maximo for years. Custom MCP servers also let us do per-tool IAM in Agent Gateway (allow `sap.get_workforce`, deny `sap.write_master`) which managed BQ MCP can't express at the same grain.
 
 **Out of contract — what we explicitly do not promise:** that our equivalence graph (`oilfield_kc.functional_equivalences`) maps to anything in their world. Equivalences are engineering-curated content; the customer will replace it from their InTouch / spec repository.
 
@@ -49,49 +49,52 @@ If a customer does only steps 1, 2, 4, and 5 and provides an empty FDP table, th
         │    oilfield_kc           — canonical_assets,            │
         │                            cross_system_aliases,        │
         │                            functional_equivalences      │
-        └───────┬───────────────────────────────┬─────────────────┘
-                │                               │
-                │ execute_sql_readonly          │ BQ client lib
-                │ (managed)                     │ (FDP only)
-                ▼                               ▼
-   ┌────────────────────────────┐   ┌──────────────────────────────┐
-   │ BigQuery MCP (managed)     │   │ FDP MCP (custom, Cloud Run)  │
-   │ https://bigquery.          │   │ mcp_servers/fdp/backend      │
-   │   googleapis.com/mcp       │   │   typed tools:               │
-   │ Tools (generic):           │   │     fdp.get_customer_config  │
-   │  execute_sql_readonly      │   │     fdp.list_approved_subs   │
-   │  list_dataset_ids          │   │     fdp.list_restrictions    │
-   │  list_table_ids            │   │ Demonstrates the wrapping    │
-   │  get_table_info            │   │ pattern for non-BQ systems.  │
-   └─────────┬──────────────────┘   └──────────┬───────────────────┘
-             │                                 │
-             │      ┌──────────────────────────┴──┐
-             │      │                             │
-             ▼      ▼                             │
-   ┌──────────────────────────────────────────────┴───────────────┐
-   │ Knowledge Catalog MCP (managed)                              │
+        └────────────┬────────────────────────────────────────────┘
+                     │ BQ jobs (read-only from MCP servers)
+                     │ — customer swaps to live OData/REST by
+                     │   forking the MCP server, no agent changes
+                     ▼
+   ┌──────────────────────────────────────────────────────────────┐
+   │   3 custom MCP servers (Cloud Run, FastAPI)                  │
+   │                                                              │
+   │   mcp_servers/sap/backend      → sap.* typed tools           │
+   │     sap.get_material_master, sap.get_plant_data,             │
+   │     sap.get_storage_location_stock, sap.get_standard_price,  │
+   │     sap.get_customer, sap.resolve_customer_by_name,          │
+   │     sap.get_workforce_by_basin                               │
+   │                                                              │
+   │   mcp_servers/maximo/backend   → maximo.* typed tools        │
+   │     maximo.get_item, maximo.query_assets_by_item,            │
+   │     maximo.query_assets_by_region, maximo.get_location,      │
+   │     maximo.get_inventory_balances (Q2 — separate from ASSET),│
+   │     maximo.get_open_workorders,                              │
+   │     maximo.get_start_date_distribution (queries WO_HISTORY)  │
+   │                                                              │
+   │   mcp_servers/fdp/backend      → fdp.* typed tools           │
+   │     fdp.get_customer_config, fdp.list_approved_substitutions,│
+   │     fdp.list_customer_restrictions                           │
+   └────────────┬─────────────────────────────────────────────────┘
+                │ MCP (StreamableHTTP) via Agent Gateway
+                │ (IAM per-tool + Model Armor + audit + Registry)
+                ▼
+   ┌──────────────────────────────────────────────────────────────┐
+   │ Knowledge Catalog MCP (managed, platform-provided)           │
    │ https://dataplex.googleapis.com/mcp                          │
    │   kc.lookup_context, kc.search_entries, kc.list_related...   │
-   └─────────┬────────────────────────────────────────────────────┘
-             │
-             │ all MCP traffic flows through:
-             │   Agent Gateway (IAM + Model Armor + audit)
-             │   Agent Registry (server discovery)
-             ▼
+   └────────────┬─────────────────────────────────────────────────┘
+                │ all 4 MCP servers fronted by Agent Gateway
+                ▼
    ┌──────────────────────────────────────────────────────────────┐
    │ Agent skill tools (one tools.py per skill)                   │
    │                                                              │
    │ asset-equivalence       → KC MCP (lookup + relationships)    │
-   │                            + BQ MCP fallback for substring   │
-   │ enterprise-systems      → BQ MCP for SAP + Maximo            │
-   │                            + FDP MCP for restrictions/config │
+   │ enterprise-systems      → sap.* / maximo.* / fdp.* / kc.*    │
    │ sourcing-logistics      → Maps Grounding (TASK #46, GA tool) │
-   │                            + BQ MCP (Maximo blockers)        │
-   │                            + FDP MCP (restrictions)          │
+   │                            + maximo.* (blockers, recert)     │
+   │                            + fdp.* (restrictions)            │
    │ procurement-prereqs     → pure functions (unchanged)         │
-   │ forecast-rationale      → pure + BQ MCP (eia_steo,           │
-   │                            bakerhughes_rig_count enrichments)│
-   │ scheduling-probability  → BQ MCP (maximo_extract.WO_HISTORY) │
+   │ forecast-rationale      → pure + sap.* (price cross-check)   │
+   │ scheduling-probability  → maximo.get_start_date_distribution │
    └──────────────────────────────────────────────────────────────┘
 
 Public-dataset loaders (one-shot scripts, run from venv):
@@ -100,11 +103,11 @@ Public-dataset loaders (one-shot scripts, run from venv):
   - scripts/load_eia_steo.py           → eia_steo.basin_production
 ```
 
-**Three MCP servers in the path:** BigQuery MCP (managed, primary data path), Knowledge Catalog MCP (managed, semantic + relationships), and FDP MCP (one custom Cloud Run service, demonstrates wrapping pattern). Plus Maps Grounding from TASK #46 (model-level, not registered with Gateway — wires through the Gemini API directly).
+**Four MCP servers in the path:** three custom Cloud Run (SAP, Maximo, FDP) wrapping BigQuery, plus the platform-provided Knowledge Catalog MCP. Plus Maps Grounding from TASK #46 (model-level, not registered with Gateway — wires through the Gemini API directly).
 
-**Why we landed here:** Agent Platform does not host BYO MCP servers. Managed BigQuery MCP covers SAP + Maximo reads with zero custom code — the customer just dumps their extracts to BQ (or BigQuery Omni for on-prem) and grants `roles/mcp.toolUser`. FDP stays as a custom Cloud Run MCP because (a) it's the demonstration of "here's how you wrap a non-BQ system," and (b) a customer's FDP-equivalent might be a live REST/OData service rather than a BQ extract, in which case they fork our FDP MCP and only swap the backend implementation — typed tool surface (`fdp.get_customer_config`) stays the same.
+**Why all-custom and not managed BigQuery MCP:** the typed tool surface is the substitution boundary. `sap.get_material_master(matnr) -> SapMaterialMaster` stays identical whether the implementation queries BQ (our v1) or live SAP OData (customer prod) — agent code, prompts, and Pydantic schemas don't change. Managed BigQuery MCP exposes generic `execute_sql_readonly` to the agent, which (a) couples agents to BQ as the source of truth permanently, (b) widens LLM error surface (the LLM writes SQL), (c) makes Agent Gateway per-tool IAM coarse (only one tool to authorize, instead of fine-grained `allow sap.get_workforce, deny sap.write_master`).
 
-**Auth flow for managed BQ MCP from the agent:** Orchestrator runtime (Vertex AI Agent Engine) gets ADC; ADC has `roles/mcp.toolUser` + `roles/bigquery.dataViewer` on `vertex-ai-demos-468803.{sap,maximo,fdp}_extract`. The McpToolset config in the agent passes the ADC token as a Bearer in the StreamableHTTP connection params. No service account JSON files in the deploy.
+**Auth flow:** Orchestrator runtime (Vertex AI Agent Engine) gets ADC and presents it as Bearer to Agent Gateway → Gateway validates IAM + applies per-tool policy + Model Armor → forwards to the right MCP server. The MCP servers run as Cloud Run services with their own service accounts that have `roles/bigquery.dataViewer` on the relevant dataset.
 
 Maps Grounding (TASK #46) lives in `sourcing-logistics` and `plan_evaluator` and is untouched.
 
@@ -465,76 +468,41 @@ Per Q7 resolution (2026-05-20), start-date variance is derived from `maximo_extr
 
 ## 4. MCP server tool contracts (post-migration)
 
-Three MCP servers in the path. Two are managed (BigQuery, Knowledge Catalog), one is custom Cloud Run (FDP).
+Three custom Cloud Run MCP servers (SAP, Maximo, FDP) + one managed (Knowledge Catalog). All four registered with Agent Registry, traffic flows through Agent Gateway with per-tool IAM and Model Armor.
 
-### BigQuery MCP (managed) — primary data path for SAP + Maximo
+**Why all three custom (and not BigQuery MCP for SAP+Maximo):** The typed tool surface (`sap.get_material_master`, `maximo.query_assets_by_region`) is the substitutability contract. A customer with on-prem SAP via OData forks our SAP MCP, swaps the BQ query inside for an OData call, and the *tool surface the agents see stays identical*. Generic `execute_sql_readonly` would couple the agents to BigQuery as the source of truth — bad for OFS majors who'll have on-prem ECC + Maximo for years. The custom MCP servers query BQ in our reference v1; in customer production they query whatever the customer has (live OData, REST API, BigQuery Omni, etc.).
 
-Endpoint: `https://bigquery.googleapis.com/mcp`. Auth: OAuth2 + IAM (`roles/mcp.toolUser` on the project, `roles/bigquery.dataViewer` on each dataset). Transport: StreamableHTTP via the standard ADK `McpToolset` config in §7 Step 5.
+Tool names follow what an enterprise integrator would naturally pick — `sap.<verb>_<entity>(...)`, `maximo.<verb>_<entity>(...)`. Transport: StreamableHTTP through Agent Gateway (TASK-05 pattern).
 
-Native tool surface (managed, not under our control):
+### SAP MCP server (`mcp_servers/sap`)
 
-| Tool | Purpose |
-|---|---|
-| `execute_sql_readonly(query, dry_run?)` | Run a parameterized SELECT. Results capped at 3000 rows, 3-minute timeout. This is the workhorse. |
-| `list_dataset_ids(project?)` | Discovery |
-| `list_table_ids(dataset)` | Discovery |
-| `get_table_info(dataset, table)` | Schema introspection — agents call this to know column names before writing SQL |
-| `execute_sql` | Read-write variant. **Not granted to our agents** — gateway IAM only allows `execute_sql_readonly`. |
+| Tool name | Args | BQ query (substantively) | Return |
+|---|---|---|---|
+| `sap.get_material_master(matnr)` | `matnr: str` | `SELECT m.MATNR, t.MAKTX, m.MTART, m.MATKL FROM sap_extract.MARA m JOIN sap_extract.MAKT t USING (MANDT, MATNR) WHERE m.MATNR = @matnr AND t.SPRAS = 'E'` | `SapMaterialMaster` Pydantic |
+| `sap.get_plant_data(matnr, werks?)` | `matnr, werks (opt)` | `SELECT * FROM sap_extract.MARC WHERE MATNR=@matnr AND (@werks IS NULL OR WERKS=@werks)` | `list[SapPlantData]` |
+| `sap.get_storage_location_stock(matnr)` | `matnr` | `SELECT MATNR, WERKS, LGORT, LABST FROM sap_extract.MARD WHERE MATNR=@matnr AND LABST > 0` | `list[SapStorageStock]` — replaces "is there inventory" |
+| `sap.get_standard_price(matnr)` | `matnr` | `SELECT STPRS, PEINH, WAERS FROM sap_extract.MBEW WHERE MATNR=@matnr LIMIT 1` | `SapStandardPrice` |
+| `sap.get_customer(kunnr)` | `kunnr` | `SELECT * FROM sap_extract.KNA1 WHERE KUNNR=@kunnr` | `SapCustomer` |
+| `sap.resolve_customer_by_name(needle)` | `needle: str` | `SELECT KUNNR, NAME1 FROM sap_extract.KNA1 WHERE LOWER(NAME1) LIKE LOWER(CONCAT('%', @needle, '%'))` | `list[SapCustomer]` — replaces `normalize_customer_id` |
+| `sap.get_workforce_by_basin(basin)` | `basin` | `SELECT * FROM sap_extract.ZHR_WORKFORCE WHERE BASIN=@basin ORDER BY SNAPSHOT_DATE DESC LIMIT 1` | `SapWorkforce` |
 
-The agent doesn't write SQL ad-hoc. Skill tools (`agents/orchestrator_agent/skills/enterprise-systems/scripts/tools.py` etc.) wrap `execute_sql_readonly` with **typed Python functions** that return Pydantic models. The skill is the typed-tool abstraction layer; `execute_sql_readonly` is the implementation. Example:
+Backwards-compat: keep the legacy endpoints (`POST /sap/workforce/by_basin`, `GET /sap/material/{matnr}`) for one release as thin wrappers, then retire. Skill tools should call the new names from day one.
 
-```python
-# agents/orchestrator_agent/skills/enterprise-systems/scripts/tools.py
+### Maximo MCP server (`mcp_servers/maximo`)
 
-from agents.utils.bq_mcp_client import call_bq_mcp  # thin wrapper around McpToolset
-
-def get_material_master(matnr: str) -> SapMaterialMaster:
-    """Lookup an SAP material by MATNR (real SAP table: MARA + MAKT)."""
-    rows = call_bq_mcp(
-        "execute_sql_readonly",
-        {
-            "query": (
-                "SELECT m.MATNR, t.MAKTX, m.MTART, m.MATKL "
-                "FROM `vertex-ai-demos-468803.sap_extract.MARA` m "
-                "JOIN `vertex-ai-demos-468803.sap_extract.MAKT` t USING (MANDT, MATNR) "
-                "WHERE m.MATNR = @matnr AND t.SPRAS = 'E' LIMIT 1"
-            ),
-            "params": {"matnr": matnr},
-        },
-    )
-    if not rows:
-        raise LookupError(f"No SAP material for MATNR={matnr}")
-    r = rows[0]
-    return SapMaterialMaster(
-        matnr=r["MATNR"], description=r["MAKTX"],
-        material_type=r["MTART"], material_group=r["MATKL"],
-    )
-```
-
-The typed Python signature (`get_material_master(matnr) -> SapMaterialMaster`) is what the LLM sees and reasons about — not the SQL. **Substitution path:** when the customer points at their data, the SQL doesn't change (their `sap_extract.MARA` has the same shape); only `BQ_PROJECT` changes. If the customer later wires a live SAP via a custom MCP server, they swap the body of `get_material_master` to call that MCP, leaving the signature untouched.
-
-The full set of skill-side typed wrappers (SAP + Maximo) and the BQ queries they emit:
-
-| Skill function | BQ query (substantive) | Return |
-|---|---|---|
-| `get_material_master(matnr)` | MARA ⋈ MAKT on (MANDT, MATNR), SPRAS='E' | `SapMaterialMaster` |
-| `get_plant_data(matnr, werks?)` | MARC where MATNR=@matnr ± WERKS filter | `list[SapPlantData]` |
-| `get_storage_location_stock(matnr)` | MARD where MATNR=@matnr AND LABST>0 | `list[SapStorageStock]` |
-| `get_standard_price(matnr)` | MBEW where MATNR=@matnr LIMIT 1 | `SapStandardPrice` |
-| `get_customer(kunnr)` | KNA1 by KUNNR | `SapCustomer` |
-| `resolve_customer_by_name(needle)` | KNA1 with `LOWER(NAME1) LIKE` | `list[SapCustomer]` — replaces `normalize_customer_id` |
-| `get_workforce_by_basin(basin)` | ZHR_WORKFORCE latest snapshot per BASIN | `SapWorkforce` |
-| `get_item(itemnum)` | `maximo_extract.ITEM` by ITEMNUM | `MaximoItem` |
-| `query_assets_by_item(itemnum, status?, siteid?)` | ASSET ⋈ LOCATIONS with filters | `list[MaximoAssetWithLocation]` |
-| `query_assets_by_region(itemnum, region)` | ASSET ⋈ LOCATIONS where REGION=@region | `list[MaximoAssetWithLocation]` (substitutes `query_maximo_availability`) |
-| `get_inventory_balances(itemnum, siteid?)` | INVBALANCES with bin/lot rollup | `list[InvBalance]` |
-| `get_location(siteid, location)` | LOCATIONS by PK | `MaximoLocation` |
-| `get_open_workorders(assetnum, siteid)` | WORKORDER where STATUS!='COMP' | `list[MaximoWorkOrder]` |
-| `get_start_date_distribution(basin, customer_id?, asset_class?)` | `WO_HISTORY` with `APPROX_QUANTILES(variance_days, 100)[OFFSET(10/50/90)]` | `StartDateDistribution` |
+| Tool name | Args | BQ query | Return |
+|---|---|---|---|
+| `maximo.get_item(itemnum)` | `itemnum` | `SELECT * FROM maximo_extract.ITEM WHERE ITEMNUM=@itemnum` | `MaximoItem` |
+| `maximo.query_assets_by_item(itemnum, status?, siteid?)` | filters | `SELECT a.*, l.LATITUDE, l.LONGITUDE, l.DESCRIPTION AS location_label, l.REGION FROM maximo_extract.ASSET a JOIN maximo_extract.LOCATIONS l USING (SITEID, LOCATION) WHERE a.ITEMNUM=@itemnum AND (@status IS NULL OR a.STATUS=@status) AND (@siteid IS NULL OR a.SITEID=@siteid)` | `list[MaximoAssetWithLocation]` |
+| `maximo.get_inventory_balances(itemnum, siteid?)` | filters | `SELECT * FROM maximo_extract.INVBALANCES WHERE ITEMNUM=@itemnum AND (@siteid IS NULL OR SITEID=@siteid)` | `list[InvBalance]` — bin-level stock (Q2: separate from ASSET) |
+| `maximo.get_location(siteid, location)` | keys | `SELECT * FROM maximo_extract.LOCATIONS WHERE SITEID=@siteid AND LOCATION=@location` | `MaximoLocation` |
+| `maximo.get_open_workorders(assetnum, siteid)` | keys | `SELECT * FROM maximo_extract.WORKORDER WHERE ASSETNUM=@assetnum AND SITEID=@siteid AND STATUS != 'COMP'` | `list[MaximoWorkOrder]` |
+| `maximo.query_assets_by_region(itemnum, region)` | convenience | joins LOCATIONS on REGION | `list[MaximoAssetWithLocation]` |
+| `maximo.get_start_date_distribution(basin, customer_id?, asset_class?)` | filters | `SELECT APPROX_QUANTILES(variance_days, 100)[OFFSET(10/50/90)] FROM maximo_extract.WO_HISTORY WHERE REGION=@basin AND ...` | `StartDateDistribution` (queries WO_HISTORY view per Q7) |
 
 `query_assets_by_region` is the substitution for the current `query_maximo_availability(canonical_id, region_filter)`. The shift is: skill calls Maximo by **Maximo's natural keys** (ITEMNUM, SITEID, REGION). The canonical-id translation happens upstream in the Catalog/MCP layer, not inside Maximo's tool surface.
 
-**Why the LLM doesn't see `execute_sql_readonly` directly:** if we expose generic SQL to the LLM, it will write column names that don't exist, miss the `MANDT` join key, miss the `@` parameterization, and the demo will be brittle. The typed Python wrappers are the contract; the LLM calls `get_material_master(matnr="MAT-67890")` and the wrapper handles the SQL. This is the same pattern ADK uses for any structured tool. The only difference from custom MCP is that the SQL goes through Google's MCP endpoint instead of our Cloud Run container.
+`get_start_date_distribution` is intentionally on the Maximo MCP (not a separate skill-side BQ client) — variance comes from WO completion data, which is Maximo-domain. This makes the substitution story clean: customer with live Maximo writes the OData equivalent of the WO_HISTORY query, no separate plumbing.
 
 ### FDP MCP server (`mcp_servers/fdp`)
 
@@ -626,28 +594,28 @@ class FdpCustomerConfig(BaseModel):
 
 Every existing tool function and its post-migration call path. "Real-SAP/Maximo-expressible" means the new call is something a customer with their actual systems can reproduce — that's the substitutability test.
 
-"Post-migration" column shows the typed Python function the skill exposes to the LLM. The Python body calls BigQuery MCP (`execute_sql_readonly`) for SAP+Maximo, calls FDP MCP for FDP data, calls KC MCP for catalog lookups.
+Every existing tool function and its post-migration call path. "Real-SAP/Maximo-expressible" means the new call is something a customer with their actual systems can reproduce — that's the substitutability test.
 
-| Skill | Tool | Current behavior | Post-migration | Notes |
-|---|---|---|---|---|
-| asset-equivalence | `resolve_canonical_asset(local_identifier, source_system?)` | reads `cross_system_aliases.json` + `canonical_assets.json` | `kc.lookup_context()` first, then `kc.search_entries()` substring match. Fallback: `execute_sql_readonly` against `oilfield_kc.cross_system_aliases`. | substring-on-label kept; "Tool X" → `TX-001` still works |
-| asset-equivalence | `find_functional_equivalents(canonical_id)` | reads `functional_equivalences.json` | `kc.list_related_entries(canonical_id, relation_type='functionally_equivalent')` (KC MCP). | Engineering content, customer brings their InTouch equivalence table |
-| asset-equivalence | `score_equivalence_confidence(src, sub, customer_id)` | reads `functional_equivalences.json` + `customers.json` | `find_functional_equivalents` + `fdp.list_customer_restrictions(customer_id)` (FDP MCP). 0.3 penalty stays as policy code. | |
-| enterprise-systems | `query_maximo_availability(canonical_id, region_filter?)` | reads `maximo_inventory.json` | (1) resolve `canonical_id` → `itemnum` via `kc.lookup_context()`. (2) typed wrapper `query_assets_by_region(itemnum, region)` → `execute_sql_readonly` against `maximo_extract.ASSET ⋈ LOCATIONS`. Returns `list[MaximoAssetWithLocation]`. `certification_hours_remaining` stays on the response (extract-layer view). | Shape changes: `location.label` becomes `description`. `equivalence_lookup` prompt + Pydantic refs get edited. |
-| enterprise-systems | `query_sap_workforce(basin)` | reads `sap_workforce.json` | typed wrapper `get_workforce_by_basin(basin)` → `execute_sql_readonly` against `sap_extract.ZHR_WORKFORCE` latest snapshot. | **synthesized-signature** — ZHR_ is a custom Z-table, customer maps to their HR view. |
-| enterprise-systems | `query_fdp_customer_config(customer_id, canonical_id)` | reads `fdp_configurations.json` | (1) resolve `canonical_id` → `matnr` via KC. (2) `fdp.get_customer_config(customer_id_normalized, matnr)` + `fdp.list_approved_substitutions(...)` via FDP MCP. Customer-name normalization calls typed wrapper `resolve_customer_by_name` which queries `sap_extract.KNA1` via BQ MCP. | brittle `v7_substitution_accepted` boolean explodes into rows in `APPROVED_SUBSTITUTIONS` |
-| enterprise-systems | `query_intouch_specs(canonical_id)` | reads `intouch_index.json` | `kc.search_entries(applies_to=canonical_id, entry_type='intouch_spec')`. | InTouch refs become Catalog entries (TASK-06) |
-| sourcing-logistics | `estimate_transit(...)` | pure haversine + thresholds | unchanged. Maps Grounding (TASK #46) already wired. | |
-| sourcing-logistics | `calculate_sourcing_cost(...)` | pure | unchanged. Optional enrich: `get_standard_price(matnr)` → BQ MCP `sap_extract.MBEW`. | |
-| sourcing-logistics | `identify_blockers(canonical_id_sub, customer_id, source_equipment_instance_id?)` | reads `customers.json` + `maximo_inventory.json` | (1) `fdp.list_customer_restrictions(customer_id)` via FDP MCP. (2) If `equipment_instance_id` present, BQ MCP wrappers `query_assets_by_item` + `get_open_workorders`. | `workforce_attached` flagged **synthesized-signature**, document derivation from `MAXIMO.LABTRANS`. |
-| procurement-prerequisites | `check_budget_threshold(plan_json, tier)` | pure | unchanged. Optional enrich: `get_standard_price(matnr) * qty` via BQ MCP. | |
-| procurement-prerequisites | `check_certification_chain(plan_json)` | pure | optional enrich: pull spec refs from `kc.lookup_context()`. | |
-| procurement-prerequisites | `check_regulatory_clearance(plan_json)` | pure | unchanged (deny-list policy code, no system of record). | |
-| forecast-rationale | `extract_rationale_tags(text)` | pure keyword scan | unchanged for TASK-16. | |
-| forecast-rationale | `compute_override_significance(orig, override, vol)` | pure | unchanged. Optionally compute `historical_volatility_pct` from `eia_steo.basin_production` rolling stddev via BQ MCP. | |
-| scheduling-probability | `get_start_date_distribution(basin, customer_id?, asset_class?)` | reads `start_date_variance/{basin}.json` | typed wrapper → BQ MCP `execute_sql_readonly` against `maximo_extract.WO_HISTORY` view (Q7) with `APPROX_QUANTILES(variance_days, 100)[OFFSET(10/50/90)]`. | Q7 resolution: variance lives at source (Maximo WO history), not as a separate KC table. |
-| scheduling-probability | `compute_optimal_buffer(p10, p50, p90, risk)` | pure | unchanged | |
-| scheduling-probability | `compute_fleet_utilization_impact(basin, rec, current)` | pure | unchanged. Optional enrich: `bakerhughes_rig_count.weekly_basin` via BQ MCP. | |
+| Skill | Tool | Current behavior | Post-migration | SAP/Maximo-expressible? | Notes |
+|---|---|---|---|---|---|
+| asset-equivalence | `resolve_canonical_asset(local_identifier, source_system?)` | reads `cross_system_aliases.json` + `canonical_assets.json` | `kc.lookup_context()` first, then `kc.search_entries()` substring match. | Yes — customer populates KC from their own MARA + Maximo ITEM extracts. | substring-on-label kept; "Tool X" → `TX-001` still works |
+| asset-equivalence | `find_functional_equivalents(canonical_id)` | reads `functional_equivalences.json` | `kc.list_related_entries(canonical_id, relation_type='functionally_equivalent')` (KC MCP). | Yes — engineering content, customer brings their InTouch equivalence table. | |
+| asset-equivalence | `score_equivalence_confidence(src, sub, customer_id)` | reads `functional_equivalences.json` + `customers.json` | `find_functional_equivalents` + `fdp.list_customer_restrictions(customer_id)` (FDP MCP). 0.3 penalty stays as policy code. | Yes — customer restrictions are an FDP-equivalent extract. | |
+| enterprise-systems | `query_maximo_availability(canonical_id, region_filter?)` | reads `maximo_inventory.json` | (1) resolve `canonical_id` → `itemnum` via `kc.lookup_context()`. (2) `maximo.query_assets_by_region(itemnum, region)`. Returns `list[MaximoAssetWithLocation]`. `certification_hours_remaining` stays on the response (extract-layer view). | Yes — `canonical_id` is *our* construct; in production the agent reasons on KC entry name, which the platform maps to ITEMNUM. | Shape changes: `location.label` becomes `description`. `equivalence_lookup` prompt + Pydantic refs get edited. |
+| enterprise-systems | `query_sap_workforce(basin)` | reads `sap_workforce.json` | `sap.get_workforce_by_basin(basin)` | Yes — though no standard SAP table; we model as ZHR_WORKFORCE custom table. | flagged: **synthesized-signature-not-from-real-systems**. Customer maps to their HR view. |
+| enterprise-systems | `query_fdp_customer_config(customer_id, canonical_id)` | reads `fdp_configurations.json` | (1) resolve `canonical_id` → `matnr` via KC. (2) `fdp.get_customer_config(customer_id_normalized, matnr)` + `fdp.list_approved_substitutions(...)`. Customer-name normalization calls `sap.resolve_customer_by_name`. | Yes — FDP is the homegrown system; customer provides an equivalent extract. | the brittle `v7_substitution_accepted` boolean explodes into rows in `APPROVED_SUBSTITUTIONS` |
+| enterprise-systems | `query_intouch_specs(canonical_id)` | reads `intouch_index.json` | `kc.search_entries(applies_to=canonical_id, entry_type='intouch_spec')`. | Yes — InTouch is internal docs, customer provides their own KC entries. | |
+| sourcing-logistics | `estimate_transit(...)` | pure haversine + thresholds | unchanged. Maps Grounding (TASK #46) already wired. | n/a — pure compute | |
+| sourcing-logistics | `calculate_sourcing_cost(...)` | pure | unchanged. Optional enrich: `sap.get_standard_price(matnr)` for charter base rate. | n/a | |
+| sourcing-logistics | `identify_blockers(canonical_id_sub, customer_id, source_equipment_instance_id?)` | reads `customers.json` + `maximo_inventory.json` | (1) `fdp.list_customer_restrictions(customer_id)`. (2) If `equipment_instance_id` present, `maximo.query_assets_by_item(itemnum, ...)` + `maximo.get_open_workorders(assetnum, siteid)`. | Yes | `workforce_attached` flagged **synthesized-signature**; in production derived from `MAXIMO.LABTRANS`. |
+| procurement-prerequisites | `check_budget_threshold(plan_json, tier)` | pure | unchanged. Optional enrich: `sap.get_standard_price(matnr) * qty` to guard against LLM hallucinating cost. | n/a | |
+| procurement-prerequisites | `check_certification_chain(plan_json)` | pure | optional enrich: pull spec refs from `kc.lookup_context()`. | Yes (when enriched) | |
+| procurement-prerequisites | `check_regulatory_clearance(plan_json)` | pure | unchanged (deny-list policy code, no system of record). | n/a | the deny-list (`iran`/`russia`) stays in code — it's policy, not data |
+| forecast-rationale | `extract_rationale_tags(text)` | pure keyword scan | unchanged for TASK-16. | n/a | |
+| forecast-rationale | `compute_override_significance(orig, override, vol)` | pure | unchanged. Optionally compute `historical_volatility_pct` from `eia_steo.basin_production` rolling stddev. | Public-data-grounded | |
+| scheduling-probability | `get_start_date_distribution(basin, customer_id?, asset_class?)` | reads `start_date_variance/{basin}.json` | `maximo.get_start_date_distribution(basin, customer_id?, asset_class?)` — queries `maximo_extract.WO_HISTORY` view (Q7) with `APPROX_QUANTILES(variance_days, 100)[OFFSET(10/50/90)]`. | Yes — variance computed from the customer's own Maximo WO completion history. | Q7 resolution: variance lives on the Maximo MCP, not as a separate skill-side BQ client. |
+| scheduling-probability | `compute_optimal_buffer(p10, p50, p90, risk)` | pure | unchanged | n/a | |
+| scheduling-probability | `compute_fleet_utilization_impact(basin, rec, current)` | pure | unchanged. Optional enrich: `bakerhughes_rig_count.weekly_basin` for actual rig activity. | Public-data-grounded option | |
 
 **Signatures that can't be expressed in real-SAP/Maximo terms** (must be flagged in code as `# SYNTHESIZED SIGNATURE: not from real systems`):
 
@@ -721,28 +689,27 @@ Three sub-steps (separate confirmations because each touches an external service
 
 Done = each table populated with current production data, attribution noted in `docs/architecture.md`.
 
-### Step 5 — BigQuery MCP integration
+### Step 5 — MCP server backend migration: SAP
 
-Deliverable: `agents/utils/bq_mcp_client.py` — a thin synchronous wrapper around ADK's `McpToolset` that calls `https://bigquery.googleapis.com/mcp` via StreamableHTTP with ADC. Env vars: `BQ_PROJECT` (default `vertex-ai-demos-468803`), `BQ_DATASET_PREFIX` (default empty — datasets are absolute-named).
+Deliverable: `mcp_servers/sap/backend/main.py` migrated to query BQ via `google-cloud-bigquery`. Add new typed endpoints per §4 (`sap.get_material_master`, `sap.get_plant_data`, `sap.get_storage_location_stock`, `sap.get_standard_price`, `sap.get_customer`, `sap.resolve_customer_by_name`, `sap.get_workforce_by_basin`). Legacy `POST /sap/workforce/by_basin` + `GET /sap/material/{matnr}` kept as thin wrappers. Add `BQ_PROJECT` and `BQ_DATASET_SAP` env vars (defaults `vertex-ai-demos-468803`, `sap_extract`).
 
-IAM setup (manual, one-time):
-- Grant the Vertex AI Reasoning Engine service account `roles/mcp.toolUser` on the project.
-- Grant `roles/bigquery.dataViewer` on each of `sap_extract`, `maximo_extract`, `oilfield_kc`, `bakerhughes_rig_count`, `worldport_index`, `eia_steo`.
-- (Optional, Phase 2) Register BigQuery MCP server with Agent Registry + add gateway policy in `infra/gateway_policies.yaml` so audit logs flow through the same pipeline as KC and FDP MCPs.
+Verification: run locally — `curl http://localhost:8080/sap/v2/material_master/MAT-67890` returns the new `SapMaterialMaster` shape; legacy `GET /sap/material/MAT-67890` returns the old shape. Integration: cargo-plane scenario integration test passes against the BQ-backed local SAP MCP.
 
-Verification: a one-off smoke test (`scripts/smoke_bq_mcp.py`) runs `execute_sql_readonly("SELECT MATNR FROM sap_extract.MARA LIMIT 5")` and prints rows.
+Done = local SAP MCP container against BQ passes existing `tests/integration/test_sap_mcp.py` (TASK-05) plus new endpoint tests.
 
-Done = `bq_mcp_client.py` returns rows from a known table; ADC token acquired from the Reasoning Engine SA works.
+### Step 6 — MCP server backend migration: Maximo
 
-### Step 6 — FDP MCP server backend migration
+Same drill for Maximo. New typed endpoints per §4 (including `maximo.get_inventory_balances` per Q2 and `maximo.get_start_date_distribution` querying the `WO_HISTORY` view per Q7). Legacy `POST /maximo/availability` kept as a thin wrapper. Add `BQ_DATASET_MAXIMO` env var.
 
-Deliverable: `mcp_servers/fdp/backend/main.py` migrated to query BQ via `google-cloud-bigquery`. New endpoint surface per §4 (`fdp.get_customer_config`, `fdp.list_approved_substitutions`, `fdp.list_customer_restrictions`). Legacy `POST /fdp/customer_config` kept as thin wrapper. Add `BQ_PROJECT` and `BQ_DATASET_FDP` env vars.
+Verification: cargo-plane scenario integration test passes against the local Maximo MCP backend pointed at BQ. Quantile call returns p10/p50/p90 within ±2 days of the previous JSON-backed values (seeder's lognormal reverse-engineering tolerance).
 
-Verification: run locally — `curl http://localhost:8080/fdp/v2/customer_config?customer_id=gulf-petroleum&matnr=MAT-67890` returns the `FdpCustomerConfig` shape.
+### Step 7 — MCP server backend migration: FDP
 
-Done = local FDP MCP container against BQ passes existing integration test (cargo-plane scenario's restriction-matrix lookup still works).
+Same. Add `BQ_DATASET_FDP` env var. Legacy `POST /fdp/customer_config` kept as thin wrapper. New typed endpoints per §4.
 
-### Step 7 — Skill tool migration: asset-equivalence
+Verification: `curl http://localhost:8080/fdp/v2/customer_config?customer_id=gulf-petroleum&matnr=MAT-67890` returns the `FdpCustomerConfig` shape.
+
+### Step 8 — Skill tool migration: asset-equivalence
 
 Deliverable: `agents/orchestrator_agent/skills/asset-equivalence/scripts/tools.py` updated. `resolve_canonical_asset` calls KC MCP first, falls back to BQ MCP `execute_sql_readonly` against `oilfield_kc.cross_system_aliases` for the substring-on-label case (the LLM's "Tool X" lookup path). `find_functional_equivalents` and `score_equivalence_confidence` go through KC MCP + FDP MCP. Remove the `agents.utils.synthetic_data` imports.
 
@@ -750,7 +717,7 @@ Verification: `pytest agents/tests/unit/test_skills.py::test_resolve_canonical_a
 
 Done = no `load_canonical_assets()` / `load_cross_system_aliases()` calls remaining in the asset-equivalence skill.
 
-### Step 8 — Skill tool migration: enterprise-systems
+### Step 9 — Skill tool migration: enterprise-systems
 
 Deliverable: `agents/orchestrator_agent/skills/enterprise-systems/scripts/tools.py` updated per §5. The query functions now wrap BQ MCP `execute_sql_readonly` (for SAP + Maximo) and FDP MCP (for FDP) calls. New typed wrappers `get_workforce_by_basin`, `query_assets_by_region`, `resolve_customer_by_name` per §4. Helper `_resolve_matnr_from_canonical(canonical_id) -> str` calls KC MCP.
 
@@ -760,46 +727,45 @@ Concurrent edit: `equivalence_lookup` prompt + downstream Pydantic field refs mi
 
 Done = no `data/*.json` reads in `enterprise-systems/scripts/tools.py`.
 
-### Step 9 — Skill tool migration: sourcing-logistics
+### Step 10 — Skill tool migration: sourcing-logistics
 
 Deliverable: `identify_blockers` migrated per §5 — replaces `load_maximo_inventory()` and `get_customer()` with FDP MCP + BQ MCP wrapper calls. `estimate_transit` and `calculate_sourcing_cost` unchanged.
 
 Verification: unit tests pass.
 
-### Step 10 — Skill tool migration: scheduling-probability
+### Step 11 — Skill tool migration: scheduling-probability
 
 Deliverable: `get_start_date_distribution` migrated to a typed BQ MCP wrapper that runs `APPROX_QUANTILES(variance_days, 100)[OFFSET(10/50/90)]` against `maximo_extract.WO_HISTORY` (the view from §3, Q7 resolution).
 
 Verification: `pytest agents/tests/unit/test_skills.py::test_get_start_date_distribution*` passes; quantiles match the previous JSON-backed outputs within ±2 days (the lognormal reverse-engineering from the seeder introduces controlled variance).
 
-### Step 11 — KC population
+### Step 12 — KC population
 
 Deliverable: re-run `knowledge_catalog/setup.py` so Catalog Entries reference `oilfield_kc.canonical_assets` content. Existing Aspect Type schemas in `knowledge_catalog/aspect_types/*.yaml` unchanged. New `relationships` registration for `functionally_equivalent` if not already present (TASK-06).
 
 Verification: KC MCP `lookup_context('TX-001')` returns canonical entry + asset_specification aspect + cross_system_aliases aspect + relationships to TX-007.
 
-### Step 12 — End-to-end smoke
+### Step 13 — End-to-end smoke
 
-Deliverable: re-run `make demo-cargo-plane` against the new BQ-MCP + FDP-MCP stack. Verify in Cloud Trace that:
+Deliverable: re-run `make demo-cargo-plane` against the new BQ-backed MCP stack. Verify in Cloud Trace that:
 1. No skill tool reads `data/*.json` at runtime.
-2. `bigquery.googleapis.com/mcp` calls show in MCP-side traces (one per SAP + Maximo skill call).
-3. FDP Cloud Run MCP shows BQ jobs in its trace.
-4. KC MCP returns canonical entries with all aliases.
-5. The output `SourcingPlan` is structurally identical to pre-migration (primary_option is Lagos, avoided_cost ~$380k).
+2. SAP MCP shows BQ jobs in its trace.
+3. Maximo MCP shows BQ jobs (including the `WO_HISTORY` view for `get_start_date_distribution`).
+4. FDP MCP shows BQ jobs.
+5. KC MCP returns canonical entries with all aliases.
+6. The output `SourcingPlan` is structurally identical to pre-migration (primary_option is Lagos, avoided_cost ~$380k).
 
 Verification command: `make demo-cargo-plane && python scripts/verify_no_json_reads.py` (a static grep over skill tools that fails if any of them imports from `agents.utils.synthetic_data`).
 
-Done = cargo-plane scenario completes end-to-end with all enterprise calls visibly hitting BQ MCP or FDP MCP.
+Done = cargo-plane scenario completes end-to-end with all four MCP servers visibly hitting BQ.
 
-### Step 13 — Documentation + retire dormant MCP dirs
+### Step 14 — Documentation
 
-Deliverable: `docs/architecture.md` updated with §2's architecture diagram. New `docs/data_layer.md` documenting per-table provenance (the §3 content, cleaned up). Update `mcp_servers/fdp/README.md` with new env vars + endpoint surface. Add `docs/bq_mcp_integration.md` documenting the BQ MCP wiring + IAM grants.
+Deliverable: `docs/architecture.md` updated with §2's architecture diagram. New `docs/data_layer.md` documenting per-table provenance (the §3 content, cleaned up). Update `mcp_servers/{sap,maximo,fdp}/README.md` with new env vars + endpoint surface.
 
-Retire `mcp_servers/sap/` and `mcp_servers/maximo/` directories — they were stood up by TASK-05 but never deployed to production and are now superseded by managed BigQuery MCP. Delete the source trees, remove Cloud Build configs, drop the `deploy-mcp-sap`/`deploy-mcp-maximo` Makefile targets, and update `scripts/register_mcp_servers.py` so the registration list contains only KC + BigQuery MCP + FDP MCP.
+### Step 15 — Commit
 
-### Step 14 — Commit
-
-`feat: backend migration — BQ extracts mirroring SAP+Maximo, BigQuery MCP for reads, FDP custom MCP retained (TASK-16)`
+`feat: backend migration — BQ extracts mirroring SAP+Maximo, 3 MCP servers BQ-backed, public datasets loaded (TASK-16)`
 
 ---
 
@@ -842,16 +808,17 @@ What we deliberately did **not** synthesize when reality was the shape-wrong cho
 
 7. ~~**Where do `start_date_variance` rows logically belong?**~~ **RESOLVED 2026-05-20: `maximo_extract.WO_HISTORY` (derived view).** Stronger substitutability — customer doesn't bring a separate table; the view computes over their existing Maximo WORKORDER dump. §3 includes the view definition; §7 Step 10 wires it.
 
-8. ~~**Skill prompts edit budget.**~~ **RESOLVED 2026-05-20: Edit the prompt + downstream Pydantic refs to use `description`** (real Maximo column). No legacy-key shim. Step 8 includes the prompt edit.
+8. ~~**Skill prompts edit budget.**~~ **RESOLVED 2026-05-20: Edit the prompt + downstream Pydantic refs to use `description`** (real Maximo column). No legacy-key shim. Step 9 includes the prompt edit.
 
-9. ~~**MCP architecture — Cloud Run for all 3, BigQuery MCP only, or hybrid?**~~ **RESOLVED 2026-05-20: Hybrid.** Managed BigQuery MCP (`https://bigquery.googleapis.com/mcp`) is the primary data path for SAP + Maximo reads — zero custom code, governed by IAM. FDP stays as a custom Cloud Run MCP server to demonstrate the wrapping pattern for non-BQ systems. Original §4 SAP MCP + Maximo MCP server sections removed; replaced with typed Python wrappers around `execute_sql_readonly`. §7 Steps 5-6 rewrote (was: SAP MCP / Maximo MCP migration → now: BigQuery MCP integration / FDP MCP migration).
+9. ~~**MCP architecture — Cloud Run for all 3, BigQuery MCP only, or hybrid?**~~ **RESOLVED 2026-05-20 (reversed from earlier hybrid decision): All 3 custom Cloud Run MCP servers (SAP, Maximo, FDP).** Reasoning: the typed tool surface (`sap.get_material_master`, `maximo.query_assets_by_region`) is the substitutability contract. A customer can fork our MCP server and swap the BQ query for a live OData/REST call — the tool surface stays identical, no agent changes. With managed BigQuery MCP the agent's tool becomes `execute_sql_readonly` and the agents are coupled to BQ as the source of truth permanently. Also enables per-tool IAM in Agent Gateway. §4 has typed tool tables for all 3 servers; §7 Steps 5-7 are the 3 MCP server migrations.
 
 ---
 
 ## Critical Files for Implementation
 
-- /Users/rahulkasanagottu/Desktop/agentic-sop-oilfield-services/agents/utils/bq_mcp_client.py (NEW — thin wrapper around BigQuery MCP)
-- /Users/rahulkasanagottu/Desktop/agentic-sop-oilfield-services/mcp_servers/fdp/backend/main.py (migrated to BQ-backed; only custom MCP retained)
+- /Users/rahulkasanagottu/Desktop/agentic-sop-oilfield-services/mcp_servers/sap/backend/main.py
+- /Users/rahulkasanagottu/Desktop/agentic-sop-oilfield-services/mcp_servers/maximo/backend/main.py
+- /Users/rahulkasanagottu/Desktop/agentic-sop-oilfield-services/mcp_servers/fdp/backend/main.py
 - /Users/rahulkasanagottu/Desktop/agentic-sop-oilfield-services/agents/orchestrator_agent/skills/enterprise-systems/scripts/tools.py
 - /Users/rahulkasanagottu/Desktop/agentic-sop-oilfield-services/agents/orchestrator_agent/skills/asset-equivalence/scripts/tools.py
 - /Users/rahulkasanagottu/Desktop/agentic-sop-oilfield-services/agents/utils/synthetic_data.py (the import surface to retire from production code paths; stays for tests)
