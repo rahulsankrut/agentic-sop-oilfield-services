@@ -17,7 +17,7 @@ import statistics
 from datetime import datetime
 from pathlib import Path
 
-from agents.utils.mcp_client import maximo_get_start_date_distribution
+from agents.utils.enterprise_data import maximo_get_start_date_distribution
 
 logger = logging.getLogger(__name__)
 
@@ -114,35 +114,24 @@ def get_start_date_distribution(
          cargo-plane scenario keeps working before WO_HISTORY is seeded.
       3. Neither  →  conservative 14d default across percentiles.
     """
-    mcp_payload = maximo_get_start_date_distribution(
-        basin, customer_id=customer_id, asset_class=asset_class
-    )
+    # TASK-MCP-REFACTOR: was the Maximo MCP endpoint; now direct-BQ via
+    # `enterprise_data.maximo_get_start_date_distribution`. Returns day-
+    # offset quantiles directly instead of date-shaped payload, so no
+    # date conversion needed.
+    bq_payload = maximo_get_start_date_distribution(basin)
 
-    if mcp_payload and float(mcp_payload.get("confidence", 0.0)) > 0.0:
-        try:
-            requested = _parse_iso(mcp_payload["requested_date"])
-            p10 = _offset_days(requested, _parse_iso(mcp_payload["p10_actual_date"]))
-            p50 = _offset_days(requested, _parse_iso(mcp_payload["p50_actual_date"]))
-            p90 = _offset_days(requested, _parse_iso(mcp_payload["p90_actual_date"]))
-        except (KeyError, ValueError) as exc:
-            logger.warning("Malformed MCP StartDateDistribution payload: %s", exc)
-        else:
-            # Heuristic sample size from confidence (inverse of the MCP's
-            # `0.25 + 0.25 * sqrt(n)/10` heuristic, capped). Used only for
-            # downstream display; the buffer math doesn't need it exact.
-            confidence = float(mcp_payload["confidence"])
-            approx_n = max(1, int(((confidence - 0.25) * 40) ** 2)) if confidence > 0.25 else 1
-            return {
-                "p10_offset_days": round(p10, 2),
-                "p50_offset_days": round(p50, 2),
-                "p90_offset_days": round(p90, 2),
-                "sample_size": approx_n,
-                "confidence": confidence,
-                "source": "maximo_mcp",
-            }
+    if bq_payload and bq_payload.get("n", 0) > 0:
+        return {
+            "p10_offset_days": round(float(bq_payload["p10_days"]), 2),
+            "p50_offset_days": round(float(bq_payload["p50_days"]), 2),
+            "p90_offset_days": round(float(bq_payload["p90_days"]), 2),
+            "sample_size": int(bq_payload["n"]),
+            "confidence": min(1.0, 0.25 + 0.25 * (float(bq_payload["n"]) ** 0.5) / 10.0),
+            "source": "maximo_bq",
+        }
 
-    # MCP returned zero-confidence (WO_HISTORY empty for this basin). Try
-    # the legacy JSON fallback before defaulting to the static 14d.
+    # BQ returned zero rows (WO_HISTORY empty for this basin). Try the
+    # legacy JSON fallback before defaulting to the static 14d.
     fallback = _synthesize_from_legacy_json(basin, customer_id, asset_class)
     if fallback is not None:
         return fallback

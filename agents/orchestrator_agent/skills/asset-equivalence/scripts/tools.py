@@ -21,7 +21,7 @@ import json
 import logging
 
 from agents.schemas import AssetIdentifier
-from agents.utils import mcp_client
+from agents.utils import enterprise_data as ed
 from agents.utils.bq_query import BQ_PROJECT, bq_query
 
 logger = logging.getLogger(__name__)
@@ -270,7 +270,7 @@ def _normalize_customer_id(raw: str) -> str:
     # Display-name input: probe SAP. If it matches, derive a slug from NAME1.
     if " " in needle:
         try:
-            customers = mcp_client.sap_resolve_customer_by_name(needle) or []
+            customers = ed.sap_resolve_customer_by_name(needle) or []
             if customers:
                 name1 = (customers[0].get("name1") or "").strip()
                 if name1:
@@ -334,7 +334,7 @@ def score_equivalence_confidence(
     restrictions: list[dict] = []
     if matnr_orig is not None and matnr_sub is not None:
         try:
-            restrictions = mcp_client.fdp_list_customer_restrictions(customer_id) or []
+            restrictions = ed.fdp_list_customer_restrictions(customer_id) or []
         except Exception as exc:  # noqa: BLE001 — degrade to base confidence
             logger.debug("fdp_list_customer_restrictions failed (%s); using base", exc)
             restrictions = []

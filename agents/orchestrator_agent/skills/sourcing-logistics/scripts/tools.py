@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import math
 
-from agents.utils import mcp_client
+from agents.utils import enterprise_data as ed
 from agents.utils.bq_query import bq_query
 
 # Distance thresholds in km
@@ -128,7 +128,7 @@ def _normalize_customer_id(raw: str) -> str:
     # anywhere directly, so we derive it the same way the original
     # `customers.json` slugs were minted: lowercase the first 1-2 NAME1
     # tokens and join with hyphens.
-    matches = mcp_client.sap_resolve_customer_by_name(needle) or []
+    matches = ed.sap_resolve_customer_by_name(needle) or []
     if matches:
         name1 = matches[0].get("name1", "")
         return _slug_from_name1(name1) or needle.lower().replace(" ", "-")
@@ -176,7 +176,7 @@ def _customer_restriction_blocker(canonical_id_substitute: str, customer_id: str
     if not matnr_sub:
         return None
     normalized = _normalize_customer_id(customer_id)
-    restrictions = mcp_client.fdp_list_customer_restrictions(normalized) or []
+    restrictions = ed.fdp_list_customer_restrictions(normalized) or []
     for r in restrictions:
         if r.get("matnr_substitute_rejected") == matnr_sub:
             return f"Customer {customer_id} restricts substitution to {canonical_id_substitute}"
@@ -186,7 +186,7 @@ def _customer_restriction_blocker(canonical_id_substitute: str, customer_id: str
 def _open_recert_hours_remaining(assetnum: str, siteid: str) -> float:
     """Sum (est_lab_hrs - act_lab_hrs) across open RECERT work orders."""
     total = 0.0
-    wos = mcp_client.maximo_get_open_workorders(assetnum, siteid) or []
+    wos = ed.maximo_get_open_workorders(assetnum, siteid) or []
     for wo in wos:
         if (wo.get("worktype") or "").upper() != "RECERT":
             continue
@@ -204,7 +204,7 @@ def _equipment_blockers(
     itemnum = _resolve_canonical_to_itemnum(canonical_id_substitute)
     matched: dict | None = None
     if itemnum:
-        for a in mcp_client.maximo_query_assets_by_item(itemnum) or []:
+        for a in ed.maximo_query_assets_by_item(itemnum) or []:
             if a.get("assetnum") == source_equipment_instance_id:
                 matched = a
                 break

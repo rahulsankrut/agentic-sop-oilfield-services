@@ -81,7 +81,7 @@ tools:
       an LLM-proposed substitute appears in this list. Empty result means
       no known customer restrictions.
     method: GET
-    path: /fdp/v2/customer_restrictions/{customer_id}
+    path: /fdp/v2/customer_restrictions/{{.customer_id}}
     pathParams:
       - name: customer_id
         type: string

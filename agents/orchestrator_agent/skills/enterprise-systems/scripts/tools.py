@@ -1,18 +1,15 @@
 """Tools for the enterprise-systems skill (Maximo, SAP, FDP, InTouch).
 
-TASK-16 Step 9 — these tools now route through the SAP / Maximo / FDP
-MCP servers (via `agents.utils.mcp_client`) and the BigQuery-backed
-`oilfield_kc.cross_system_aliases` table (via `agents.utils.bq_query`)
-instead of reading `data/*.json` directly. The function signatures and
-docstrings are unchanged so calling skill prompts + downstream
-build_plans glue don't need to know whether the implementation is
-in-memory JSON or live MCP/BQ.
+TASK-MCP-REFACTOR (2026-05-21) — these tools now route through
+`agents.utils.enterprise_data` (BQ-direct) instead of the MCP servers
+(`agents.utils.mcp_client`, deleted). The schema queried is identical
+to what the MCP backends read; we just skip the HTTP roundtrip when the
+caller is Python rather than the LLM. Function signatures and return
+shapes are unchanged.
 
 Per Q8 (TASK-16 spec §7 Step 9), the `query_maximo_availability` return
-shape's `location` field now uses ``description`` (real Maximo column
-name) instead of the legacy ``label``. Downstream consumers
-(``build_plans._instance_to_geopoint`` + the test suite) are updated to
-match.
+shape's `location` field uses ``description`` (real Maximo column
+name) instead of the legacy ``label``.
 """
 
 from __future__ import annotations
@@ -21,7 +18,7 @@ import logging
 import os
 from typing import Any
 
-from agents.utils import mcp_client
+from agents.utils import enterprise_data as ed
 from agents.utils.bq_query import bq_query
 
 logger = logging.getLogger(__name__)
@@ -90,10 +87,10 @@ def normalize_customer_id(name_or_slug: str) -> str:
         return ""
     needle = name_or_slug.lower().strip()
 
-    # First try resolving through the SAP MCP. KNA1.NAME1 is the display
-    # name; LIKE %needle% matches both directions ("Gulf Petroleum
+    # First try resolving through the SAP KNA1 BQ table. NAME1 is the
+    # display name; LIKE %needle% matches both directions ("Gulf Petroleum
     # Services" contains "gulf petroleum" and vice versa).
-    matches = mcp_client.sap_resolve_customer_by_name(needle)
+    matches = ed.sap_resolve_customer_by_name(needle)
     if matches:
         # KUNNR in our synthetic data is the slug (matches the legacy
         # `customers.json` ID format). Customers bringing their own SAP
@@ -149,9 +146,9 @@ def query_maximo_availability(
     itemnum = alias["MAXIMO_ITEMNUM"]
 
     if region_filter:
-        raw_assets = mcp_client.maximo_query_assets_by_region(itemnum, region_filter)
+        raw_assets = ed.maximo_query_assets_by_region(itemnum, region_filter)
     else:
-        raw_assets = mcp_client.maximo_query_assets_by_item(itemnum)
+        raw_assets = ed.maximo_query_assets_by_item(itemnum)
 
     rows: list[dict] = []
     for asset in raw_assets:
@@ -161,7 +158,7 @@ def query_maximo_availability(
         cert_hours = 0
         if assetnum and siteid:
             try:
-                wos = mcp_client.maximo_get_open_workorders(assetnum, siteid)
+                wos = ed.maximo_get_open_workorders(assetnum, siteid)
             except Exception as exc:  # noqa: BLE001 — keep the row even if WO lookup fails
                 logger.warning("Failed to fetch open WOs for %s/%s: %s", assetnum, siteid, exc)
                 wos = []
@@ -217,9 +214,9 @@ def query_sap_workforce(basin: str) -> dict:
     If the basin is unknown, returns all-zeros (the SAP MCP returns a
     zero-filled SapWorkforce in that case).
     """
-    # DEMO NARRATION: "SAP MCP — workforce-by-basin. Same shape whether it's
-    # the customer's ZHR_WORKFORCE Z-table or our seeded BQ extract."
-    payload = mcp_client.sap_get_workforce_by_basin(basin) or {}
+    # DEMO NARRATION: "SAP ZHR_WORKFORCE — same shape whether it's the
+    # customer's homegrown Z-table or our seeded BQ extract."
+    payload = ed.sap_get_workforce_by_basin(basin) or {}
     return {
         "crew_count_available": int(payload.get("crew_count_available", 0) or 0),
         "specialist_count_available": int(payload.get("specialist_count_available", 0) or 0),
@@ -255,11 +252,11 @@ def query_fdp_customer_config(customer_id: str, canonical_id: str) -> dict:
         return {}
     matnr = alias["SAP_MATNR"]
 
-    config = mcp_client.fdp_get_customer_config(slug, matnr)
+    config = ed.fdp_get_customer_config(slug, matnr)
     if not config:
         return {}
 
-    substitutions = mcp_client.fdp_list_approved_substitutions(slug, matnr) or []
+    substitutions = ed.fdp_list_approved_substitutions(slug, matnr) or []
     subs_map: dict[str, bool] = {}
     for sub in substitutions:
         sub_matnr = sub.get("matnr_substitute")

@@ -35,7 +35,7 @@ tools:
       Use this when the agent has a Maximo ITEMNUM and needs the item's
       description and commodity group. Reads Maximo ITEM (Item Master).
     method: GET
-    path: /maximo/v2/item/{itemnum}
+    path: /maximo/v2/item/{{.itemnum}}
     pathParams:
       - name: itemnum
         type: string
@@ -51,7 +51,7 @@ tools:
       "in_use") and / or SITEID. Joins ASSET ⋈ LOCATIONS on
       (SITEID, LOCATION). Returns a list of MaximoAssetWithLocation.
     method: GET
-    path: /maximo/v2/assets/by_item/{itemnum}
+    path: /maximo/v2/assets/by_item/{{.itemnum}}
     pathParams:
       - name: itemnum
         type: string
@@ -78,7 +78,7 @@ tools:
       canonical-id translation happens upstream in the Knowledge Catalog,
       so this tool takes Maximo's natural key (ITEMNUM).
     method: GET
-    path: /maximo/v2/assets/by_region/{itemnum}
+    path: /maximo/v2/assets/by_region/{{.itemnum}}
     pathParams:
       - name: itemnum
         type: string
@@ -99,7 +99,7 @@ tools:
       ASSET (which tracks individual serialized units), INVBALANCES
       tracks consumable / bulk inventory at a bin.
     method: GET
-    path: /maximo/v2/inventory_balances/{itemnum}
+    path: /maximo/v2/inventory_balances/{{.itemnum}}
     pathParams:
       - name: itemnum
         type: string
@@ -119,7 +119,7 @@ tools:
       nearest World Port Index port for transit-cost grounding. Reads
       Maximo LOCATIONS.
     method: GET
-    path: /maximo/v2/location/{siteid}/{location}
+    path: /maximo/v2/location/{{.siteid}}/{{.location}}
     pathParams:
       - name: siteid
         type: string
@@ -137,7 +137,7 @@ tools:
       being committed to a sourcing plan. Reads Maximo WORKORDER
       filtered to STATUS != 'COMP'.
     method: GET
-    path: /maximo/v2/open_workorders/{assetnum}/{siteid}
+    path: /maximo/v2/open_workorders/{{.assetnum}}/{{.siteid}}
     pathParams:
       - name: assetnum
         type: string
@@ -157,7 +157,7 @@ tools:
       with APPROX_QUANTILES. Optional customer_id / asset_class filters
       are reserved for future v2 work — accepted as no-ops today.
     method: GET
-    path: /maximo/v2/start_date_distribution/{basin}
+    path: /maximo/v2/start_date_distribution/{{.basin}}
     pathParams:
       - name: basin
         type: string
@@ -201,7 +201,7 @@ tools:
       maximo_get_open_workorders. Fetches the legacy EquipmentInstance
       shape by ASSETNUM.
     method: GET
-    path: /maximo/equipment/{equipment_instance_id}
+    path: /maximo/equipment/{{.equipment_instance_id}}
     pathParams:
       - name: equipment_instance_id
         type: string

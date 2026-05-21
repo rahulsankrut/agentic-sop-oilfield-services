@@ -36,7 +36,7 @@ tools:
       English description, material type (FERT/ROH/HALB), material group,
       and base unit of measure. Joins SAP MARA + MAKT (English language).
     method: GET
-    path: /sap/v2/material_master/{matnr}
+    path: /sap/v2/material_master/{{.matnr}}
     pathParams:
       - name: matnr
         type: string
@@ -50,7 +50,7 @@ tools:
       MRP controller, MRP type, procurement type. Optionally filter by
       WERKS (plant code). Returns rows from SAP MARC.
     method: GET
-    path: /sap/v2/plant_data/{matnr}
+    path: /sap/v2/plant_data/{{.matnr}}
     pathParams:
       - name: matnr
         type: string
@@ -69,7 +69,7 @@ tools:
       plant" — returns SAP MARD rows with LABST > 0 (unrestricted stock)
       per (WERKS, LGORT). Replaces the v1 inventory-availability check.
     method: GET
-    path: /sap/v2/storage_location_stock/{matnr}
+    path: /sap/v2/storage_location_stock/{{.matnr}}
     pathParams:
       - name: matnr
         type: string
@@ -83,7 +83,7 @@ tools:
       SAP's standard price (STPRS in MBEW) for a material. Guards against
       LLM hallucinating cost figures.
     method: GET
-    path: /sap/v2/standard_price/{matnr}
+    path: /sap/v2/standard_price/{{.matnr}}
     pathParams:
       - name: matnr
         type: string
@@ -97,7 +97,7 @@ tools:
       the customer's master data — name, country, city, street. Reads
       SAP KNA1.
     method: GET
-    path: /sap/v2/customer/{kunnr}
+    path: /sap/v2/customer/{{.kunnr}}
     pathParams:
       - name: kunnr
         type: string
@@ -129,7 +129,7 @@ tools:
       sourcing plan. Reads the SAP Z-table ZHR_WORKFORCE (custom
       workforce-by-basin extract). Unknown basins return all zeros.
     method: GET
-    path: /sap/v2/workforce/by_basin/{basin}
+    path: /sap/v2/workforce/by_basin/{{.basin}}
     pathParams:
       - name: basin
         type: string
@@ -158,7 +158,7 @@ tools:
       a SAP MATNR to the canonical asset record via the cross-system
       alias table. Kept for one release for TASK-05 backwards compat.
     method: GET
-    path: /sap/material/{sap_material_number}
+    path: /sap/material/{{.sap_material_number}}
     pathParams:
       - name: sap_material_number
         type: string
