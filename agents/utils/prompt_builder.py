@@ -15,7 +15,16 @@
 # Ported verbatim from
 # github.com/GoogleCloudPlatform/next-26-keynotes/devkey/demo-1/planner_agent/utils.py
 
-"""Immutable, section-based prompt builder for agent instruction composition."""
+"""Immutable, section-based prompt builder for agent instruction composition.
+
+DEVIATION NOTE (code-review LOW #24, 2026-05-21): SPECS.md §Architectural
+principles mandates ``PromptBuilder`` for prompt composition, but every
+agent's ``prompts.py`` currently uses a triple-quoted string. This module
+is preserved as a tested, ready-to-use utility — retrofit when a prompt
+genuinely benefits from section-based composition (variant injection,
+A/B testing, runtime section reordering). The triple-quoted-string
+shape is fine for the deterministic prompts we ship today.
+"""
 
 from __future__ import annotations
 

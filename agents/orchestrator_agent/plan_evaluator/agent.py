@@ -14,7 +14,7 @@ import os
 import pathlib
 
 import vertexai
-from google.adk.agents import LlmAgent
+from google.adk import Agent
 from google.adk.skills import load_skill_from_dir
 from google.adk.tools import google_maps_grounding, preload_memory
 from google.adk.tools.skill_toolset import SkillToolset
@@ -105,7 +105,7 @@ assert abs(sum(CRITERION_WEIGHTS.values()) - 1.0) < 1e-4, "Weights must sum to 1
 # oilfield services: safety, customer compatibility, logistics feasibility,
 # cost, equivalence confidence, regulatory, schedule. Each weighted, all
 # aggregated into an overall_score the Orchestrator iterates against."
-root_agent = LlmAgent(
+root_agent = Agent(
     name="plan_evaluator_agent",
     model=GlobalGemini(model=MODEL_NAME),
     description=(

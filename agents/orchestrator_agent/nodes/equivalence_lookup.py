@@ -317,7 +317,8 @@ equivalence_lookup_agent = Agent(
         "rationale. Sources its evidence from Knowledge Catalog via the managed "
         "Dataplex MCP server, routed through Agent Gateway."
     ),
-    instruction=EQUIVALENCE_LOOKUP_INSTRUCTION,
+    static_instruction=EQUIVALENCE_LOOKUP_INSTRUCTION,
+    include_contents="none",
     output_schema=EquivalentAssetCandidate,
     tools=[*_build_mcp_toolset(), preload_memory],
     after_agent_callback=_emit_equivalence_events,

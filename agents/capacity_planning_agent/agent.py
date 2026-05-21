@@ -10,7 +10,7 @@ called directly from Gemini Enterprise, not from a sibling agent).
 import os
 
 import vertexai
-from google.adk.agents import LlmAgent
+from google.adk import Agent
 from google.adk.tools import preload_memory
 from google.genai.types import GenerateContentConfig, ThinkingConfig
 
@@ -35,7 +35,7 @@ if project_id:
 # risk tolerance, and recommends buffers. This is how Issue 1 resolves: static
 # worst-case buffers replaced with risk-calibrated recommendations grounded in
 # real start-date volatility data."
-root_agent = LlmAgent(
+root_agent = Agent(
     name=AGENT_NAME,
     model=GlobalGemini(model=MODEL_NAME),
     description=AGENT_DESCRIPTION,

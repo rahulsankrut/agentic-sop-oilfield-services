@@ -134,7 +134,8 @@ sourcing_logistics_agent = Agent(
         "Decision node: refine a deterministically-built SourcingPlan with "
         "logistics reasoning. Returns an updated SourcingPlan."
     ),
-    instruction=SOURCING_LOGISTICS_INSTRUCTION,
+    static_instruction=SOURCING_LOGISTICS_INSTRUCTION,
+    include_contents="none",
     output_schema=SourcingPlan,
     # google_maps_grounding lets the model ground transit-time and distance
     # claims in real Maps data during reasoning (Persona 3 cargo-plane

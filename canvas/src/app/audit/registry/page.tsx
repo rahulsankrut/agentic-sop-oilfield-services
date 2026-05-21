@@ -45,8 +45,9 @@ type DataMode = "mock" | "live";
 // for the v1 demo; the live wiring is the deploy step."
 export default function AuditRegistryPage() {
   // For TASK-11 v1 this is always "mock" — TASK-13 flips it to "live" via
-  // env-driven feature flag once the Cloud Logging tail is wired.
-  const [dataMode] = useState<DataMode>("mock");
+  // env-driven feature flag once the Cloud Logging tail is wired. Plain
+  // `const` (not useState — there's no setter wired). Code-review LOW #26.
+  const dataMode: DataMode = "mock";
 
   // R reloads the data — for v1 this is just a no-op flash that re-renders
   // (mock data doesn't change). Wired now so the rehearsal muscle-memory is

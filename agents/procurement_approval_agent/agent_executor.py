@@ -122,7 +122,7 @@ class ProcurementApprovalExecutor(AgentExecutor):
         try:
             await updater.update_status(
                 TaskState.working,
-                message=new_agent_text_message("Reviewing plan for simulation readiness..."),
+                message=new_agent_text_message("Reviewing plan for procurement readiness..."),
             )
 
             session_id = await self.session_manager.get_or_create_session(
@@ -160,7 +160,7 @@ class ProcurementApprovalExecutor(AgentExecutor):
 
             await updater.update_status(
                 TaskState.failed,
-                message=new_agent_text_message("Failed to generate simulation approval"),
+                message=new_agent_text_message("Failed to generate procurement approval"),
                 final=True,
             )
 

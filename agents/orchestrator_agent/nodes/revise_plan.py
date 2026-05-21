@@ -68,7 +68,8 @@ revise_plan_agent = Agent(
         "Decision node: revise a sourcing plan based on Plan Evaluator findings. "
         "Returns an updated SourcingPlan."
     ),
-    instruction=REVISE_PLAN_INSTRUCTION,
+    static_instruction=REVISE_PLAN_INSTRUCTION,
+    include_contents="none",
     output_schema=SourcingPlan,
     tools=[preload_memory],
     after_agent_callback=_stash_plan_and_save_memories,

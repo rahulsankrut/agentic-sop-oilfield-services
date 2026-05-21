@@ -1,7 +1,7 @@
 """Local A2A server for testing the Procurement Approval Agent.
 
 Usage:
-    poetry run python -m agents.procurement_approval_agent.local_server
+    poetry run python scripts/procurement_local_server.py
 """
 
 import asyncio
@@ -28,8 +28,12 @@ AGENT_PORT = 8089
 
 async def run_server():
     """Run the Procurement Approval Agent as a local A2A server."""
-    from .agent_card import create_procurement_approval_card
-    from .agent_executor import ProcurementApprovalExecutor
+    from agents.procurement_approval_agent.agent_card import (
+        create_procurement_approval_card,
+    )
+    from agents.procurement_approval_agent.agent_executor import (
+        ProcurementApprovalExecutor,
+    )
 
     project = os.environ.get("GOOGLE_CLOUD_PROJECT")
     if not project:

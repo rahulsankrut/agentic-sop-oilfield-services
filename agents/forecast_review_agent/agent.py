@@ -12,7 +12,7 @@ wrapping — called directly from Gemini Enterprise, not from a sibling agent).
 import os
 
 import vertexai
-from google.adk.agents import LlmAgent
+from google.adk import Agent
 from google.adk.tools import preload_memory
 from google.genai.types import GenerateContentConfig, ThinkingConfig
 
@@ -36,7 +36,7 @@ if project_id:
 # Agent Inbox. When David makes a significant forecast override, this agent
 # prompts him for rationale, extracts structured tags via Gemini, and writes
 # them back to BigQuery. The next model retrain ingests this — Issue 2 closes."
-root_agent = LlmAgent(
+root_agent = Agent(
     name=AGENT_NAME,
     model=GlobalGemini(model=MODEL_NAME),
     description=AGENT_DESCRIPTION,

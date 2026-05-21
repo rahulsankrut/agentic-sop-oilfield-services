@@ -2,10 +2,10 @@
 
 Usage:
     # Terminal 1: Start server
-    poetry run python -m agents.procurement_approval_agent.local_server
+    poetry run python scripts/procurement_local_server.py
 
     # Terminal 2: Run test client
-    poetry run python -m agents.procurement_approval_agent.test_client
+    poetry run python scripts/procurement_test_client.py
 """
 
 import asyncio

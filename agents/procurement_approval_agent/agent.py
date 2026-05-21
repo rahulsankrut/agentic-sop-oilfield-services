@@ -15,7 +15,7 @@ by ``runtime/deploy.py``). Called by the Capacity Orchestrator via
 import os
 
 import vertexai
-from google.adk.agents import LlmAgent
+from google.adk import Agent
 from google.adk.tools import preload_memory
 from google.genai.types import GenerateContentConfig, ThinkingConfig
 
@@ -39,7 +39,7 @@ if project_id:
 # logistics dollars commit. Fast — no LLM reasoning depth needed, just
 # deterministic prerequisite checks. Runs on Agent Engine. Called by the
 # Orchestrator via A2A — the same protocol that bridges to SAP Joule agents."
-root_agent = LlmAgent(
+root_agent = Agent(
     name=AGENT_NAME,
     model=GlobalGemini(model=MODEL_NAME),
     description=AGENT_DESCRIPTION,
