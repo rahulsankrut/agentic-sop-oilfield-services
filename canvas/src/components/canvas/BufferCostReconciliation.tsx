@@ -1,9 +1,23 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, Target } from "lucide-react";
+import { CheckCircle2, TrendingUp, TrendingDown, Target } from "lucide-react";
 
 import type { BufferOption } from "@/data/fleetUtilizationData";
+
+interface BufferCommitBannerProps {
+  visible: boolean;
+  /** e.g. "Recommendation accepted. Buffer 14d → 10d. CapEx deferred $3.2M." */
+  headline?: string;
+  /** Optional second line — saved-as / version string. */
+  subline?: string;
+  /** Capex deferred (USD), rendered as the big stat. */
+  capexDeferredUsd?: number;
+  /** Buffer-days landed on (e.g. 10). */
+  bufferDays?: number;
+  /** On-time rate % (e.g. 78). */
+  onTimeRatePct?: number;
+}
 
 interface BufferCostReconciliationProps {
   option: BufferOption;
@@ -87,6 +101,85 @@ function Row({
         </div>
       </div>
       <div className="text-lg font-medium tabular-nums">{formatted}</div>
+    </div>
+  );
+}
+
+// DEMO NARRATION (Persona 2 v2, Beat 4): "Banner lands at the bottom of
+// the canvas. Buffer 14 down to 10, three-point-two million in CapEx
+// deferred, saved as Q4 fleet schedule v3. Capacity Planning Agent wrote
+// the outcome back to Memory Bank — next quarter's recommendation will
+// remember Tomas accepted a 10-day buffer at 0.7 risk tolerance."
+export function BufferCommitBanner({
+  visible,
+  headline,
+  subline,
+  capexDeferredUsd,
+  bufferDays,
+  onTimeRatePct,
+}: BufferCommitBannerProps) {
+  if (!visible) return null;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 20 }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
+      className="pointer-events-none absolute inset-x-6 bottom-6 z-10"
+    >
+      <div className="pointer-events-auto rounded-2xl border border-emerald-400/30 bg-gradient-to-r from-emerald-500/15 via-emerald-500/10 to-emerald-400/5 p-5 backdrop-blur-md">
+        <div className="flex items-start gap-4">
+          <CheckCircle2 className="mt-0.5 h-6 w-6 flex-none text-emerald-400" />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-emerald-100">
+              {headline ?? "Recommendation accepted."}
+            </div>
+            {subline && (
+              <div className="mt-0.5 text-xs text-emerald-200/70">{subline}</div>
+            )}
+          </div>
+          <div className="flex items-baseline gap-5">
+            {typeof bufferDays === "number" && (
+              <Stat label="Buffer" value={`${bufferDays}d`} />
+            )}
+            {typeof onTimeRatePct === "number" && (
+              <Stat label="On-time" value={`${onTimeRatePct}%`} />
+            )}
+            {typeof capexDeferredUsd === "number" && (
+              <Stat
+                label="CapEx deferred"
+                value={`$${(capexDeferredUsd / 1_000_000).toFixed(1)}M`}
+                accent
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+}) {
+  return (
+    <div className="text-right">
+      <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/60">
+        {label}
+      </div>
+      <div
+        className={`text-xl font-semibold tabular-nums ${
+          accent ? "text-emerald-200" : "text-white"
+        }`}
+      >
+        {value}
+      </div>
     </div>
   );
 }

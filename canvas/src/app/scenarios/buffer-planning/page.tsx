@@ -1,40 +1,49 @@
 "use client";
 
 /**
- * Persona 2 (Tomas, Fleet Scheduler — Permian) — buffer planning scenario.
+ * Persona 2 (Tomas, West Texas Fleet Scheduler) — buffer-planning scenario.
  *
  * Static demo mode: beat-by-beat scenario state from
- * ``bufferPlanningBeats``. Space advances, R resets, B / Shift+Space
- * steps back. Between beats (or after the final beat), the slider is
- * manually overridable — moving it triggers a reactive chart +
- * reconciliation panel update without changing the active beat.
+ * ``bufferPlanningBeats`` (src/data/scenarios/bufferPlanning.ts).
  *
- * TASK-12 wires this page into the demo runner: publishes into the
- * global demo context, mounts the DemoTimer, and uses
- * `useRehearsalControls` so the same Space / R / Shift+Space / L / P
- * shortcuts feel identical to the cargo-plane page.
+ * Choreography (6 beats, ~3 min):
+ *   Space → Beat 0..5. Shift+Space steps back, R resets, P pauses,
+ *   \ opens the global backstage panel.
+ *
+ *   Beat 0  chat panel posts Tomas's opening prompt; canvas opens to the
+ *           30-day Permian fleet timeline at the status-quo 14-day buffer.
+ *   Beat 1  stat tiles surface: 14d buffer, 92% on-time, 68% utilization.
+ *   Beat 2  agent models the 14→8 buffer drop. Stats reflow; timeline
+ *           tightens; risk-tolerance slider stays at 0.5.
+ *   Beat 3  risk-tolerance slider animates 0.5 → 0.7; agent counter-
+ *           proposes a 10-day buffer. Stats land at 78% / 76% / $3.2M.
+ *   Beat 4  Tomas accepts; the BufferCommitBanner appears at the bottom
+ *           of the canvas.
+ *   Beat 5  saved-as confirmation; persona timer rolls.
+ *
+ * Wiring identical to the cargo-plane page: rehearsal controls, demo
+ * context publication, pre-warm on mount.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { CanvasShell } from "@/components/layout/CanvasShell";
-import { FleetTimelineChart } from "@/components/canvas/FleetTimelineChart";
-import { RiskToleranceSlider } from "@/components/canvas/RiskToleranceSlider";
-import { BufferCostReconciliation } from "@/components/canvas/BufferCostReconciliation";
+import { FleetDailyTimelineChart } from "@/components/canvas/FleetTimelineChart";
+import { RiskToleranceSliderContinuous } from "@/components/canvas/RiskToleranceSlider";
+import { BufferCommitBanner } from "@/components/canvas/BufferCostReconciliation";
 import { DemoTimer } from "@/components/demo/DemoTimer";
-import { bufferPlanningBeats } from "@/data/bufferPlanningBeats";
+import { bufferPlanningBeats } from "@/data/scenarios/bufferPlanning";
 import { personaForPathname } from "@/data/personas";
 import { publishDemoState } from "@/hooks/useDemoContext";
 import { useScenario } from "@/hooks/useScenario";
 import { useRehearsalControls } from "@/hooks/useRehearsalControls";
 import { preWarmSession } from "@/lib/preWarmSession";
-import {
-  bufferOptionFor,
-  fracPumpScenario,
-  withBuffer,
-  type BufferOption,
-} from "@/data/fleetUtilizationData";
+import { getPersona } from "@/lib/skin";
+
+const TOMAS_PERSONA = getPersona("tomas");
+const TOMAS_OPENING_PROMPT =
+  'Show me Permian fleet utilization and the buffer trade-off — I want to drop the buffer from 14 to 8 days and see what the on-time rate does.';
 
 export default function BufferPlanningScenarioPage() {
   const pathname = usePathname();
@@ -52,15 +61,11 @@ export default function BufferPlanningScenarioPage() {
     setStartedAt((prev) => prev ?? Date.now());
   }, []);
 
-  // Manual slider override — when the user drags the slider between beats,
-  // this wins over `state.bufferOption`. Cleared when the beat advances so
-  // the storyboard reasserts control.
-  const [manualOverride, setManualOverride] = useState<
-    BufferOption["risk_tolerance"] | null
-  >(null);
-  const activeTolerance =
-    manualOverride ?? state.bufferOption ?? "conservative";
-  const currentOption = bufferOptionFor(activeTolerance);
+  // Manual risk-tolerance override — when the demoer drags the slider
+  // between beats, this wins over the beat-driven value until the next
+  // Space press (which clears it).
+  const [manualRisk, setManualRisk] = useState<number | null>(null);
+  const activeRisk = manualRisk ?? state.riskTolerance ?? 0.5;
 
   // Pre-warm on mount.
   useEffect(() => {
@@ -69,7 +74,7 @@ export default function BufferPlanningScenarioPage() {
   }, [persona]);
 
   const hardReset = useCallback(() => {
-    setManualOverride(null);
+    setManualRisk(null);
     setPaused(false);
     setStartedAt(null);
     scenario.reset();
@@ -77,34 +82,32 @@ export default function BufferPlanningScenarioPage() {
   }, [persona, scenario]);
 
   const skipToEnd = useCallback(() => {
-    setManualOverride(null);
+    setManualRisk(null);
     const stepsLeft = scenario.totalBeats - 1 - scenario.currentBeatIndex;
     for (let i = 0; i < stepsLeft; i++) scenario.advance();
   }, [scenario]);
 
-  // DEMO NARRATION (rehearsal controls): "Same keyboard wiring as the
-  // cargo-plane view — Space advances Tomas's beats. Between beats he
-  // can drag the slider freely; the chart and the cost panel update
-  // live without touching the storyboard cursor."
+  // DEMO NARRATION: "Same keyboard wiring as the cargo-plane view — Space
+  // advances Tomas's beats. Between beats he can nudge the risk slider
+  // and the chart still reacts; Space then jumps to the next scripted
+  // beat regardless."
   useRehearsalControls({
     onAdvance: () => {
       markStarted();
-      setManualOverride(null);
+      setManualRisk(null);
       scenario.advance();
     },
     onStepBack: () => {
-      setManualOverride(null);
+      setManualRisk(null);
       scenario.stepBack();
     },
     onReset: hardReset,
-    // Buffer planning is static-only for now — L is a no-op until live
-    // mode lands. Wiring the handler so the Backstage button still
-    // surfaces, but it intentionally does nothing.
+    // Buffer planning is static-only for v1 — L is a no-op.
     onToggleMode: undefined,
     onPause: () => setPaused((p) => !p),
   });
 
-  // Publish into the global demo context.
+  // Publish into the global demo context (Backstage / 1..6 hotkeys / timer).
   useEffect(() => {
     if (!persona) return;
     const beat = currentBeat;
@@ -125,7 +128,7 @@ export default function BufferPlanningScenarioPage() {
       lastError: null,
       startedAt,
       onReset: hardReset,
-      onToggleMode: null, // no live mode yet for buffer planning
+      onToggleMode: null,
       onPause: () => setPaused((p) => !p),
       onSkipToEnd: skipToEnd,
     });
@@ -140,14 +143,15 @@ export default function BufferPlanningScenarioPage() {
     skipToEnd,
   ]);
 
-  const timelineWithBuffer = useMemo(
-    () => withBuffer(fracPumpScenario.timeline, currentOption.buffer_pct),
-    [currentOption.buffer_pct],
-  );
+  const bufferDays = state.bufferDays ?? 14;
+  const onTimeRatePct = state.onTimeRatePct ?? 0;
+  const utilizationPct = state.utilizationPct ?? 0;
+  const capexDeferredUsd = state.capexDeferredUsd ?? 0;
+  const fleetTimelineData = state.fleetTimelineData ?? [];
 
   return (
     <CanvasShell
-      drawerOpen={!!state.drawerOpen}
+      drawerOpen={false}
       chat={
         <ChatPanel
           beatId={currentBeat.id}
@@ -155,38 +159,61 @@ export default function BufferPlanningScenarioPage() {
           index={currentBeatIndex}
           total={totalBeats}
           paused={paused}
+          showOpeningPrompt={currentBeatIndex === 0}
         />
       }
-      drawer={<BufferCostReconciliation option={currentOption} />}
       canvas={
         <div
-          className="relative flex h-full flex-col gap-6 p-8"
+          className="relative flex h-full flex-col gap-5 p-8"
           style={{ background: "var(--color-bg-base)" }}
         >
-          <header>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">
-              {fracPumpScenario.customer} · {fracPumpScenario.equipment_class}
+          <header className="flex items-end justify-between">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">
+                Permian basin · Midland · ExxonMobil · {TOMAS_PERSONA.sop_stage}
+              </div>
+              <h1 className="mt-1 text-2xl font-semibold">
+                Q4 fleet buffer planning
+              </h1>
             </div>
-            <h1 className="mt-1 text-2xl font-semibold">Q3 buffer planning</h1>
+            <BeatIndicator index={currentBeatIndex} total={totalBeats} />
           </header>
 
-          {state.showTimeline ? (
-            <FleetTimelineChart
-              timeline={timelineWithBuffer}
-              bufferedCapacity={currentOption.buffer_pct}
-              highlightWeek={state.highlightWeek}
-            />
-          ) : (
-            <ChartPlaceholder />
-          )}
-
-          <RiskToleranceSlider
-            options={fracPumpScenario.buffer_options}
-            value={activeTolerance}
-            onChange={setManualOverride}
+          <StatTiles
+            bufferDays={bufferDays}
+            onTimeRatePct={onTimeRatePct}
+            utilizationPct={utilizationPct}
+            capexDeferredUsd={capexDeferredUsd}
           />
 
-          <BeatIndicator index={currentBeatIndex} total={totalBeats} />
+          <div className="flex-1 min-h-0">
+            {state.showTimeline ? (
+              <FleetDailyTimelineChart
+                data={fleetTimelineData}
+                bufferDays={bufferDays}
+              />
+            ) : (
+              <ChartPlaceholder />
+            )}
+          </div>
+
+          <RiskToleranceSliderContinuous
+            value={activeRisk}
+            onChange={setManualRisk}
+          />
+
+          <BufferCommitBanner
+            visible={!!state.commitBannerVisible}
+            headline={state.commitBannerHeadline}
+            subline={
+              currentBeatIndex >= 5
+                ? "Synced to Maximo · Memory Bank: buffer_outcomes"
+                : "Saved as Q4 fleet schedule v3"
+            }
+            bufferDays={bufferDays}
+            onTimeRatePct={onTimeRatePct}
+            capexDeferredUsd={capexDeferredUsd}
+          />
 
           {persona && (
             <DemoTimer
@@ -202,10 +229,111 @@ export default function BufferPlanningScenarioPage() {
 
 function ChartPlaceholder() {
   return (
-    <div className="flex h-[480px] w-full items-center justify-center rounded-2xl border border-white/5 bg-white/[0.03]">
+    <div className="flex h-full min-h-[380px] w-full items-center justify-center rounded-2xl border border-white/5 bg-white/[0.03]">
       <div className="text-sm text-white/40">
-        Forecast loading — press Space to advance.
+        Capacity Planning Agent loading — press Space to advance.
       </div>
+    </div>
+  );
+}
+
+interface StatTilesProps {
+  bufferDays: number;
+  onTimeRatePct: number;
+  utilizationPct: number;
+  capexDeferredUsd: number;
+}
+
+function StatTiles({
+  bufferDays,
+  onTimeRatePct,
+  utilizationPct,
+  capexDeferredUsd,
+}: StatTilesProps) {
+  return (
+    <div className="grid grid-cols-4 gap-3">
+      <StatTile
+        label="Buffer"
+        value={`${bufferDays}d`}
+        sub={
+          bufferDays >= 14
+            ? "status quo"
+            : `${14 - bufferDays}d below baseline`
+        }
+        accent="amber"
+      />
+      <StatTile
+        label="On-time start rate"
+        value={`${onTimeRatePct}%`}
+        sub={
+          onTimeRatePct >= 90
+            ? "comfortable margin"
+            : onTimeRatePct >= 75
+              ? "acceptable"
+              : "below SLO"
+        }
+        accent={onTimeRatePct >= 75 ? "emerald" : "rose"}
+      />
+      <StatTile
+        label="Fleet utilization"
+        value={`${utilizationPct}%`}
+        sub={
+          utilizationPct >= 80
+            ? "tight"
+            : utilizationPct >= 70
+              ? "balanced"
+              : "loose"
+        }
+        accent="emerald"
+      />
+      <StatTile
+        label="CapEx deferred"
+        value={
+          capexDeferredUsd === 0
+            ? "$0"
+            : `$${(capexDeferredUsd / 1_000_000).toFixed(1)}M`
+        }
+        sub={
+          capexDeferredUsd === 0
+            ? "baseline plan"
+            : "vs replacement-tool spend"
+        }
+        accent="emerald"
+      />
+    </div>
+  );
+}
+
+function StatTile({
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  accent: "amber" | "emerald" | "rose";
+}) {
+  const accentClass =
+    accent === "amber"
+      ? "text-amber-300"
+      : accent === "rose"
+        ? "text-rose-300"
+        : "text-emerald-300";
+  return (
+    <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4">
+      <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">
+        {label}
+      </div>
+      <div
+        className={`mt-1 text-3xl font-semibold tabular-nums ${accentClass}`}
+      >
+        {value}
+      </div>
+      {sub && (
+        <div className="mt-0.5 text-[11px] text-white/40">{sub}</div>
+      )}
     </div>
   );
 }
@@ -216,6 +344,7 @@ interface ChatPanelProps {
   index: number;
   total: number;
   paused: boolean;
+  showOpeningPrompt: boolean;
 }
 
 function ChatPanel({
@@ -224,15 +353,29 @@ function ChatPanel({
   index,
   total,
   paused,
+  showOpeningPrompt,
 }: ChatPanelProps) {
+  const firstName = TOMAS_PERSONA.name.split(" ")[0];
   return (
     <div className="flex h-full flex-col p-6">
       <div className="mb-4 text-[10px] uppercase tracking-[0.18em] text-white/40">
-        Tomas · Fleet Scheduler Permian
+        {firstName} · {TOMAS_PERSONA.role} — {TOMAS_PERSONA.region}
       </div>
-      <div className="mb-6 text-sm text-white/70">
+      <div className="mb-4 text-sm text-white/70">
         Gemini Enterprise chat (stand-in)
       </div>
+
+      {showOpeningPrompt && (
+        <div className="mb-3 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3">
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-amber-300/80">
+            {firstName} → Capacity Planning Agent
+          </div>
+          <div className="text-sm leading-relaxed text-white/90">
+            {TOMAS_OPENING_PROMPT}
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto rounded-lg border border-white/10 bg-white/[0.03] p-4">
         <div className="mb-2 text-[10px] uppercase tracking-wider text-white/40">
           Beat {index + 1} / {total} {paused ? "· paused" : ""}
@@ -256,7 +399,7 @@ interface BeatIndicatorProps {
 
 function BeatIndicator({ index, total }: BeatIndicatorProps) {
   return (
-    <div className="mt-auto flex items-center gap-3 self-start rounded-full border border-white/10 bg-black/40 px-4 py-2 backdrop-blur-md">
+    <div className="flex items-center gap-3 self-end rounded-full border border-white/10 bg-black/40 px-4 py-2 backdrop-blur-md">
       <div className="text-[10px] uppercase tracking-[0.18em] text-white/50">
         Static demo
       </div>

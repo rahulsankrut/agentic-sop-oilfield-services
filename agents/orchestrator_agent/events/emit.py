@@ -52,3 +52,24 @@ def emit(ctx: Context, event: CanvasEvent) -> dict[str, Any]:
         except Exception:
             existing = []
     return {"canvas_events": [*existing, event.model_dump(mode="json")]}
+
+
+def emit_a2ui(ctx: Context, messages: list[dict[str, Any]]) -> dict[str, Any]:
+    """Append an A2UI v0.8 ServerToClientMessage batch to session state.
+
+    TASK-45 Phase 2 — agent-emitted A2UI surfaces (KC drawer, cost rollup,
+    audit panels). The canvas SSE client drains ``a2ui_envelopes`` from
+    each ``state_delta`` and hands the messages to ``A2UIProvider.
+    processMessages()`` so the right surface renders client-side.
+
+    ``messages`` is what ``agents/utils/a2ui.message_batch(...)`` returns
+    (a list of ``surfaceUpdate`` + ``beginRendering`` envelopes per the
+    v0.8 schema).
+    """
+    existing: list[Any] = []
+    if hasattr(ctx, "state"):
+        try:
+            existing = list(ctx.state.get("a2ui_envelopes", []) or [])
+        except Exception:
+            existing = []
+    return {"a2ui_envelopes": [*existing, *messages]}

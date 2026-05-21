@@ -60,8 +60,8 @@ const ROUTING_BY_PERSONA: Record<
   { route: string; implementationStatus: ImplementationStatus }
 > = {
   david: {
-    route: "/scenarios/forecast-review?status=stub",
-    implementationStatus: "stub",
+    route: "/scenarios/forecast-review",
+    implementationStatus: "ready-static",
   },
   tomas: {
     route: "/scenarios/buffer-planning",

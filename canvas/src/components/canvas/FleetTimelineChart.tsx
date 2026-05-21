@@ -12,6 +12,7 @@ import {
 } from "recharts";
 
 import type { FleetUtilizationPoint } from "@/data/fleetUtilizationData";
+import type { FleetTimelineDayPoint } from "@/data/demoScenarios";
 
 interface FleetTimelineChartProps {
   timeline: FleetUtilizationPoint[];
@@ -22,6 +23,14 @@ interface FleetTimelineChartProps {
   /** Optional week label (e.g. "W27") to draw a vertical reference
    *  line — used when the agent's narration points at a specific week. */
   highlightWeek?: string;
+}
+
+interface FleetDailyTimelineChartProps {
+  data: FleetTimelineDayPoint[];
+  /** Numeric buffer in days — drives the vertical reference line. */
+  bufferDays?: number;
+  /** Optional chart title; defaults to "30-day Permian fleet deployment". */
+  title?: string;
 }
 
 // DEMO NARRATION (Beat 2): "Here's the 12-week forecast. The shaded band
@@ -161,6 +170,127 @@ function LegendDot({
         <div className="h-2 w-3 rounded-sm opacity-30" style={{ backgroundColor: color }} />
       )}
       <span className="text-white/60">{label}</span>
+    </div>
+  );
+}
+
+// DEMO NARRATION (Persona 2 v2): "Thirty days of Permian deployment. The
+// white line is the basin's active rig count — Baker Hughes data. The
+// emerald line is what this fleet's actually committed to. Tighter
+// the gap, higher the utilization but also higher the late-start risk.
+// The vertical marker is the current buffer-day cutoff."
+export function FleetDailyTimelineChart({
+  data,
+  bufferDays,
+  title = "30-day Permian fleet deployment",
+}: FleetDailyTimelineChartProps) {
+  // Place the buffer line at (30 - bufferDays) → the buffer extends
+  // FROM that day to the right edge of the timeline.
+  const bufferLineDay =
+    typeof bufferDays === "number" ? Math.max(1, 30 - bufferDays) : null;
+
+  return (
+    <div className="h-full w-full rounded-2xl bg-white/5 p-6">
+      <div className="mb-4 flex items-baseline justify-between">
+        <h3 className="text-lg font-medium">{title}</h3>
+        <div className="flex gap-4 text-xs">
+          <LegendDot color="rgb(255, 255, 255)" label="Basin active rigs" filled />
+          <LegendDot color="rgb(16, 185, 129)" label="Fleet deployed" filled />
+          {bufferLineDay !== null && (
+            <LegendDot
+              color="rgb(245, 158, 11)"
+              label={`${bufferDays}-day buffer`}
+              filled
+            />
+          )}
+        </div>
+      </div>
+
+      <ResponsiveContainer width="100%" height={380}>
+        <ComposedChart
+          data={data}
+          margin={{ top: 20, right: 30, bottom: 20, left: 30 }}
+        >
+          <defs>
+            <linearGradient id="activeRigsBand" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgb(255, 255, 255)" stopOpacity={0.18} />
+              <stop offset="100%" stopColor="rgb(255, 255, 255)" stopOpacity={0.03} />
+            </linearGradient>
+            <linearGradient id="deployedBand" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgb(16, 185, 129)" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="rgb(16, 185, 129)" stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
+
+          <XAxis
+            dataKey="day"
+            stroke="rgba(255,255,255,0.5)"
+            tick={{ fill: "rgba(255,255,255,0.7)", fontSize: 12 }}
+            label={{
+              value: "Day",
+              position: "insideBottom",
+              offset: -10,
+              fill: "rgba(255,255,255,0.5)",
+            }}
+          />
+          <YAxis
+            stroke="rgba(255,255,255,0.5)"
+            tick={{ fill: "rgba(255,255,255,0.7)", fontSize: 12 }}
+            domain={[200, 360]}
+            label={{
+              value: "Rigs",
+              angle: -90,
+              position: "insideLeft",
+              fill: "rgba(255,255,255,0.5)",
+            }}
+          />
+
+          <Area
+            type="monotone"
+            dataKey="active_rigs"
+            stroke="rgb(255, 255, 255)"
+            strokeWidth={2}
+            strokeDasharray="6 3"
+            fill="url(#activeRigsBand)"
+            isAnimationActive={false}
+          />
+
+          <Area
+            type="monotone"
+            dataKey="deployed"
+            stroke="rgb(16, 185, 129)"
+            strokeWidth={3}
+            fill="url(#deployedBand)"
+            isAnimationActive={true}
+            animationDuration={500}
+          />
+
+          {bufferLineDay !== null && (
+            <ReferenceLine
+              x={bufferLineDay}
+              stroke="rgb(245, 158, 11)"
+              strokeDasharray="4 2"
+              strokeWidth={2}
+              label={{
+                value: `${bufferDays}d`,
+                fill: "rgb(245, 158, 11)",
+                fontSize: 11,
+                position: "top",
+              }}
+            />
+          )}
+
+          <Tooltip
+            contentStyle={{
+              backgroundColor: "rgb(17, 23, 42)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "8px",
+            }}
+            labelStyle={{ color: "rgba(255,255,255,0.8)" }}
+            labelFormatter={(d) => `Day ${d}`}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
     </div>
   );
 }

@@ -136,6 +136,62 @@ export interface CostBannerState {
   avoided?: number;
 }
 
+/**
+ * One day of the Permian fleet timeline (Persona 2 / Tomas).
+ * `active_rigs` is the count of rigs Baker-Hughes-style "active" in the
+ * basin on that day; `deployed` is the subset that this fleet has
+ * actually deployed equipment to.
+ */
+export interface FleetTimelineDayPoint {
+  day: number; // 1..30
+  active_rigs: number;
+  deployed: number;
+}
+
+/**
+ * Forecast-review view (Persona 1, TASK-14): a basin's row in the grid.
+ *
+ * `baseline_usd` is the model's untouched Q4 completions-revenue forecast.
+ * `override_usd` is David's manual override; when present, the tile renders
+ * the new number with a delta vs baseline. `confidence` drives a pill color
+ * (high = emerald, medium = amber, low = rose) and signals where the model
+ * is least sure — i.e. where David's domain knowledge has the most leverage.
+ * `rationaleTags` are the structured tags the Forecast Review Agent extracts
+ * from David's freeform override note; they render as chips beneath the tile.
+ */
+export interface BasinTileData {
+  id: string;
+  /** Display label — "Permian", "Gulf of Mexico", etc. */
+  label: string;
+  baseline_usd: number;
+  yoy_pct: number;
+  confidence: "high" | "medium" | "low";
+  /** When set, the tile shows the overridden value + delta vs baseline. */
+  override_usd?: number;
+  /** Structured rationale chips from the Forecast Review Agent. */
+  rationaleTags?: string[];
+  /** When true, the tile is highlighted (the basin David is editing). */
+  active?: boolean;
+  /** When true, the tile shows the "Why is the model wrong here?" prompt. */
+  promptOpen?: boolean;
+}
+
+/**
+ * Bottom-of-canvas delta stat for forecast-review (Persona 1, TASK-14).
+ * Aggregates the total override magnitude across all basins David touched.
+ */
+export interface ForecastDeltaBannerState {
+  visible: boolean;
+  /** Negative = forecast revised downward; positive = upward. */
+  delta_usd?: number;
+  /** Pre-override Q4 total. */
+  baseline_total_usd?: number;
+  /** Post-override Q4 total. */
+  revised_total_usd?: number;
+  /** Number of basins that received an override. */
+  overrides_count?: number;
+}
+
 export interface ScenarioState {
   mapCenter: [number, number];
   mapZoom: number;
@@ -151,6 +207,34 @@ export interface ScenarioState {
   /** Buffer-planning view: optional week label to highlight with a reference line. */
   highlightWeek?: string;
   drawerOpen?: boolean;
+
+  // -------------------------------------------------------------------------
+  // Buffer-planning v2 (Persona 2, TASK-12 enhancement): numeric buffer-days
+  // + continuous risk-tolerance scenario. Optional everywhere so the existing
+  // beats (cargo-plane, forecast-review, etc.) keep compiling without
+  // touching them.
+  // -------------------------------------------------------------------------
+  /** Numeric buffer in days (e.g. 14, 10, 8). Used by the Permian fleet view. */
+  bufferDays?: number;
+  /** Continuous 0..1 risk tolerance for the agent's recommendation. */
+  riskTolerance?: number;
+  /** Projected on-time start rate as a percent (e.g. 92 = 92%). */
+  onTimeRatePct?: number;
+  /** Fleet utilization percent (e.g. 68 = 68%). */
+  utilizationPct?: number;
+  /** Capex deferred by accepting this buffer plan, USD. */
+  capexDeferredUsd?: number;
+  /** 30-day fleet deployment timeline (one entry per day). */
+  fleetTimelineData?: FleetTimelineDayPoint[];
+  /** When true, the bottom-of-canvas BufferCostReconciliation banner is shown. */
+  commitBannerVisible?: boolean;
+  /** Optional headline text for the commit banner (used in the final beat). */
+  commitBannerHeadline?: string;
+  /** Forecast-review view (Persona 1, TASK-14): basin grid + delta banner. */
+  basinTiles?: BasinTileData[];
+  forecastDelta?: ForecastDeltaBannerState;
+  /** Forecast-review: a "saved as v2" confirmation toast at the bottom. */
+  forecastToast?: { visible: boolean; message?: string };
 }
 
 export interface Beat {

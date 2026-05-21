@@ -148,6 +148,41 @@ def _build_mcp_toolset() -> list:
 EQUIVALENCE_LOOKUP_USING_MCP: bool = bool(os.getenv("AGENT_GATEWAY_ENDPOINT"))
 
 
+def _emit_kc_drawer_a2ui(ctx, candidate_dict: dict) -> None:
+    """TASK-45 Phase 2 — emit a KC drawer A2UI surface.
+
+    Called inside the after-agent callback once the equivalence decision
+    has produced a candidate. The canvas's A2UIProvider drains
+    ``a2ui_envelopes`` from the SSE state_delta and renders the surface
+    client-side. Failures are swallowed — A2UI is best-effort, and the
+    bespoke drawer remains the fallback.
+    """
+    if not candidate_dict:
+        return
+    try:
+        from agents.utils import a2ui  # noqa: PLC0415
+
+        aspects = {
+            "cross_system_aliases": candidate_dict.get("aliases", {}) or {},
+            "functional_equivalences": [candidate_dict] if candidate_dict else [],
+            "asset_specification": {
+                "manufacturer": candidate_dict.get("manufacturer", ""),
+                "introduced_year": candidate_dict.get("introduced_year", ""),
+            },
+        }
+        a2ui_msgs = a2ui.kc_drawer(
+            str(candidate_dict.get("canonical_id", "")),
+            str(candidate_dict.get("canonical_label", "")),
+            aspects=aspects,
+        )
+        ctx.state["a2ui_envelopes"] = [
+            *(ctx.state.get("a2ui_envelopes") or []),
+            *a2ui_msgs,
+        ]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("equivalence_lookup a2ui emit failed: %s", exc)
+
+
 async def _emit_equivalence_events(callback_context: CallbackContext) -> None:
     """Surface the equivalence decision to the canvas as two events.
 
@@ -227,6 +262,8 @@ async def _emit_equivalence_events(callback_context: CallbackContext) -> None:
                 ctx.state["canvas_events"] = [*existing, *new_events]
             except Exception as exc:
                 logger.warning("Failed to write canvas_events to state: %s", exc)
+
+        _emit_kc_drawer_a2ui(ctx, candidate_dict)
     except Exception as exc:  # noqa: BLE001
         # Never let canvas-event emission fail the agent turn.
         logger.warning("equivalence_lookup canvas-event emit failed: %s", exc)

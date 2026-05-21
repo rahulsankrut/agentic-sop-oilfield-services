@@ -51,6 +51,12 @@ export interface AgentStreamOptions {
    * canvas events the node appended to the state delta.
    */
   onEvent: (event: CanvasEvent) => void;
+  /**
+   * Optional. Called for every A2UI envelope drained from the stream
+   * (TASK-45 Phase 2). Typically wired to `A2UIProvider.processMessages`
+   * — the canvas's A2UI renderer then updates the corresponding surfaces.
+   */
+  onA2UIMessage?: (message: unknown) => void;
   onStateChange?: (state: ConnectionState) => void;
 }
 
@@ -62,6 +68,10 @@ interface AdkEventLike {
   actions?: {
     state_delta?: {
       canvas_events?: unknown[];
+      // TASK-45 Phase 2 — A2UI v0.8 ServerToClientMessage[] envelopes
+      // emitted by orchestrator nodes. The canvas's A2UIProvider drains
+      // these and renders the surfaces client-side.
+      a2ui_envelopes?: unknown[];
     };
   };
 }
@@ -141,6 +151,7 @@ export class AgentStream {
           try {
             const adkEvent = JSON.parse(json) as AdkEventLike;
             this.drainCanvasEvents(adkEvent);
+            this.drainA2UIEnvelopes(adkEvent);
           } catch (err) {
             // eslint-disable-next-line no-console
             console.warn(
@@ -181,6 +192,27 @@ export class AgentStream {
       this.opts.onEvent(raw as CanvasEvent);
     }
     this.lastEmittedCount = list.length;
+  }
+
+  /**
+   * Track A2UI envelopes across ADK chunks the same way we track canvas
+   * events — the backend appends cumulatively, we only forward the
+   * newly-added entries.
+   */
+  private a2uiEmittedCount = 0;
+
+  /**
+   * Extract A2UI v0.8 envelopes from the ADK state_delta and forward
+   * each to ``onA2UIMessage``. Tolerates field absence.
+   */
+  private drainA2UIEnvelopes(adkEvent: AdkEventLike): void {
+    if (!this.opts.onA2UIMessage) return;
+    const list = adkEvent.actions?.state_delta?.a2ui_envelopes;
+    if (!Array.isArray(list) || list.length <= this.a2uiEmittedCount) return;
+    for (let i = this.a2uiEmittedCount; i < list.length; i++) {
+      this.opts.onA2UIMessage(list[i]);
+    }
+    this.a2uiEmittedCount = list.length;
   }
 
   close(): void {

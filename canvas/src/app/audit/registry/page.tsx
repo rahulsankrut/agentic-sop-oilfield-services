@@ -20,14 +20,15 @@
 
 import { useEffect, useState } from "react";
 
-import { RegistryTable } from "@/components/audit/RegistryTable";
-import { GatewayDecisionsList } from "@/components/audit/GatewayDecisionsList";
-import { ModelArmorBlocksList } from "@/components/audit/ModelArmorBlocksList";
+import { A2UIPanel } from "@/components/a2ui/A2UIPanel";
 import {
-  armorBlocks,
-  gatewayDecisions,
-  registryEntries,
-} from "@/data/auditMockData";
+  AUDIT_GATEWAY_DECISIONS,
+  AUDIT_GATEWAY_DECISIONS_SURFACE_ID,
+  AUDIT_MODEL_ARMOR_BLOCKS,
+  AUDIT_MODEL_ARMOR_SURFACE_ID,
+  AUDIT_REGISTRY_SURFACE_ID,
+  AUDIT_REGISTRY_TABLE,
+} from "@/data/a2uiSamples";
 import { getPersona } from "@/lib/skin";
 
 // Persona 6 (Audit Director) display name + role come from the active
@@ -77,7 +78,16 @@ export default function AuditRegistryPage() {
             title="Agent Registry"
             subtitle="Four MCP servers registered. Default-deny is enforced at Agent Gateway — anything not in this table is unreachable to every agent in the system."
           >
-            <RegistryTable entries={registryEntries} />
+            {/* DEMO NARRATION (Persona 6, Ayesha — TASK-45 Phase 2): "These
+                audit panels were hand-coded React in v1. In v2 they're A2UI
+                — the agent emits JSON describing the table, the gateway
+                decisions list, and the Model Armor blocks. If the catalog
+                of policies grew tomorrow, the agent emits more rows and
+                the canvas updates without a code deploy." */}
+            <A2UIPanel
+              messages={AUDIT_REGISTRY_TABLE}
+              surfaceId={AUDIT_REGISTRY_SURFACE_ID}
+            />
           </Section>
 
           <Section
@@ -85,7 +95,10 @@ export default function AuditRegistryPage() {
             title="Agent Gateway — recent decisions"
             subtitle="Every MCP tool call and every A2A handshake passes through Agent Gateway. ALLOWED rows cite the policy that approved them; DENIED rows show what default-deny rejected (e.g. Plan Evaluator writing to SAP — least-privilege at the tool level)."
           >
-            <GatewayDecisionsList entries={gatewayDecisions} />
+            <A2UIPanel
+              messages={AUDIT_GATEWAY_DECISIONS}
+              surfaceId={AUDIT_GATEWAY_DECISIONS_SURFACE_ID}
+            />
           </Section>
 
           <Section
@@ -93,7 +106,10 @@ export default function AuditRegistryPage() {
             title="Model Armor — recent blocks"
             subtitle="INSPECT_AND_BLOCK at MEDIUM+ confidence across prompt-injection, sensitive-data, dangerous-content, and malicious-URI filter categories. Blocks fire at the MCP boundary, before any agent reasons over the payload."
           >
-            <ModelArmorBlocksList entries={armorBlocks} />
+            <A2UIPanel
+              messages={AUDIT_MODEL_ARMOR_BLOCKS}
+              surfaceId={AUDIT_MODEL_ARMOR_SURFACE_ID}
+            />
           </Section>
         </div>
 

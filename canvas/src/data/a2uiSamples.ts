@@ -17,6 +17,15 @@
 
 import type { ServerToClientMessage } from "@a2ui/react";
 
+import {
+  armorBlocks,
+  gatewayDecisions,
+  registryEntries,
+  type ArmorBlockEntry,
+  type GatewayDecisionEntry,
+  type RegistryEntry,
+} from "@/data/auditMockData";
+
 const txt = (s: string) => ({ literalString: s });
 const childrenOf = (ids: string[]) => ({ explicitList: ids });
 
@@ -121,3 +130,627 @@ export const COST_ROLLUP_CARGO_PLANE: ServerToClientMessage[] = [
   },
   { beginRendering: { surfaceId: "cost-rollup", root: "root" } },
 ];
+
+// ===========================================================================
+// Audit Mode surfaces (TASK-45 Phase 2) — Persona 6 (Ayesha) governance view.
+//
+// Three panels migrate from bespoke React (RegistryTable, GatewayDecisionsList,
+// ModelArmorBlocksList) onto A2UI v0.8 surfaces. Factories below build the
+// ServerToClientMessage[] payloads programmatically from the typed mock data
+// in `auditMockData.ts` so the data and the rendering stay loosely coupled.
+//
+// Catalog limitation: the v0.8 standard catalog has no native Table, Badge,
+// or Pill component (Card / Row / Column / Text / Divider / List / Button /
+// Icon / Image only). We render badges as Text with leading symbol prefixes
+// (e.g. "● ALLOWED", "◆ DENIED", "✓ Healthy", "⚠ Degraded"); the demo point
+// is that the agent emits JSON describing the surface, not visual fidelity
+// with the v1 hand-tuned components.
+// ===========================================================================
+
+// ---- shared formatters ----------------------------------------------------
+
+function formatUtcDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mn = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${mn} UTC`;
+}
+
+function formatTimeOnly(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mn = String(d.getUTCMinutes()).padStart(2, "0");
+  const ss = String(d.getUTCSeconds()).padStart(2, "0");
+  return `${hh}:${mn}:${ss}`;
+}
+
+const TECHNIQUE_LABELS: Record<ArmorBlockEntry["technique"], string> = {
+  "prompt-injection": "Prompt injection",
+  jailbreak: "Jailbreak",
+  "sensitive-data": "Sensitive data",
+  "dangerous-content": "Dangerous content",
+  "malicious-uri": "Malicious URI",
+};
+
+// ---- Agent Registry table -------------------------------------------------
+
+const REGISTRY_SURFACE_ID = "audit-registry-table";
+
+/**
+ * Build the A2UI message batch for the Agent Registry panel — a Card
+ * containing a Column whose rows are: a header row, then one Row per
+ * registered MCP server. Each per-server Row pairs server name+source on
+ * the left with endpoint/tools/latency/registered/status on the right.
+ */
+export function buildRegistryMessages(
+  rows: ReadonlyArray<RegistryEntry>,
+): ServerToClientMessage[] {
+  const components: Array<{ id: string; component: Record<string, unknown> }> = [];
+
+  // Header row — column labels.
+  components.push(
+    {
+      id: "reg-hdr-server",
+      component: { Text: { text: txt("SERVER"), usageHint: "caption" } },
+    },
+    {
+      id: "reg-hdr-endpoint",
+      component: { Text: { text: txt("ENDPOINT"), usageHint: "caption" } },
+    },
+    {
+      id: "reg-hdr-tools",
+      component: { Text: { text: txt("TOOLS"), usageHint: "caption" } },
+    },
+    {
+      id: "reg-hdr-latency",
+      component: { Text: { text: txt("P50 LATENCY"), usageHint: "caption" } },
+    },
+    {
+      id: "reg-hdr-registered",
+      component: { Text: { text: txt("REGISTERED"), usageHint: "caption" } },
+    },
+    {
+      id: "reg-hdr-status",
+      component: { Text: { text: txt("STATUS"), usageHint: "caption" } },
+    },
+    {
+      id: "reg-hdr-row",
+      component: {
+        Row: {
+          children: childrenOf([
+            "reg-hdr-server",
+            "reg-hdr-endpoint",
+            "reg-hdr-tools",
+            "reg-hdr-latency",
+            "reg-hdr-registered",
+            "reg-hdr-status",
+          ]),
+          distribution: "spaceBetween",
+          alignment: "center",
+        },
+      },
+    },
+    { id: "reg-hdr-divider", component: { Divider: { axis: "horizontal" } } },
+  );
+
+  const bodyChildIds: string[] = ["reg-hdr-row", "reg-hdr-divider"];
+
+  rows.forEach((row, idx) => {
+    const p = `reg-${idx}`;
+    const statusGlyph = row.status === "Healthy" ? "✓" : "⚠";
+
+    components.push(
+      // Server cell — name + source on stacked lines (Column).
+      {
+        id: `${p}-name`,
+        component: { Text: { text: txt(row.displayName), usageHint: "h5" } },
+      },
+      {
+        id: `${p}-source`,
+        component: { Text: { text: txt(row.source), usageHint: "caption" } },
+      },
+      {
+        id: `${p}-server-cell`,
+        component: {
+          Column: {
+            children: childrenOf([`${p}-name`, `${p}-source`]),
+            distribution: "start",
+            alignment: "start",
+          },
+        },
+      },
+      // Endpoint cell — endpoint URL + server id below.
+      {
+        id: `${p}-endpoint`,
+        component: { Text: { text: txt(row.endpoint), usageHint: "body" } },
+      },
+      {
+        id: `${p}-serverid`,
+        component: {
+          Text: { text: txt(row.serverId), usageHint: "caption" },
+        },
+      },
+      {
+        id: `${p}-endpoint-cell`,
+        component: {
+          Column: {
+            children: childrenOf([`${p}-endpoint`, `${p}-serverid`]),
+            distribution: "start",
+            alignment: "start",
+          },
+        },
+      },
+      // Single-line cells.
+      {
+        id: `${p}-tools`,
+        component: {
+          Text: { text: txt(String(row.toolCount)), usageHint: "body" },
+        },
+      },
+      {
+        id: `${p}-latency`,
+        component: {
+          Text: {
+            text: txt(`${row.latencyP50Ms} ms`),
+            usageHint: "body",
+          },
+        },
+      },
+      {
+        id: `${p}-registered`,
+        component: {
+          Text: {
+            text: txt(formatUtcDate(row.registeredAt)),
+            usageHint: "body",
+          },
+        },
+      },
+      {
+        id: `${p}-status`,
+        component: {
+          Text: {
+            text: txt(`${statusGlyph} ${row.status}`),
+            usageHint: "body",
+          },
+        },
+      },
+      // Body row.
+      {
+        id: `${p}-row`,
+        component: {
+          Row: {
+            children: childrenOf([
+              `${p}-server-cell`,
+              `${p}-endpoint-cell`,
+              `${p}-tools`,
+              `${p}-latency`,
+              `${p}-registered`,
+              `${p}-status`,
+            ]),
+            distribution: "spaceBetween",
+            alignment: "start",
+          },
+        },
+      },
+      { id: `${p}-divider`, component: { Divider: { axis: "horizontal" } } },
+    );
+
+    bodyChildIds.push(`${p}-row`, `${p}-divider`);
+  });
+
+  components.push(
+    {
+      id: "reg-body",
+      component: {
+        Column: {
+          children: childrenOf(bodyChildIds),
+          distribution: "start",
+          alignment: "stretch",
+        },
+      },
+    },
+    { id: "reg-root", component: { Card: { child: "reg-body" } } },
+  );
+
+  return [
+    {
+      surfaceUpdate: {
+        surfaceId: REGISTRY_SURFACE_ID,
+        components,
+      },
+    },
+    { beginRendering: { surfaceId: REGISTRY_SURFACE_ID, root: "reg-root" } },
+  ];
+}
+
+/** Static export for the page to render directly. */
+export const AUDIT_REGISTRY_TABLE: ServerToClientMessage[] =
+  buildRegistryMessages(registryEntries);
+
+export const AUDIT_REGISTRY_SURFACE_ID = REGISTRY_SURFACE_ID;
+
+// ---- Agent Gateway recent decisions ---------------------------------------
+
+const GATEWAY_SURFACE_ID = "audit-gateway-decisions";
+
+/**
+ * Build the A2UI message batch for the Gateway-decisions panel — a Card
+ * containing a summary line + a List whose items are per-decision Rows
+ * (timestamp + ALLOWED/DENIED badge + principal + tool path + reason +
+ * latency). Maps from typed `GatewayDecisionEntry[]`.
+ */
+export function buildGatewayDecisionsMessages(
+  entries: ReadonlyArray<GatewayDecisionEntry>,
+): ServerToClientMessage[] {
+  const components: Array<{ id: string; component: Record<string, unknown> }> = [];
+
+  const allowedCount = entries.filter((e) => e.decision === "ALLOWED").length;
+  const deniedCount = entries.length - allowedCount;
+
+  // Summary line.
+  components.push(
+    {
+      id: "gw-summary",
+      component: {
+        Text: {
+          text: txt(
+            `● ${allowedCount} allowed   ◆ ${deniedCount} denied   ·   last ${entries.length} decisions`,
+          ),
+          usageHint: "caption",
+        },
+      },
+    },
+    { id: "gw-summary-divider", component: { Divider: { axis: "horizontal" } } },
+  );
+
+  const itemIds: string[] = [];
+
+  entries.forEach((entry, idx) => {
+    const p = `gw-${idx}`;
+    const allowed = entry.decision === "ALLOWED";
+    const glyph = allowed ? "●" : "◆";
+
+    components.push(
+      // Badge + timestamp (column 1).
+      {
+        id: `${p}-badge`,
+        component: {
+          Text: {
+            text: txt(`${glyph} ${entry.decision}`),
+            usageHint: "h5",
+          },
+        },
+      },
+      {
+        id: `${p}-time`,
+        component: {
+          Text: {
+            text: txt(formatTimeOnly(entry.timestamp)),
+            usageHint: "caption",
+          },
+        },
+      },
+      {
+        id: `${p}-meta`,
+        component: {
+          Column: {
+            children: childrenOf([`${p}-badge`, `${p}-time`]),
+            distribution: "start",
+            alignment: "start",
+          },
+        },
+      },
+      // Detail (column 2): agent → tool, principal, reason.
+      {
+        id: `${p}-arrow`,
+        component: {
+          Text: {
+            text: txt(`${entry.sourceAgent}  →  ${entry.toolPath}`),
+            usageHint: "body",
+          },
+        },
+      },
+      {
+        id: `${p}-principal`,
+        component: {
+          Text: {
+            text: txt(
+              `principal: ${entry.principal}@…iam.gserviceaccount.com`,
+            ),
+            usageHint: "caption",
+          },
+        },
+      },
+      {
+        id: `${p}-reason`,
+        component: {
+          Text: { text: txt(entry.reason), usageHint: "caption" },
+        },
+      },
+      {
+        id: `${p}-detail`,
+        component: {
+          Column: {
+            children: childrenOf([
+              `${p}-arrow`,
+              `${p}-principal`,
+              `${p}-reason`,
+            ]),
+            distribution: "start",
+            alignment: "start",
+          },
+        },
+      },
+      // Latency (column 3).
+      {
+        id: `${p}-latency`,
+        component: {
+          Text: {
+            text: txt(`${entry.latencyMs} ms`),
+            usageHint: "body",
+          },
+        },
+      },
+      // Row composing the three columns.
+      {
+        id: `${p}-row`,
+        component: {
+          Row: {
+            children: childrenOf([
+              `${p}-meta`,
+              `${p}-detail`,
+              `${p}-latency`,
+            ]),
+            distribution: "spaceBetween",
+            alignment: "start",
+          },
+        },
+      },
+    );
+
+    itemIds.push(`${p}-row`);
+  });
+
+  components.push(
+    {
+      id: "gw-list",
+      component: {
+        List: {
+          children: childrenOf(itemIds),
+          direction: "vertical",
+        },
+      },
+    },
+    {
+      id: "gw-body",
+      component: {
+        Column: {
+          children: childrenOf([
+            "gw-summary",
+            "gw-summary-divider",
+            "gw-list",
+          ]),
+          distribution: "start",
+          alignment: "stretch",
+        },
+      },
+    },
+    { id: "gw-root", component: { Card: { child: "gw-body" } } },
+  );
+
+  return [
+    {
+      surfaceUpdate: {
+        surfaceId: GATEWAY_SURFACE_ID,
+        components,
+      },
+    },
+    { beginRendering: { surfaceId: GATEWAY_SURFACE_ID, root: "gw-root" } },
+  ];
+}
+
+export const AUDIT_GATEWAY_DECISIONS: ServerToClientMessage[] =
+  buildGatewayDecisionsMessages(gatewayDecisions);
+
+export const AUDIT_GATEWAY_DECISIONS_SURFACE_ID = GATEWAY_SURFACE_ID;
+
+// ---- Model Armor blocks ---------------------------------------------------
+
+const ARMOR_SURFACE_ID = "audit-model-armor-blocks";
+
+/**
+ * Build the A2UI message batch for the Model Armor blocks panel — a Card
+ * containing a Column with a summary header and one nested Card per block.
+ * Each block-card surfaces technique + confidence + direction badges,
+ * the agent → tool target, and the truncated payload snippet.
+ */
+export function buildModelArmorMessages(
+  blocks: ReadonlyArray<ArmorBlockEntry>,
+): ServerToClientMessage[] {
+  const components: Array<{ id: string; component: Record<string, unknown> }> = [];
+
+  components.push(
+    {
+      id: "ma-summary",
+      component: {
+        Text: {
+          text: txt(
+            `⛨ ${blocks.length} blocked attempt${
+              blocks.length === 1 ? "" : "s"
+            } (last 7 days)`,
+          ),
+          usageHint: "caption",
+        },
+      },
+    },
+    { id: "ma-summary-divider", component: { Divider: { axis: "horizontal" } } },
+  );
+
+  const blockCardIds: string[] = [];
+
+  blocks.forEach((block, idx) => {
+    const p = `ma-${idx}`;
+    const techniqueLabel = TECHNIQUE_LABELS[block.technique];
+
+    components.push(
+      // Badge row: technique / confidence / direction / timestamp.
+      {
+        id: `${p}-technique`,
+        component: {
+          Text: {
+            text: txt(`◈ ${techniqueLabel}`),
+            usageHint: "h5",
+          },
+        },
+      },
+      {
+        id: `${p}-confidence`,
+        component: {
+          Text: {
+            text: txt(`confidence: ${block.confidence}`),
+            usageHint: "caption",
+          },
+        },
+      },
+      {
+        id: `${p}-direction`,
+        component: {
+          Text: { text: txt(block.direction), usageHint: "caption" },
+        },
+      },
+      {
+        id: `${p}-timestamp`,
+        component: {
+          Text: {
+            text: txt(formatUtcDate(block.timestamp)),
+            usageHint: "caption",
+          },
+        },
+      },
+      {
+        id: `${p}-badge-row`,
+        component: {
+          Row: {
+            children: childrenOf([
+              `${p}-technique`,
+              `${p}-confidence`,
+              `${p}-direction`,
+              `${p}-timestamp`,
+            ]),
+            distribution: "spaceBetween",
+            alignment: "center",
+          },
+        },
+      },
+      // Target line: agent → tool.
+      {
+        id: `${p}-target`,
+        component: {
+          Text: {
+            text: txt(`${block.sourceAgent}  →  ${block.targetTool}`),
+            usageHint: "body",
+          },
+        },
+      },
+      // Payload section.
+      {
+        id: `${p}-payload-label`,
+        component: {
+          Text: {
+            text: txt("Payload (truncated · sensitive values redacted)"),
+            usageHint: "caption",
+          },
+        },
+      },
+      {
+        id: `${p}-payload-snippet`,
+        component: {
+          Text: { text: txt(block.payloadSnippet), usageHint: "body" },
+        },
+      },
+      {
+        id: `${p}-payload-col`,
+        component: {
+          Column: {
+            children: childrenOf([
+              `${p}-payload-label`,
+              `${p}-payload-snippet`,
+            ]),
+            distribution: "start",
+            alignment: "stretch",
+          },
+        },
+      },
+      {
+        id: `${p}-payload-card`,
+        component: { Card: { child: `${p}-payload-col` } },
+      },
+      // Inner column → block card.
+      {
+        id: `${p}-inner`,
+        component: {
+          Column: {
+            children: childrenOf([
+              `${p}-badge-row`,
+              `${p}-target`,
+              `${p}-payload-card`,
+            ]),
+            distribution: "start",
+            alignment: "stretch",
+          },
+        },
+      },
+      { id: `${p}-card`, component: { Card: { child: `${p}-inner` } } },
+    );
+
+    blockCardIds.push(`${p}-card`);
+  });
+
+  components.push(
+    {
+      id: "ma-blocks-col",
+      component: {
+        Column: {
+          children: childrenOf(blockCardIds),
+          distribution: "start",
+          alignment: "stretch",
+        },
+      },
+    },
+    {
+      id: "ma-body",
+      component: {
+        Column: {
+          children: childrenOf([
+            "ma-summary",
+            "ma-summary-divider",
+            "ma-blocks-col",
+          ]),
+          distribution: "start",
+          alignment: "stretch",
+        },
+      },
+    },
+    { id: "ma-root", component: { Card: { child: "ma-body" } } },
+  );
+
+  return [
+    {
+      surfaceUpdate: {
+        surfaceId: ARMOR_SURFACE_ID,
+        components,
+      },
+    },
+    { beginRendering: { surfaceId: ARMOR_SURFACE_ID, root: "ma-root" } },
+  ];
+}
+
+export const AUDIT_MODEL_ARMOR_BLOCKS: ServerToClientMessage[] =
+  buildModelArmorMessages(armorBlocks);
+
+export const AUDIT_MODEL_ARMOR_SURFACE_ID = ARMOR_SURFACE_ID;
