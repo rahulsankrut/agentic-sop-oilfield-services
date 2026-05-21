@@ -36,6 +36,8 @@ import { AssetMarker } from "@/components/canvas/AssetMarker";
 import { LogisticsArc } from "@/components/canvas/LogisticsArc";
 import { KnowledgeCatalogDrawer } from "@/components/canvas/KnowledgeCatalogDrawer";
 import { CostRollupBanner } from "@/components/canvas/CostRollupBanner";
+import { A2UIPanel } from "@/components/a2ui/A2UIPanel";
+import { COST_ROLLUP_CARGO_PLANE, KC_DRAWER_TX007 } from "@/data/a2uiSamples";
 import { DemoTimer } from "@/components/demo/DemoTimer";
 import { ReconnectBanner } from "@/components/demo/ReconnectBanner";
 import { personaForPathname } from "@/data/personas";
@@ -83,6 +85,9 @@ export default function CargoPlaneScenarioPage() {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   // Banner state when the live mode falls back automatically.
   const [autoFellBack, setAutoFellBack] = useState(false);
+  // TASK-45: agent-driven UI toggle. `A` cycles between bespoke and
+  // A2UI-rendered non-spatial panels (KC drawer + cost rollup).
+  const [a2uiMode, setA2uiMode] = useState(false);
 
   const staticScenario = useScenario({ beats: cargoPlaneBeats });
   const liveScenario = useLiveScenario({
@@ -261,6 +266,18 @@ export default function CargoPlaneScenarioPage() {
     setLiveGeneration((g) => g + 1);
   }, []);
 
+  // TASK-45: `A` toggles A2UI-rendered non-spatial panels.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      if (e.key === "a" || e.key === "A") setA2uiMode((m) => !m);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const showReconnectBanner =
     (mode === "live" &&
       (liveScenario.connectionState === "closed" ||
@@ -283,11 +300,19 @@ export default function CargoPlaneScenarioPage() {
       }
       drawer={
         state.drawer.entity ? (
-          <KnowledgeCatalogDrawer
-            canonicalId={state.drawer.entity.canonicalId}
-            canonicalLabel={state.drawer.entity.canonicalLabel}
-            aspects={state.drawer.entity.aspects}
-          />
+          a2uiMode ? (
+            <A2UIPanel
+              messages={KC_DRAWER_TX007}
+              surfaceId="kc-drawer"
+              className="p-4"
+            />
+          ) : (
+            <KnowledgeCatalogDrawer
+              canonicalId={state.drawer.entity.canonicalId}
+              canonicalLabel={state.drawer.entity.canonicalLabel}
+              aspects={state.drawer.entity.aspects}
+            />
+          )
         ) : null
       }
       canvas={
@@ -319,18 +344,38 @@ export default function CargoPlaneScenarioPage() {
             ))}
           </GlobalMap>
 
-          <CostRollupBanner
-            visible={state.costBanner.visible}
-            doomed={state.costBanner.doomed}
-            recommended={state.costBanner.recommended}
-            avoided={state.costBanner.avoided}
-          />
+          {a2uiMode ? (
+            state.costBanner.visible ? (
+              <div className="absolute bottom-6 right-6 max-w-md">
+                <A2UIPanel
+                  messages={COST_ROLLUP_CARGO_PLANE}
+                  surfaceId="cost-rollup"
+                />
+              </div>
+            ) : null
+          ) : (
+            <CostRollupBanner
+              visible={state.costBanner.visible}
+              doomed={state.costBanner.doomed}
+              recommended={state.costBanner.recommended}
+              avoided={state.costBanner.avoided}
+            />
+          )}
 
           <ModeIndicator
             mode={mode}
             paused={paused}
             connectionState={liveScenario.connectionState}
           />
+
+          {a2uiMode && (
+            <div className="absolute top-6 right-6 flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1.5 backdrop-blur-md">
+              <div className="h-2 w-2 rounded-full bg-emerald-400" />
+              <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200">
+                A2UI · agent-driven UI
+              </div>
+            </div>
+          )}
 
           {mode === "static" && (
             <BeatIndicator
