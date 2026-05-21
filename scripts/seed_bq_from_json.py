@@ -1,0 +1,653 @@
+"""Seed BigQuery tables from `data/*.json`.
+
+TASK-16 Step 3. Idempotent — every table is loaded with WRITE_TRUNCATE
+so re-running clobbers the previous load.
+
+Excludes `data/intouch_docs/` (docs go into KC as catalog entries in Step
+12) and `data/start_date_variance/` (the variance is reverse-engineered
+into `maximo_extract.WORKORDER` history in a follow-up step).
+
+What this script loads (per spec §3 mapping):
+
+  data/canonical_assets.json (30)
+    → oilfield_kc.canonical_assets               (30 rows)
+    → sap_extract.MARA                           (30)
+    → sap_extract.MAKT                           (30)
+    → sap_extract.MARC                           (30) — one plant per material
+    → sap_extract.MBEW                           (30)
+    → maximo_extract.ITEM                        (30)
+
+  data/cross_system_aliases.json (30)
+    → oilfield_kc.cross_system_aliases           (30)
+
+  data/customers.json (7)
+    → sap_extract.KNA1                           (7)
+    → sap_extract.KNVV                           (7)
+
+  data/sap_workforce.json (7 basins)
+    → sap_extract.ZHR_WORKFORCE                  (7, snapshot=today)
+
+  data/maximo_inventory.json (11)
+    → maximo_extract.ASSET                       (11)
+    → maximo_extract.LOCATIONS                   (deduped, ~8)
+    → maximo_extract.INVENTORY                   (deduped on item+loc)
+    → maximo_extract.INVBALANCES                 (11)
+    → sap_extract.MARD                           (1 per available instance)
+    → maximo_extract.WORKORDER                   (1 per instance with open recert)
+
+  data/fdp_configurations.json (nested)
+    → fdp_extract.CUSTOMER_CONFIG                (flattened, ~25)
+    → fdp_extract.APPROVED_SUBSTITUTIONS         (flattened from v?_substitution_accepted)
+
+  data/functional_equivalences.json (12)
+    → oilfield_kc.functional_equivalences        (12)
+
+Verification:
+    bq query "SELECT COUNT(*) FROM \\`vertex-ai-demos-468803.sap_extract.MARA\\`"     → 30
+    bq query "SELECT COUNT(*) FROM \\`vertex-ai-demos-468803.maximo_extract.ASSET\\`" → 11
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+from datetime import date, datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from google.cloud import bigquery
+
+PROJECT = "vertex-ai-demos-468803"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+# Region → SAP 4-char plant code (WERKS). Each region maps to one plant for v1.
+REGION_TO_WERKS = {
+    "west_africa": "WAFR",
+    "permian": "USPM",
+    "gulf_of_mexico": "USGM",
+    "north_sea": "GBNS",
+    "bohai": "CNBH",
+    "south_china_sea": "CNSC",
+    "asia_pacific": "APAC",
+}
+
+# Region → Maximo SITEID
+REGION_TO_SITEID = {
+    "west_africa": "LAGOS",
+    "permian": "MIDLAND",
+    "gulf_of_mexico": "HOU01",
+    "north_sea": "ABDN01",
+    "bohai": "TIANJIN",
+    "south_china_sea": "SCS01",
+    "asia_pacific": "DARWIN",
+}
+
+# Region → ISO country code for KNA1.LAND1
+REGION_TO_COUNTRY = {
+    "west_africa": "NG",
+    "permian": "US",
+    "gulf_of_mexico": "US",
+    "north_sea": "GB",
+    "bohai": "CN",
+    "south_china_sea": "CN",
+    "asia_pacific": "AU",
+}
+
+
+def slug(s: str, maxlen: int = 25) -> str:
+    """Lowercase, replace whitespace + punctuation with '-', truncate."""
+    out = re.sub(r"[^a-zA-Z0-9]+", "-", s.strip()).strip("-").lower()
+    return out[:maxlen]
+
+
+def lgort_code(label: str) -> str:
+    """SAP storage-location code (4 chars). Derived from location label."""
+    # Take the first word, uppercase, pad/truncate to 4
+    first = re.sub(r"[^a-zA-Z]+", "", label.split(",")[0])[:3].upper()
+    return (first + "1")[:4]
+
+
+def mtart_for(category: str) -> str:
+    """SAP material type. ROH=raw, FERT=finished, HALB=semi-finished."""
+    # OFS tools are finished goods
+    return "FERT"
+
+
+def matkl_for(subcategory: str) -> str:
+    """SAP material group — 9 chars max, slug of subcategory."""
+    return slug(subcategory, 9).upper()
+
+
+def stprs_for(category: str, subcategory: str) -> float:
+    """Standard price in USD. Synthetic but stratified by category."""
+    # Stratified to match §3.6 hint: downhole tools $250k-$1.2M, surface $1.5M-$3M.
+    base = {
+        "downhole_tool": 850_000,
+        "drilling_motor": 950_000,
+        "mwd": 450_000,
+        "lwd": 520_000,
+        "surface_pump": 2_200_000,
+        "wireline": 380_000,
+        "completion_tool": 620_000,
+    }
+    # Try subcategory first, then category, then default
+    return float(base.get(subcategory, base.get(category, 500_000)))
+
+
+def kunnr_for(customer_index: int) -> str:
+    """SAP customer number padded to 10 chars: '0000100001' style."""
+    return f"00001000{customer_index + 1:02d}"
+
+
+def load_data() -> dict[str, Any]:
+    """Load all data/*.json (skipping excluded subdirs)."""
+    d: dict[str, Any] = {}
+    for name in [
+        "canonical_assets",
+        "cross_system_aliases",
+        "customers",
+        "fdp_configurations",
+        "functional_equivalences",
+        "maximo_inventory",
+        "sap_workforce",
+    ]:
+        path = DATA_DIR / f"{name}.json"
+        with path.open() as f:
+            d[name] = json.load(f)
+        log.info("loaded data/%s.json", name)
+    return d
+
+
+# ---------------------------------------------------------------------------
+# Row builders
+# ---------------------------------------------------------------------------
+
+
+def now_iso() -> str:
+    return datetime.now(tz=timezone.utc).isoformat()
+
+
+def build_oilfield_kc_canonical_assets(d: dict[str, Any]) -> list[dict]:
+    rows = []
+    for a in d["canonical_assets"]:
+        spec = a.get("specifications", {})
+        rows.append({
+            "CANONICAL_ID": a["canonical_id"],
+            "CANONICAL_LABEL": a["canonical_label"],
+            "CATEGORY": a["category"],
+            "SUBCATEGORY": a.get("subcategory"),
+            "OPERATING_TEMP_MAX_C": spec.get("operating_temp_max_c"),
+            "OPERATING_PRESSURE_MAX_PSI": spec.get("operating_pressure_max_psi"),
+            "OUTER_DIAMETER_IN": spec.get("outer_diameter_in"),
+            "MANUFACTURER": a.get("manufacturer"),
+            "INTRODUCED_YEAR": a.get("introduced_year"),
+        })
+    return rows
+
+
+def build_oilfield_kc_cross_system_aliases(d: dict[str, Any]) -> list[dict]:
+    rows = []
+    for cid, m in d["cross_system_aliases"].items():
+        rows.append({
+            "CANONICAL_ID": cid,
+            "SAP_MATNR": m.get("sap_material_number"),
+            "MAXIMO_ITEMNUM": m.get("maximo_equipment_id"),
+            "FDP_CONFIG_ID": m.get("fdp_config_id"),
+            "INTOUCH_SPEC_REFS": m.get("intouch_spec_refs", []),
+        })
+    return rows
+
+
+def build_oilfield_kc_functional_equivalences(d: dict[str, Any]) -> list[dict]:
+    rows = []
+    for fe in d["functional_equivalences"]:
+        rows.append({
+            "CANONICAL_ID_A": fe["canonical_id_a"],
+            "CANONICAL_ID_B": fe["canonical_id_b"],
+            "CONFIDENCE": fe["confidence"],
+            "RATIONALE_SOURCE": fe.get("rationale_source"),
+            "CUSTOMER_OVERRIDES": json.dumps(fe.get("customer_compatibility_overrides", [])),
+        })
+    return rows
+
+
+def build_sap_mara(d: dict[str, Any]) -> list[dict]:
+    aliases = d["cross_system_aliases"]
+    rows = []
+    for a in d["canonical_assets"]:
+        cid = a["canonical_id"]
+        matnr = aliases.get(cid, {}).get("sap_material_number")
+        if matnr is None:
+            continue
+        year = a.get("introduced_year") or 2020
+        rows.append({
+            "MANDT": "100",
+            "MATNR": matnr,
+            "ERSDA": f"{year}-01-01",
+            "ERNAM": "SYSTEM",
+            "LAEDA": f"{year}-01-01",
+            "AENAM": "SYSTEM",
+            "MTART": mtart_for(a["category"]),
+            "MBRSH": "M",
+            "MATKL": matkl_for(a.get("subcategory", "")),
+            "MEINS": "EA",
+            "BISMT": None,
+            "LVORM": False,
+        })
+    return rows
+
+
+def build_sap_makt(d: dict[str, Any]) -> list[dict]:
+    aliases = d["cross_system_aliases"]
+    rows = []
+    for a in d["canonical_assets"]:
+        matnr = aliases.get(a["canonical_id"], {}).get("sap_material_number")
+        if matnr is None:
+            continue
+        rows.append({
+            "MANDT": "100",
+            "MATNR": matnr,
+            "SPRAS": "E",
+            "MAKTX": a["canonical_label"][:40],
+        })
+    return rows
+
+
+def build_sap_marc(d: dict[str, Any]) -> list[dict]:
+    """One MARC row per (MATNR, WERKS). For v1 each material is at WERKS='PT01'."""
+    aliases = d["cross_system_aliases"]
+    rows = []
+    for a in d["canonical_assets"]:
+        matnr = aliases.get(a["canonical_id"], {}).get("sap_material_number")
+        if matnr is None:
+            continue
+        rows.append({
+            "MANDT": "100",
+            "MATNR": matnr,
+            "WERKS": "PT01",
+            "DISPO": "001",
+            "DISMM": "PD",
+            "BESKZ": "F",
+            "LVORM": False,
+        })
+    return rows
+
+
+def build_sap_mbew(d: dict[str, Any]) -> list[dict]:
+    aliases = d["cross_system_aliases"]
+    rows = []
+    for a in d["canonical_assets"]:
+        matnr = aliases.get(a["canonical_id"], {}).get("sap_material_number")
+        if matnr is None:
+            continue
+        rows.append({
+            "MANDT": "100",
+            "MATNR": matnr,
+            "BWKEY": "PT01",
+            "VPRSV": "S",
+            "STPRS": stprs_for(a["category"], a.get("subcategory", "")),
+            "PEINH": 1,
+            "WAERS": "USD",
+        })
+    return rows
+
+
+def build_sap_mard(d: dict[str, Any]) -> list[dict]:
+    """One MARD row per available equipment instance — mirrors Maximo INVBALANCES."""
+    aliases = d["cross_system_aliases"]
+    rows = []
+    for inv in d["maximo_inventory"]:
+        cid = inv["canonical_id"]
+        matnr = aliases.get(cid, {}).get("sap_material_number")
+        if matnr is None:
+            continue
+        region = inv["location"]["region"]
+        werks = REGION_TO_WERKS.get(region, "PT01")
+        lgort = lgort_code(inv["location"]["label"])
+        # LABST=1 when status indicates the asset is on hand; 0 when in use elsewhere.
+        labst = 1.0 if inv["status"] in ("available", "available_after_recert", "in_repair") else 0.0
+        rows.append({
+            "MANDT": "100",
+            "MATNR": matnr,
+            "WERKS": werks,
+            "LGORT": lgort,
+            "LABST": labst,
+            "INSME": 0.0,
+        })
+    return rows
+
+
+def build_sap_kna1(d: dict[str, Any]) -> list[dict]:
+    rows = []
+    for i, c in enumerate(d["customers"]):
+        primary_region = (c.get("regions") or ["permian"])[0]
+        rows.append({
+            "MANDT": "100",
+            "KUNNR": kunnr_for(i),
+            "NAME1": c["name"][:35],
+            "LAND1": REGION_TO_COUNTRY.get(primary_region, "US"),
+            "ORT01": primary_region.replace("_", " ").title()[:35],
+            "STRAS": "1 Main St"[:35],
+        })
+    return rows
+
+
+def build_sap_knvv(d: dict[str, Any]) -> list[dict]:
+    rows = []
+    for i, _c in enumerate(d["customers"]):
+        rows.append({
+            "MANDT": "100",
+            "KUNNR": kunnr_for(i),
+            "VKORG": "OFS1",
+            "VTWEG": "10",
+            "SPART": "01",
+        })
+    return rows
+
+
+def build_sap_zhr_workforce(d: dict[str, Any]) -> list[dict]:
+    today = date.today().isoformat()
+    rows = []
+    for basin, w in d["sap_workforce"].items():
+        rows.append({
+            "BASIN": basin,
+            "CREW_COUNT_AVAILABLE": w["crew_count_available"],
+            "SPECIALIST_COUNT_AVAILABLE": w["specialist_count_available"],
+            "ON_CALL_COUNT": w["on_call_count"],
+            "SNAPSHOT_DATE": today,
+        })
+    return rows
+
+
+def build_maximo_item(d: dict[str, Any]) -> list[dict]:
+    aliases = d["cross_system_aliases"]
+    rows = []
+    for a in d["canonical_assets"]:
+        cid = a["canonical_id"]
+        itemnum = aliases.get(cid, {}).get("maximo_equipment_id")
+        if itemnum is None:
+            continue
+        rows.append({
+            "ITEMNUM": itemnum,
+            "ITEMSETID": "SET1",
+            "DESCRIPTION": a["canonical_label"][:100],
+            "COMMODITYGROUP": a["category"][:16],
+        })
+    return rows
+
+
+def build_maximo_asset(d: dict[str, Any]) -> list[dict]:
+    """One row per maximo_inventory entry — the 11 instances."""
+    aliases = d["cross_system_aliases"]
+    by_cid = {a["canonical_id"]: a for a in d["canonical_assets"]}
+    rows = []
+    for i, inv in enumerate(d["maximo_inventory"]):
+        cid = inv["canonical_id"]
+        itemnum = aliases.get(cid, {}).get("maximo_equipment_id")
+        canon = by_cid.get(cid, {})
+        region = inv["location"]["region"]
+        rows.append({
+            "ASSETID": i + 1,
+            "ASSETNUM": inv["equipment_instance_id"][:25],
+            "DESCRIPTION": canon.get("canonical_label", "")[:100],
+            "STATUS": inv["status"][:16],
+            "LOCATION": slug(inv["location"]["label"]),
+            "SITEID": REGION_TO_SITEID.get(region, "DEFAULT")[:16],
+            "ORGID": "OFS",
+            "PARENT": None,
+            "ASSETTYPE": canon.get("category", "")[:16],
+            "ITEMNUM": itemnum,
+            "SERIALNUM": f"SN-{i + 1:06d}",
+            "INSTALLDATE": (canon.get("introduced_year", 2020) and f"{canon['introduced_year']}-06-15"),
+        })
+    return rows
+
+
+def build_maximo_locations(d: dict[str, Any]) -> list[dict]:
+    """Dedup locations from maximo_inventory."""
+    seen: dict[tuple, dict] = {}
+    for inv in d["maximo_inventory"]:
+        loc = inv["location"]
+        region = loc["region"]
+        siteid = REGION_TO_SITEID.get(region, "DEFAULT")[:16]
+        location = slug(loc["label"])
+        key = (siteid, location)
+        if key in seen:
+            continue
+        # Choose TYPE based on label heuristic
+        ltype = "STOREROOM" if any(w in loc["label"].lower() for w in ("storage", "depot", "shop", "yard", "warehouse")) else "OPERATING"
+        seen[key] = {
+            "LOCATION": location,
+            "SITEID": siteid,
+            "ORGID": "OFS",
+            "DESCRIPTION": loc["label"][:100],
+            "TYPE": ltype,
+            "STATUS": "OPERATING",
+            "LATITUDE": loc.get("latitude"),
+            "LONGITUDE": loc.get("longitude"),
+            "REGION": region[:20],
+        }
+    return list(seen.values())
+
+
+def build_maximo_inventory(d: dict[str, Any]) -> list[dict]:
+    """One row per (ITEMNUM, LOCATION, SITEID)."""
+    aliases = d["cross_system_aliases"]
+    seen: dict[tuple, dict] = {}
+    for inv in d["maximo_inventory"]:
+        cid = inv["canonical_id"]
+        itemnum = aliases.get(cid, {}).get("maximo_equipment_id")
+        if itemnum is None:
+            continue
+        region = inv["location"]["region"]
+        siteid = REGION_TO_SITEID.get(region, "DEFAULT")[:16]
+        location = slug(inv["location"]["label"])
+        key = (itemnum, "SET1", location, siteid)
+        if key in seen:
+            continue
+        seen[key] = {
+            "ITEMNUM": itemnum,
+            "ITEMSETID": "SET1",
+            "LOCATION": location,
+            "SITEID": siteid,
+            "STATUS": "ACTIVE",
+            "ABCTYPE": "A",
+        }
+    return list(seen.values())
+
+
+def build_maximo_invbalances(d: dict[str, Any]) -> list[dict]:
+    """One bin balance per maximo_inventory instance."""
+    aliases = d["cross_system_aliases"]
+    today = date.today().isoformat()
+    rows = []
+    for i, inv in enumerate(d["maximo_inventory"]):
+        cid = inv["canonical_id"]
+        itemnum = aliases.get(cid, {}).get("maximo_equipment_id")
+        if itemnum is None:
+            continue
+        region = inv["location"]["region"]
+        siteid = REGION_TO_SITEID.get(region, "DEFAULT")[:16]
+        location = slug(inv["location"]["label"])
+        physcnt = 1.0 if inv["status"] in ("available", "available_after_recert", "in_repair") else 0.0
+        rows.append({
+            "ITEMNUM": itemnum,
+            "ITEMSETID": "SET1",
+            "LOCATION": location,
+            "SITEID": siteid,
+            "BINNUM": f"A{(i % 5) + 1}",
+            "LOTNUM": None,
+            "CONDITIONCODE": "REFURB" if inv["status"] == "available_after_recert" else "NEW",
+            "PHYSCNT": physcnt,
+            "PHYSCNTDATE": today,
+            "CURBAL": physcnt,
+        })
+    return rows
+
+
+def build_maximo_workorder(d: dict[str, Any]) -> list[dict]:
+    """One open RECERT or REPAIR WO per asset that needs work.
+
+    For assets with status='available_after_recert' or 'in_repair', or
+    `certification_hours_remaining > 0`, emit one open WO. ESTLABHRS and
+    ACTLABHRS are set so that ESTLABHRS - ACTLABHRS = the certification
+    hours remaining — i.e., the customer's view layer would compute the
+    Q5-derived field via this same arithmetic.
+    """
+    rows = []
+    for i, inv in enumerate(d["maximo_inventory"]):
+        cert_hrs = inv.get("certification_hours_remaining", 0) or 0
+        status = inv["status"]
+        if cert_hrs <= 0 and status not in ("in_repair", "available_after_recert"):
+            continue
+        region = inv["location"]["region"]
+        siteid = REGION_TO_SITEID.get(region, "DEFAULT")[:16]
+        worktype = "REPAIR" if status == "in_repair" else "RECERT"
+        # Open WO — STATUS=INPRG. EstLab - ActLab = cert_hrs remaining.
+        est = float(max(cert_hrs * 2, 8.0))
+        act = est - float(cert_hrs)
+        rows.append({
+            "WONUM": f"WO-{i + 1:06d}",
+            "SITEID": siteid,
+            "ASSETNUM": inv["equipment_instance_id"][:25],
+            "LOCATION": slug(inv["location"]["label"]),
+            "STATUS": "INPRG",
+            "WORKTYPE": worktype,
+            "REPORTDATE": now_iso(),
+            "SCHEDSTART": None,
+            "ACTSTART": None,
+            "ESTLABHRS": est,
+            "ACTLABHRS": act,
+        })
+    return rows
+
+
+def build_fdp_customer_config(d: dict[str, Any]) -> list[dict]:
+    """Flatten data/fdp_configurations.json — nested {customer: {canonical_id: {approved, notes}}}."""
+    aliases = d["cross_system_aliases"]
+    today = date.today().isoformat()
+    rows = []
+    for customer_id, materials in d["fdp_configurations"].items():
+        for canonical_id, cfg in materials.items():
+            matnr = aliases.get(canonical_id, {}).get("sap_material_number")
+            if matnr is None:
+                continue
+            rows.append({
+                "CUSTOMER_ID": customer_id,
+                "MATNR": matnr,
+                "APPROVED": cfg.get("approved", False),
+                "NOTES": (cfg.get("notes") or "")[:500],
+                "EFFECTIVE_DATE": today,
+            })
+    return rows
+
+
+def build_fdp_approved_substitutions(d: dict[str, Any]) -> list[dict]:
+    """Explode `v?_substitution_accepted` booleans into rows.
+
+    Looks up the actual substitute via functional_equivalences: any
+    `v<X>_substitution_accepted` key inside an FDP entry implies the
+    substitute exists somewhere in functional_equivalences as the OTHER
+    side of an equivalence with this canonical_id.
+    """
+    aliases = d["cross_system_aliases"]
+
+    # Build canonical → functional substitutes index from
+    # functional_equivalences. If A↔B with confidence>0, then B is a
+    # candidate substitute for A and vice versa.
+    subs_by_cid: dict[str, list[str]] = {}
+    for fe in d["functional_equivalences"]:
+        a, b = fe["canonical_id_a"], fe["canonical_id_b"]
+        subs_by_cid.setdefault(a, []).append(b)
+        subs_by_cid.setdefault(b, []).append(a)
+
+    rows = []
+    for customer_id, materials in d["fdp_configurations"].items():
+        for canonical_id, cfg in materials.items():
+            # Find any v<X>_substitution_accepted keys
+            for k, v in cfg.items():
+                if not (k.startswith("v") and k.endswith("_substitution_accepted")):
+                    continue
+                # The substitute is one of the canonical_id's equivalents.
+                # In practice each material in the synthetic data has one obvious sub.
+                candidates = subs_by_cid.get(canonical_id, [])
+                if not candidates:
+                    continue
+                sub_canonical = candidates[0]  # 1 row per (customer, material, sub)
+                matnr_orig = aliases.get(canonical_id, {}).get("sap_material_number")
+                matnr_sub = aliases.get(sub_canonical, {}).get("sap_material_number")
+                if matnr_orig is None or matnr_sub is None:
+                    continue
+                rows.append({
+                    "CUSTOMER_ID": customer_id,
+                    "MATNR_ORIGINAL": matnr_orig,
+                    "MATNR_SUBSTITUTE": matnr_sub,
+                    "ACCEPTED": bool(v),
+                })
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Driver
+# ---------------------------------------------------------------------------
+
+# (table_fqn, builder_fn) pairs. Order matters only for readability.
+TABLES: list[tuple[str, str]] = [
+    ("oilfield_kc.canonical_assets", "build_oilfield_kc_canonical_assets"),
+    ("oilfield_kc.cross_system_aliases", "build_oilfield_kc_cross_system_aliases"),
+    ("oilfield_kc.functional_equivalences", "build_oilfield_kc_functional_equivalences"),
+    ("sap_extract.MARA", "build_sap_mara"),
+    ("sap_extract.MAKT", "build_sap_makt"),
+    ("sap_extract.MARC", "build_sap_marc"),
+    ("sap_extract.MBEW", "build_sap_mbew"),
+    ("sap_extract.MARD", "build_sap_mard"),
+    ("sap_extract.KNA1", "build_sap_kna1"),
+    ("sap_extract.KNVV", "build_sap_knvv"),
+    ("sap_extract.ZHR_WORKFORCE", "build_sap_zhr_workforce"),
+    ("maximo_extract.ITEM", "build_maximo_item"),
+    ("maximo_extract.ASSET", "build_maximo_asset"),
+    ("maximo_extract.LOCATIONS", "build_maximo_locations"),
+    ("maximo_extract.INVENTORY", "build_maximo_inventory"),
+    ("maximo_extract.INVBALANCES", "build_maximo_invbalances"),
+    ("maximo_extract.WORKORDER", "build_maximo_workorder"),
+    ("fdp_extract.CUSTOMER_CONFIG", "build_fdp_customer_config"),
+    ("fdp_extract.APPROVED_SUBSTITUTIONS", "build_fdp_approved_substitutions"),
+]
+
+
+def load_to_bq(client: bigquery.Client, table_fqn: str, rows: list[dict]) -> int:
+    """Load `rows` into `<project>.<table_fqn>` with WRITE_TRUNCATE."""
+    full = f"{PROJECT}.{table_fqn}"
+    job_config = bigquery.LoadJobConfig(
+        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+        source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+        # Don't infer schema — use the table's existing schema (DDL from Step 2).
+        schema_update_options=[],
+    )
+    # Stream rows as NDJSON to load_table_from_json
+    job = client.load_table_from_json(rows, full, job_config=job_config)
+    job.result()  # block until complete
+    return job.output_rows or 0
+
+
+def main() -> None:
+    data = load_data()
+    builders = globals()
+    client = bigquery.Client(project=PROJECT)
+
+    for table_fqn, builder_name in TABLES:
+        rows = builders[builder_name](data)
+        n = load_to_bq(client, table_fqn, rows)
+        log.info("loaded %s: %d rows", table_fqn, n)
+
+
+if __name__ == "__main__":
+    main()
