@@ -289,6 +289,13 @@ When v1 is complete, the following must all be true:
 
 ### Architectural deviations from earlier drafts (full list)
 
+Quick reference; the *why* + consequences live in `docs/adr/`:
+[0002](docs/adr/0002-poetry-not-uv.md) · [0003](docs/adr/0003-plan-evaluator-bundled.md) ·
+[0004](docs/adr/0004-streamquery-sse-not-websocket.md) ·
+[0005](docs/adr/0005-mcp-skill-composers-bq-direct.md) ·
+[0006](docs/adr/0006-global-gemini-routing.md).
+
+
 - **Package manager:** Poetry instead of `uv`. The original tech-stack lock
   was `uv`, but `uv` doesn't work on the user's corp laptop where this code
   will eventually run. Poetry mirrors the existing `earnings_analyst`

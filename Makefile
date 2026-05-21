@@ -153,17 +153,36 @@ teardown:
 	@echo "Teardown not yet implemented (TASK-13)"
 	@exit 1
 
+# ---------------------------------------------------------------------------
+# Demo runner targets (TASK-12). Each invokes scripts/demo_runner.sh which:
+#   1. Sets the active customer skin (default vs halliburton)
+#   2. Verifies the deployed agent's resource name is in .env
+#   3. Echoes the seed Memory Bank session id for the persona
+#   4. Prints presenter URLs (canvas A2UI + GE App live-agent surface)
+#   5. Starts the canvas dev server (or skips if port already in use)
+#
+# Optional env: SKIN=halliburton (default: default), CANVAS_PORT=3001,
+# SKIP_CANVAS=1 to skip step 5 and just run the preflight.
+
+DEMO_SKIN ?= default
+
 demo-cargo-plane:
-	@echo "Persona 3 demo not yet implemented (TASK-11)"
-	@exit 1
+	@SKIN=$(DEMO_SKIN) scripts/demo_runner.sh maria cargo-plane $(DEMO_SKIN)
 
 demo-forecast:
-	@echo "Persona 1 demo not yet implemented (TASK-11)"
-	@exit 1
+	@SKIN=$(DEMO_SKIN) scripts/demo_runner.sh david forecast-review $(DEMO_SKIN)
 
 demo-fleet-buffer:
-	@echo "Persona 2 demo not yet implemented (TASK-11)"
-	@exit 1
+	@SKIN=$(DEMO_SKIN) scripts/demo_runner.sh tomas buffer-planning $(DEMO_SKIN)
+
+demo-deep-research:
+	@SKIN=$(DEMO_SKIN) scripts/demo_runner.sh priya deep-research $(DEMO_SKIN)
+
+demo-agent-studio:
+	@SKIN=$(DEMO_SKIN) scripts/demo_runner.sh rafael agent-studio $(DEMO_SKIN)
+
+demo-audit:
+	@SKIN=$(DEMO_SKIN) scripts/demo_runner.sh ayesha audit-registry $(DEMO_SKIN)
 
 demo-health:
 	@echo "Health check not yet implemented (TASK-13)"
