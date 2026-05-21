@@ -21,6 +21,7 @@ from agents.schemas import (
 from agents.utils.skill_imports import (
     estimate_transit,
     identify_blockers,
+    query_maximo_availability,
     resolve_canonical_asset,
 )
 
@@ -124,14 +125,19 @@ def build_direct_plan(node_input: dict) -> Event:
         primary_option=option,
     )
 
+    plan_dict = plan.model_dump(mode="json")
     return Event(
         message=f"Direct plan built — primary cost ${option.estimated_cost_usd:,}",
         output={
             "request": request.model_dump(mode="json"),
             "results": results.model_dump(mode="json"),
-            "plan": plan.model_dump(mode="json"),
+            "plan": plan_dict,
             "path": "direct",
         },
+        # Persist plan into ctx.state so finalize + route_on_procurement_
+        # threshold can find it after the sourcing_logistics / plan_evaluator
+        # LLMs clobber node_input with their own structured outputs.
+        state={"plan": plan_dict, "path": "direct"},
     )
 
 
@@ -181,6 +187,27 @@ def build_equivalent_plan(node_input: dict, ctx: Context) -> Event:
         results, substitute_canonical_id
     )
     if instance is None:
+        # results.maximo only contains instances of the ORIGINAL canonical
+        # asset (parallel_queries doesn't know what equivalence the LLM will
+        # pick). Query Maximo directly for the substitute's deployable
+        # instances in the target region.
+        try:
+            substitute_instances = query_maximo_availability(
+                substitute_canonical_id,
+                region_filter=request.target_region,
+            ) or []
+            for row in substitute_instances:
+                # `startswith("available")` catches both "available" and
+                # "available_after_recert" — the BQ synthetic data has the
+                # latter truncated to "available_after_" (16-char column),
+                # so a strict equality check misses it.
+                status = (row.get("status") or "").lower()
+                if status.startswith("available") and not status.startswith("unavailable"):
+                    instance = row
+                    break
+        except Exception:  # noqa: BLE001 — best-effort fallback
+            instance = None
+    if instance is None:
         # No deployable instance — emit a degraded plan that the Plan Evaluator
         # will catch (rather than hard-crashing the workflow).
         return Event(
@@ -214,6 +241,7 @@ def build_equivalent_plan(node_input: dict, ctx: Context) -> Event:
         primary_option=option,
     )
 
+    plan_dict = plan.model_dump(mode="json")
     return Event(
         message=(
             f"Equivalence plan built — substitute {substitute_canonical_id} "
@@ -222,10 +250,12 @@ def build_equivalent_plan(node_input: dict, ctx: Context) -> Event:
         output={
             "request": request.model_dump(mode="json"),
             "results": results.model_dump(mode="json"),
-            "plan": plan.model_dump(mode="json"),
+            "plan": plan_dict,
             "path": "equivalence",
             "equivalent_candidate": candidate,
         },
+        # Persist plan to ctx.state — same reason as build_direct_plan.
+        state={"plan": plan_dict, "path": "equivalence"},
     )
 
 
@@ -240,9 +270,9 @@ def _first_deployable_of(results: SystemQueryResults, canonical_id: str) -> dict
     if not results.maximo or not results.maximo.get("instances"):
         return None
     for row in results.maximo["instances"]:
-        if row.get("canonical_id") == canonical_id and row.get("status") in (
-            "available",
-            "available_after_recert",
-        ):
+        status = (row.get("status") or "").lower()
+        if row.get("canonical_id") == canonical_id and status.startswith(
+            "available"
+        ) and not status.startswith("unavailable"):
             return row
     return None

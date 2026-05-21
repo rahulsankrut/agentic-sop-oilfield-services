@@ -7,25 +7,35 @@ follows it just reads the flag — no LLM judgment here.
 
 from __future__ import annotations
 
+import logging
+
 from google.adk import Event
 
 from agents.schemas import CapacityGapRequest, SystemQueryResults
+from agents.utils.skill_imports import find_functional_equivalents
+
+logger = logging.getLogger(__name__)
 
 
 def _pick_best_instance(maximo: dict | None) -> dict | None:
     """Pick a deployable Maximo instance from the parallel-query results.
 
-    Preference order: status=='available' over 'available_after_recert'; within
-    each status, the first row wins (the synthetic loader returns deterministic
-    ordering). Returns None if no row is deployable.
+    Preference order: status=='available' over the recert variant; within
+    each status, the first row wins (the synthetic loader returns
+    deterministic ordering). The BQ synthetic data truncates the recert
+    status to ``"available_after_"`` (16-char column), so we match on
+    startswith instead of strict equality.
     """
     if not maximo or not maximo.get("instances"):
         return None
     instances = maximo["instances"]
-    available = [r for r in instances if r.get("status") == "available"]
+    available = [r for r in instances if (r.get("status") or "") == "available"]
     if available:
         return available[0]
-    aftrec = [r for r in instances if r.get("status") == "available_after_recert"]
+    aftrec = [
+        r for r in instances
+        if (r.get("status") or "").lower().startswith("available_after_")
+    ]
     if aftrec:
         return aftrec[0]
     return None
@@ -45,6 +55,21 @@ def evaluate_direct_availability(node_input: dict) -> Event:
     fdp_approved = bool((results.fdp or {}).get("approved"))
     direct_available = chosen is not None and fdp_approved
 
+    # If direct path isn't available, pre-fetch the KC equivalents so the
+    # equivalence_lookup LLM has a real list to pick from (otherwise the LLM
+    # has no tool to query KC and hallucinates substitute ids).
+    equivalents: list[dict] = []
+    if not direct_available:
+        canonical_id = request.canonical_asset_id or ""
+        if canonical_id:
+            try:
+                equivalents = find_functional_equivalents(canonical_id) or []
+            except Exception as exc:  # noqa: BLE001 — degrade to empty
+                logger.warning(
+                    "find_functional_equivalents(%r) failed: %s",
+                    canonical_id, exc,
+                )
+
     return Event(
         message=(
             "Direct availability: "
@@ -55,5 +80,6 @@ def evaluate_direct_availability(node_input: dict) -> Event:
             "results": results.model_dump(mode="json"),
             "direct_available": direct_available,
             "chosen_direct_instance": chosen,
+            "kc_equivalents": equivalents,
         },
     )
