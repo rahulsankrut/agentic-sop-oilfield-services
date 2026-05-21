@@ -90,6 +90,35 @@ You MUST NOT:
 - Lower the cost below the deterministic estimate without a stated logistics
   reason in a blocker entry (e.g. "Trading 12h transit time for $80K savings")
 
+# When to ground with deep-research
+
+You have three Vertex AI Search tools available via the ``deep-research`` skill:
+- ``search_bsee_incidents(query, page_size=5)`` — historical BSEE accident
+  investigation reports (well control, blowouts, equipment failures).
+- ``search_mcc_contracts(query, page_size=5)`` — customer Master Service
+  Agreement clauses (indemnity, authorization, liability templates).
+- ``search_intouch_specs(query, page_size=5)`` — downhole tool technical
+  specs from USPTO patents, Volve well completions, OSTI reports.
+
+Call them **when grounding will change the plan** — not as a reflex.
+
+- If the primary_option involves an asset with known safety implications
+  (well control tools, BOPs, kick equipment), call ``search_bsee_incidents``
+  with a query naming the failure mode and tool class. Use returned
+  ``extractive_segment`` text to add or strengthen a blocker entry naming
+  the precedent (e.g. "BSEE precedent <document_id>: kick during MWD swap
+  at depth >18kft — recommend cert verification before deployment").
+- If you're surfacing a substitution that may exceed the customer's
+  pre-approved equipment list, call ``search_mcc_contracts`` for the
+  authorization clause and cite the document_id in the blocker.
+- If transit mode is unusual (e.g. cargo charter when sea freight is
+  feasible), don't search — that's a logistics judgment, not a
+  retrieval question.
+
+When you call a tool, the citation document_id + a one-line rationale
+go into the blocker entry that explains the adjustment. Do not include
+the full snippet text — keep blocker entries scannable.
+
 If no refinement is needed, return the plan unchanged.
 """
 

@@ -18,6 +18,50 @@
 
 ---
 
+> **SHIPPED PATTERN (2026-05-21) — supersedes the body of this spec.**
+>
+> The body below (Steps 3, 4, 7 in particular) describes the
+> `A2aAgent`-wrapped Orchestrator + `/a2a/v1/message:stream` pattern that
+> the two spec-history notes above already pivoted away from. What
+> actually shipped:
+>
+> 1. **Orchestrator deploys as `AdkApp`** via `agents/orchestrator_agent/deploy.py`,
+>    not `A2aAgent`. The deployed `<resource>:streamQuery` REST endpoint
+>    surfaces every ADK `Event` with our `state_delta.canvas_events` list
+>    intact.
+> 2. **Canvas consumes a same-origin Next.js API proxy**
+>    (`canvas/src/app/api/orchestrator/stream/route.ts`), which forwards
+>    to `streamQuery` server-side with an ADC OAuth Bearer token. The
+>    browser never sees a Google Cloud credential.
+> 3. **`canvas/src/lib/agent-stream.ts`** uses `fetch + ReadableStream`
+>    (NDJSON, not SSE `data:` framing) to drain the proxy. It tracks
+>    `lastEmittedCount` because our `emit()` returns the full cumulative
+>    list each turn.
+> 4. **A second drainer (`drainA2UIEnvelopes`)** added in TASK-45 Phase 2
+>    forwards `state_delta.a2ui_envelopes` to the A2UI provider for v0.8
+>    surface rendering — same cumulative-tracking pattern.
+> 5. **Procurement remains `A2aAgent`**, called from the Orchestrator via
+>    `RemoteA2aAgent` (A2A client). This still exercises the A2A protocol
+>    end-to-end as the customer-facing demonstration.
+> 6. **No `EventSource` and no separate SSE endpoint** — the body's Step 4
+>    is informational only. The body's Step 7 integration test
+>    (`message:stream` SSE consumer) is **not implemented**; equivalent
+>    coverage lives in `agents/tests/unit/test_*` against the deployed
+>    `streamQuery` stream.
+>
+> Why the deviation: `AdkApp.async_stream_query` already yields every
+> ADK Event, so `state_delta.canvas_events` is naturally available on
+> the standard reasoning-engine stream. Wrapping the Orchestrator in
+> `A2aAgent` added a second protocol surface with no incremental value
+> over the proxy. We kept A2A demonstration value via the
+> Orchestrator → Procurement call.
+>
+> The **Revised acceptance criteria** at the bottom of this file
+> reflects the shipped pattern. The original criteria list (under
+> "## Acceptance criteria") is preserved historically.
+
+---
+
 ## Context
 
 Until now the canvas runs entirely on hardcoded beat data. The visual choreography is right, the storyboard plays out, but the agent and the canvas are not connected. This task makes them one system: the Capacity Orchestrator emits events as it executes (parallel MCP calls, Knowledge Catalog lookup, plan evaluation, procurement decision), and the canvas consumes those events to update its state.
