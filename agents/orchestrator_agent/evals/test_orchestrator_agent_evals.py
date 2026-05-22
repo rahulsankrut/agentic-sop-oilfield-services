@@ -24,6 +24,7 @@ import pytest
 
 from agents.schemas import SourcingPlan
 from agents.utils.eval_helpers import (
+    extract_first_json_object,
     extract_user_query,
     load_evalset,
     stream_query_text,
@@ -234,11 +235,22 @@ def cargo_plane_response() -> str:
 
     ~120s end-to-end per the spec — caching avoids re-running for each
     assertion in this module.
+
+    The deployed Orchestrator appends routing-decision narratives after
+    the JSON SourcingPlan ("Routing on evaluation: …", "Final SourcingPlan:
+    …"). We extract just the leading JSON so the tests can validate it
+    against the SourcingPlan schema.
     """
+    import json as _json
+
     evalset = load_evalset(EVALSET_PATH)
     case = next(c for c in evalset["eval_cases"] if c["eval_id"] == "happy_path_cargo_plane")
     prompt = extract_user_query(case)
-    return stream_query_text("ORCHESTRATOR_AGENT_RESOURCE_NAME", prompt, user_id="eval-maria")
+    raw = stream_query_text(
+        "ORCHESTRATOR_AGENT_RESOURCE_NAME", prompt, user_id="eval-maria"
+    )
+    plan_obj = extract_first_json_object(raw)
+    return _json.dumps(plan_obj)
 
 
 @pytest.mark.evals_live
@@ -310,7 +322,8 @@ def test_live_edge_unknown_customer_degrades_gracefully():
     # Either valid SourcingPlan (with low/zero customer_compatibility) or
     # an error message is acceptable.
     try:
-        SourcingPlan.model_validate_json(text)
+        plan_obj = extract_first_json_object(text)
+        SourcingPlan.model_validate(plan_obj)
     except Exception:
         # Non-JSON or partial — that's fine, just don't crash silently.
         assert len(text) > 20, "Response too short to be a meaningful error"
@@ -340,7 +353,7 @@ def test_live_restriction_penalty_lowers_compatibility():
     text = stream_query_text(
         "ORCHESTRATOR_AGENT_RESOURCE_NAME", prompt, user_id="eval-restriction"
     )
-    plan = SourcingPlan.model_validate_json(text)
+    plan = SourcingPlan.model_validate(extract_first_json_object(text))
     blocker_text = " ".join(plan.blockers or []).lower()
     incompatible = plan.primary_option.customer_compatibility is False
     mentions_restriction = any(
@@ -372,7 +385,7 @@ def test_live_multi_skin_halliburton_returns_valid_plan():
     text = stream_query_text(
         "ORCHESTRATOR_AGENT_RESOURCE_NAME", prompt, user_id="eval-halliburton"
     )
-    plan = SourcingPlan.model_validate_json(text)
+    plan = SourcingPlan.model_validate(extract_first_json_object(text))
     # Don't assert TX-007 here — different skins can route to different
     # source locations. The contract is "valid SourcingPlan returned".
     assert plan.primary_option.estimated_cost_usd > 0

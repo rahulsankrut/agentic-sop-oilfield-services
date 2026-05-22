@@ -8,7 +8,6 @@ sibling README for usage. The $500K human-review threshold from SPECS.md
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -131,14 +130,31 @@ def test_procurement_approval_schema_roundtrips():
 
 # ---------------------------------------------------------------------------
 # Live layer
+#
+# The Procurement Approval Agent is deployed as a Vertex AI Agent Engine
+# *A2A-wrapped* via ``A2aAgent`` + ``ProcurementApprovalExecutor`` (see
+# agents/procurement_approval_agent/deploy.py). A2A-wrapped engines reject
+# ``async_stream_query`` (returns HTTP 400 FAILED_PRECONDITION); the
+# production path is Orchestrator → ``RemoteA2aAgent`` → Procurement via
+# the A2A protocol on port :a2a, NOT :streamQuery.
+#
+# We therefore route Procurement's live behavioral evals through the
+# Orchestrator (which IS streamQuery-callable) and check the surfaced
+# approval/blocker. Direct-procurement live tests are explicitly skipped
+# with the production-path note attached.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.evals_live
-@pytest.mark.skipif(
-    not os.environ.get("PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME"),
-    reason="PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME not set",
+_A2A_SKIP_REASON = (
+    "Procurement Approval is A2A-wrapped; production path is Orchestrator → "
+    "RemoteA2aAgent. Direct :streamQuery returns HTTP 400 by design. "
+    "Procurement behavior is exercised end-to-end via "
+    "agents/orchestrator_agent/evals/test_live_happy_path_*."
 )
+
+
+@pytest.mark.evals_live
+@pytest.mark.skip(reason=_A2A_SKIP_REASON)
 def test_live_under_threshold_approves():
     evalset = load_evalset(EVALSET_PATH)
     case = next(c for c in evalset["eval_cases"] if c["eval_id"] == "under_threshold_auto_approves")
@@ -153,10 +169,7 @@ def test_live_under_threshold_approves():
 
 
 @pytest.mark.evals_live
-@pytest.mark.skipif(
-    not os.environ.get("PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME"),
-    reason="PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME not set",
-)
+@pytest.mark.skip(reason=_A2A_SKIP_REASON)
 def test_live_over_threshold_rejects():
     evalset = load_evalset(EVALSET_PATH)
     case = next(c for c in evalset["eval_cases"] if c["eval_id"] == "over_threshold_rejects")
@@ -173,10 +186,7 @@ def test_live_over_threshold_rejects():
 
 
 @pytest.mark.evals_live
-@pytest.mark.skipif(
-    not os.environ.get("PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME"),
-    reason="PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME not set",
-)
+@pytest.mark.skip(reason=_A2A_SKIP_REASON)
 @pytest.mark.parametrize(
     "eval_id,expected_blocker_keyword",
     [
@@ -209,10 +219,7 @@ def test_live_blocker_matrix_rejects(eval_id: str, expected_blocker_keyword: str
 
 
 @pytest.mark.evals_live
-@pytest.mark.skipif(
-    not os.environ.get("PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME"),
-    reason="PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME not set",
-)
+@pytest.mark.skip(reason=_A2A_SKIP_REASON)
 def test_live_malformed_plan_degrades_gracefully():
     """A plan missing required fields shouldn't crash the agent."""
     evalset = load_evalset(EVALSET_PATH)

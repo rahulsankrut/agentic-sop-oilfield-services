@@ -24,6 +24,7 @@ import pytest
 from agents.orchestrator_agent.plan_evaluator.agent import CRITERION_WEIGHTS
 from agents.schemas import PlanEvaluation, SourcingPlan
 from agents.utils.eval_helpers import (
+    extract_first_json_object,
     extract_user_query,
     load_evalset,
     stream_query_text,
@@ -202,5 +203,7 @@ def test_live_plan_evaluator_passes_good_plan_via_orchestrator():
     )
     # If we got a SourcingPlan back at all, the Plan Evaluator accepted
     # the plan (the workflow router's PROCEED branch is gated on it).
-    plan = SourcingPlan.model_validate_json(text)
+    # The Orchestrator appends routing narratives after the JSON;
+    # extract just the leading SourcingPlan object.
+    plan = SourcingPlan.model_validate(extract_first_json_object(text))
     assert plan.primary_option.estimated_cost_usd > 0

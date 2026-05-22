@@ -159,6 +159,27 @@ def stream_query_text(
     return "".join(buf)
 
 
+def extract_first_json_object(text: str) -> dict[str, Any]:
+    """Pull the first complete JSON object out of a free-form string.
+
+    The Capacity Orchestrator's :streamQuery response is a concatenation
+    of (a) the final-node JSON output (e.g. ``SourcingPlan``) and (b)
+    routing-decision narratives from the Workflow router nodes
+    ("Routing on evaluation: score=0.86 iteration=2 → PROCEED" etc.).
+    Pure ``json.loads(text)`` fails on the trailing narrative. We use
+    ``raw_decode`` to extract the leading JSON object and discard the
+    rest.
+    """
+    text = text.lstrip()
+    if not text or not text.startswith("{"):
+        raise ValueError(
+            f"Response does not start with a JSON object: {text[:120]!r}"
+        )
+    decoder = json.JSONDecoder()
+    obj, _end = decoder.raw_decode(text)
+    return obj
+
+
 def extract_expected_text(eval_case: dict[str, Any]) -> str | None:
     """Pull the expected final-response text from an ADK eval case dict.
 
