@@ -5,10 +5,14 @@ Second node — deterministic, calls the asset-equivalence skill directly.
 
 from __future__ import annotations
 
+import logging
+
 from google.adk import Event
 
 from agents.schemas import CapacityGapRequest
 from agents.utils.skill_imports import resolve_canonical_asset
+
+logger = logging.getLogger(__name__)
 
 
 # DEMO NARRATION: "Second node: resolving the asset to a canonical id. The
@@ -49,9 +53,10 @@ def resolve_canonical_asset_node(node_input: dict) -> Event:
         }
     )
 
-    return Event(
-        message=(
-            f"Resolved {request.requested_asset!r} → {asset['canonical_id']} (region={region})"
-        ),
-        output=updated.model_dump(),
+    logger.info(
+        "Resolved %r → %s (region=%s)",
+        request.requested_asset,
+        asset["canonical_id"],
+        region,
     )
+    return Event(output=updated.model_dump())

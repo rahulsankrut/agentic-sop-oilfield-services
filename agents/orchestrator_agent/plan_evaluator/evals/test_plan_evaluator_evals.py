@@ -24,7 +24,6 @@ import pytest
 from agents.orchestrator_agent.plan_evaluator.agent import CRITERION_WEIGHTS
 from agents.schemas import PlanEvaluation, SourcingPlan
 from agents.utils.eval_helpers import (
-    WorkflowDidNotFinalizeError,
     extract_first_json_object,
     extract_user_query,
     load_evalset,
@@ -207,18 +206,7 @@ def test_live_plan_evaluator_passes_good_plan_via_orchestrator():
     # The Orchestrator appends routing narratives after the JSON;
     # extract just the leading SourcingPlan object.
     #
-    # If the workflow routed to REVISE-without-recovery (LLM scoring
-    # non-determinism), no SourcingPlan is in the stream — skip this
-    # run. The Orchestrator's own happy-path tests cover the PROCEED
-    # path; this test is specifically about the Plan Evaluator's
-    # accept-or-reject judgement, which we can't assert on without a
-    # finalized plan.
-    try:
-        plan = SourcingPlan.model_validate(
-            extract_first_json_object(text, must_contain=("requested_asset", "primary_option"))
-        )
-    except WorkflowDidNotFinalizeError as exc:
-        pytest.skip(
-            f"Workflow did not finalize this run (LLM scoring non-determinism): {exc}"
-        )
+    plan = SourcingPlan.model_validate(
+        extract_first_json_object(text, must_contain=("requested_asset", "primary_option"))
+    )
     assert plan.primary_option.estimated_cost_usd > 0

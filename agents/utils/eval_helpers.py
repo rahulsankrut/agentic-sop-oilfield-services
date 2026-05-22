@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -175,25 +176,40 @@ class WorkflowDidNotFinalizeError(RuntimeError):
 def extract_first_json_object(
     text: str,
     must_contain: tuple[str, ...] | None = None,
+    *,
+    prefer: str = "last",
 ) -> dict[str, Any]:
-    """Pull the first complete JSON object out of a free-form string.
+    """Pull a complete JSON object out of a free-form string.
 
-    The Capacity Orchestrator's :streamQuery response interleaves node-
-    narration prefixes ("Parsed capacity-gap request: ...", "Resolved
-    'Tool X' → TX-001 ...", "Routing on evaluation: score=0.86 ...") with
-    the final-node JSON output (a ``SourcingPlan``) and nested sub-objects
-    (asset cards, route legs). We scan every ``{`` position, ``raw_decode``
-    each one, and return the first match.
+    The Capacity Orchestrator emits TWO SourcingPlan JSON payloads per
+    workflow run: one from ``sourcing_logistics_agent`` (LlmAgent with
+    output_schema, streamed mid-workflow before finalize fills in the
+    naive baseline / avoided cost) and one from
+    ``finalize_sourcing_plan`` (the corrected, final plan). The first is
+    structurally a SourcingPlan but has ``avoided_cost_usd=0`` and
+    ``naive_baseline=None``; the second is the authoritative response.
 
-    ``must_contain`` filters to only return an object that has *all* the
-    given top-level keys — required because raw_decode happily parses
-    nested ``{canonical_id: ...}`` asset cards before the outer
-    SourcingPlan. Pass e.g. ``("requested_asset", "primary_option")`` to
-    pin to the SourcingPlan wrapper.
+    ``prefer="last"`` (default) returns the last matching object — the
+    one that should be treated as authoritative for end-of-workflow
+    assertions. ``prefer="first"`` returns the first, for legacy
+    callers that want the earliest object regardless of subsequent
+    overrides.
 
-    Raises ValueError if no matching JSON object is found.
+    ``must_contain`` filters to objects that have *all* the given keys —
+    required because raw_decode happily parses nested
+    ``{canonical_id: ...}`` asset cards. Pass e.g.
+    ``("requested_asset", "primary_option")`` to pin to the SourcingPlan
+    wrapper.
+
+    Raises ValueError if no matching JSON object is found, or
+    WorkflowDidNotFinalizeError if the stream shows the workflow routed
+    to REVISE without recovering (Plan Evaluator scoring non-determinism).
     """
+    if prefer not in ("first", "last"):
+        raise ValueError(f"prefer must be 'first' or 'last', got {prefer!r}")
+
     decoder = json.JSONDecoder()
+    matches: list[dict[str, Any]] = []
     pos = 0
     while True:
         brace = text.find("{", pos)
@@ -206,13 +222,15 @@ def extract_first_json_object(
             continue
         if isinstance(obj, dict):
             if must_contain is None or all(k in obj for k in must_contain):
-                return obj
+                matches.append(obj)
+                if prefer == "first":
+                    return obj
         pos = brace + 1
-    # If we got here, no JSON object satisfied must_contain. For
-    # Orchestrator callers pinning the SourcingPlan wrapper, this is
-    # almost always a non-deterministic REVISE-without-recovery —
-    # signal it so callers can pytest.skip rather than fail.
-    if must_contain and "Routing on evaluation:" in text and "REVISE" in text:
+
+    if matches:
+        return matches[-1]
+
+    if must_contain and "REVISE" in text:
         raise WorkflowDidNotFinalizeError(
             "Workflow routed to REVISE without finalizing; no SourcingPlan "
             "emitted. Plan Evaluator scoring is non-deterministic per run."
@@ -221,6 +239,113 @@ def extract_first_json_object(
         f"No JSON object matching {must_contain} found in response "
         f"(len={len(text)}): {text[:200]!r}"
     )
+
+
+def a2a_send_text(
+    resource_name_env: str,
+    prompt: str,
+    timeout: float = 240.0,
+) -> str:
+    """Drive a deployed A2A-wrapped Agent Engine via the A2A protocol.
+
+    Procurement Approval is deployed with ``A2aAgent`` + a custom
+    ``ProcurementApprovalExecutor``; the A2A-wrapped engine rejects the
+    AdkApp ``async_stream_query`` :streamQuery class_method (returns
+    HTTP 400 FAILED_PRECONDITION). The production path — Orchestrator →
+    ``RemoteA2aAgent`` → Procurement A2A — uses the A2A protocol on the
+    engine's ``/a2a`` endpoint with the regional aiplatform host.
+
+    Mirrors ``SerializableRemoteA2aAgent`` in
+    ``agents/orchestrator_agent/tools.py`` (Google Cloud ADC auth +
+    regional URL fix) but as a one-shot synchronous helper for evals.
+
+    Returns the concatenated text of all response parts.
+    """
+    import asyncio
+
+    import httpx
+    from a2a.client import ClientConfig, ClientFactory
+    from a2a.types import Message, Role, TextPart, TransportProtocol
+
+    resource = os.environ.get(resource_name_env)
+    if not resource:
+        raise RuntimeError(
+            f"{resource_name_env} not set; A2A live eval cannot run. Source .env first."
+        )
+
+    parts = resource.split("/")
+    try:
+        location = parts[parts.index("locations") + 1]
+    except (ValueError, IndexError) as exc:
+        raise RuntimeError(f"Cannot parse location from resource: {resource!r}") from exc
+
+    card_url = (
+        f"https://{location}-aiplatform.googleapis.com/v1beta1/{resource}/a2a/v1/card"
+    )
+    a2a_url = f"https://{location}-aiplatform.googleapis.com/v1beta1/{resource}/a2a"
+
+    # Local import — auth is in the orchestrator package; we re-use it
+    # rather than redefine the httpx.Auth class.
+    from agents.orchestrator_agent.auth import GoogleAuthRefresh
+
+    async def _run() -> str:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(timeout=timeout),
+            headers={"Content-Type": "application/json"},
+            auth=GoogleAuthRefresh(),
+        ) as client:
+            # Fetch + patch the agent card (Agent Engine returns a global
+            # URL that 404s; we override with the regional URL).
+            card_resp = await client.get(card_url)
+            card_resp.raise_for_status()
+            from a2a.types import AgentCard
+
+            card = AgentCard.model_validate(card_resp.json())
+            card.url = a2a_url
+            # Force HTTP+JSON; Procurement deploy sets preferred_transport
+            # to http_json (see procurement_approval_agent/deploy.py).
+            card.preferred_transport = TransportProtocol.http_json
+
+            factory = ClientFactory(
+                config=ClientConfig(
+                    httpx_client=client,
+                    streaming=False,
+                    polling=False,
+                    supported_transports=[
+                        TransportProtocol.http_json,
+                        TransportProtocol.jsonrpc,
+                    ],
+                )
+            )
+            a2a_client = factory.create(card)
+
+            message = Message(
+                message_id=str(uuid.uuid4()),
+                role=Role.user,
+                parts=[TextPart(text=prompt)],
+            )
+            buf: list[str] = []
+            async for event in a2a_client.send_message(message):
+                # event is either a Message (terminal) or a (Task, Update) tuple.
+                if isinstance(event, tuple):
+                    task, _update = event
+                    for art in task.artifacts or []:
+                        for raw_part in art.parts or []:
+                            p = raw_part.root if hasattr(raw_part, "root") else raw_part
+                            text = getattr(p, "text", None)
+                            if text:
+                                buf.append(text)
+                else:
+                    for raw_part in event.parts or []:
+                        p = raw_part.root if hasattr(raw_part, "root") else raw_part
+                        text = getattr(p, "text", None)
+                        if text:
+                            buf.append(text)
+            return "".join(buf)
+
+    # Required because asyncio gets cranky inside pytest's own loop on
+    # 3.10; a fresh loop here keeps the helper standalone-runnable too.
+    return asyncio.run(_run())
 
 
 def extract_expected_text(eval_case: dict[str, Any]) -> str | None:

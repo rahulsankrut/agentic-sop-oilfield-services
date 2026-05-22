@@ -8,15 +8,16 @@ sibling README for usage. The $500K human-review threshold from SPECS.md
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
 from agents.schemas import ProcurementApproval
 from agents.utils.eval_helpers import (
+    a2a_send_text,
     extract_user_query,
     load_evalset,
-    stream_query_text,
 )
 
 EVALSET_PATH = Path(__file__).parent / "procurement_approval_agent.evalset.json"
@@ -131,37 +132,29 @@ def test_procurement_approval_schema_roundtrips():
 # ---------------------------------------------------------------------------
 # Live layer
 #
-# The Procurement Approval Agent is deployed as a Vertex AI Agent Engine
-# *A2A-wrapped* via ``A2aAgent`` + ``ProcurementApprovalExecutor`` (see
-# agents/procurement_approval_agent/deploy.py). A2A-wrapped engines reject
-# ``async_stream_query`` (returns HTTP 400 FAILED_PRECONDITION); the
-# production path is Orchestrator → ``RemoteA2aAgent`` → Procurement via
-# the A2A protocol on port :a2a, NOT :streamQuery.
-#
-# We therefore route Procurement's live behavioral evals through the
-# Orchestrator (which IS streamQuery-callable) and check the surfaced
-# approval/blocker. Direct-procurement live tests are explicitly skipped
-# with the production-path note attached.
+# Procurement Approval is deployed A2A-wrapped (A2aAgent +
+# ProcurementApprovalExecutor — see agents/procurement_approval_agent/deploy.py).
+# A2A-wrapped engines reject the AdkApp :streamQuery class_method
+# (HTTP 400 FAILED_PRECONDITION). Live evals drive the deployed surface
+# via the A2A protocol on /a2a — the same path Orchestrator's
+# RemoteA2aAgent uses in production. ``a2a_send_text`` wraps the
+# httpx + ADC + ClientFactory glue.
 # ---------------------------------------------------------------------------
 
-
-_A2A_SKIP_REASON = (
-    "Procurement Approval is A2A-wrapped; production path is Orchestrator → "
-    "RemoteA2aAgent. Direct :streamQuery returns HTTP 400 by design. "
-    "Procurement behavior is exercised end-to-end via "
-    "agents/orchestrator_agent/evals/test_live_happy_path_*."
-)
+def _procurement_live_gate() -> bool:
+    return bool(os.environ.get("PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME"))
 
 
 @pytest.mark.evals_live
-@pytest.mark.skip(reason=_A2A_SKIP_REASON)
+@pytest.mark.skipif(
+    not _procurement_live_gate(),
+    reason="PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME not set",
+)
 def test_live_under_threshold_approves():
     evalset = load_evalset(EVALSET_PATH)
     case = next(c for c in evalset["eval_cases"] if c["eval_id"] == "under_threshold_auto_approves")
     prompt = extract_user_query(case)
-    text = stream_query_text(
-        "PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME", prompt, user_id="eval-procurement-under"
-    )
+    text = a2a_send_text("PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME", prompt)
     approval = ProcurementApproval.model_validate_json(text)
     assert approval.approved is True, (
         f"Expected auto-approve for under-threshold plan; got blockers={approval.blockers!r}"
@@ -169,14 +162,15 @@ def test_live_under_threshold_approves():
 
 
 @pytest.mark.evals_live
-@pytest.mark.skip(reason=_A2A_SKIP_REASON)
+@pytest.mark.skipif(
+    not _procurement_live_gate(),
+    reason="PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME not set",
+)
 def test_live_over_threshold_rejects():
     evalset = load_evalset(EVALSET_PATH)
     case = next(c for c in evalset["eval_cases"] if c["eval_id"] == "over_threshold_rejects")
     prompt = extract_user_query(case)
-    text = stream_query_text(
-        "PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME", prompt, user_id="eval-procurement-over"
-    )
+    text = a2a_send_text("PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME", prompt)
     approval = ProcurementApproval.model_validate_json(text)
     assert approval.approved is False, (
         "Expected rejection for over-threshold plan; got approved=True "
@@ -186,7 +180,10 @@ def test_live_over_threshold_rejects():
 
 
 @pytest.mark.evals_live
-@pytest.mark.skip(reason=_A2A_SKIP_REASON)
+@pytest.mark.skipif(
+    not _procurement_live_gate(),
+    reason="PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME not set",
+)
 @pytest.mark.parametrize(
     "eval_id,expected_blocker_keyword",
     [
@@ -204,9 +201,7 @@ def test_live_blocker_matrix_rejects(eval_id: str, expected_blocker_keyword: str
     evalset = load_evalset(EVALSET_PATH)
     case = next(c for c in evalset["eval_cases"] if c["eval_id"] == eval_id)
     prompt = extract_user_query(case)
-    text = stream_query_text(
-        "PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME", prompt, user_id=f"eval-{eval_id}"
-    )
+    text = a2a_send_text("PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME", prompt)
     approval = ProcurementApproval.model_validate_json(text)
     assert approval.approved is False, (
         f"{eval_id}: expected rejection, got approved=True"
@@ -219,7 +214,10 @@ def test_live_blocker_matrix_rejects(eval_id: str, expected_blocker_keyword: str
 
 
 @pytest.mark.evals_live
-@pytest.mark.skip(reason=_A2A_SKIP_REASON)
+@pytest.mark.skipif(
+    not _procurement_live_gate(),
+    reason="PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME not set",
+)
 def test_live_malformed_plan_degrades_gracefully():
     """A plan missing required fields shouldn't crash the agent."""
     evalset = load_evalset(EVALSET_PATH)
@@ -229,9 +227,7 @@ def test_live_malformed_plan_degrades_gracefully():
         if c["eval_id"] == "edge_malformed_plan_degrades_gracefully"
     )
     prompt = extract_user_query(case)
-    text = stream_query_text(
-        "PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME", prompt, user_id="eval-procurement-malformed"
-    )
+    text = a2a_send_text("PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME", prompt)
     assert text, "Agent returned empty response for malformed plan"
     # Don't strictly require a valid ProcurementApproval (the LLM may
     # return an error explanation instead). Just make sure it doesn't

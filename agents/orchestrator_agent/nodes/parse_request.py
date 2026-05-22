@@ -7,6 +7,7 @@ zoom the map and mark the target location.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 from google.adk import Context, Event
@@ -15,6 +16,8 @@ from agents.schemas import CapacityGapRequest, GeoPoint
 
 from ..events.canvas_events import CapacityGapDetectedEvent
 from ..events.emit import emit
+
+logger = logging.getLogger(__name__)
 
 _WEEKDAY_NAMES = {
     "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
@@ -152,9 +155,13 @@ def parse_capacity_gap_request(node_input: str, ctx: Context) -> Event:
     state_delta = emit(ctx, gap_event)
     state_delta["request"] = request.model_dump(mode="json")
     state_delta["iteration_count"] = 0
+    logger.info(
+        "Parsed capacity-gap request: %s to %s by %s",
+        request.requested_asset,
+        request.target_location.label,
+        request.deadline.date(),
+    )
     return Event(
-        message=f"Parsed capacity-gap request: {request.requested_asset} "
-        f"to {request.target_location.label} by {request.deadline.date()}",
         output=request.model_dump(mode="json"),
         state=state_delta,
     )

@@ -75,11 +75,11 @@ def evaluate_direct_availability(node_input: dict) -> Event:
                     canonical_id, exc,
                 )
 
+    logger.info(
+        "Direct availability: %s",
+        "YES" if direct_available else "NO — equivalence path required",
+    )
     return Event(
-        message=(
-            "Direct availability: "
-            + ("YES" if direct_available else "NO — equivalence path required")
-        ),
         output={
             "request": request.model_dump(mode="json"),
             "results": results.model_dump(mode="json"),

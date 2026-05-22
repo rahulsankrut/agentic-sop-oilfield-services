@@ -12,10 +12,14 @@ Three routers:
 
 from __future__ import annotations
 
+import logging
+
 from google.adk import Context, Event
 
 from ..events.canvas_events import RouterDecisionEvent
 from ..events.emit import emit
+
+logger = logging.getLogger(__name__)
 
 # Route keys live in module scope so the agent.py edge dict and the routers
 # stay in sync without string-literal drift.
@@ -76,8 +80,8 @@ def route_on_availability(node_input: dict, ctx: Context) -> Event:
         if node_input.get("direct_available")
         else "No direct availability — proceeding to equivalence reasoning"
     )
+    logger.info("Routing on availability: %s", route)
     return Event(
-        message=f"Routing on availability: {route}",
         route=route,
         output=node_input,
         state=_router_state(ctx, "route_on_availability", route, rationale),
@@ -144,10 +148,13 @@ def route_on_evaluation_score(node_input: dict, ctx: Context) -> Event:
         state_delta_extra["iteration_count"] = new_iteration
         rationale = f"Score {overall_score:.2f} below threshold; requesting revision"
 
+    logger.info(
+        "Routing on evaluation: score=%.2f iteration=%d → %s",
+        overall_score,
+        iteration,
+        route,
+    )
     return Event(
-        message=(
-            f"Routing on evaluation: score={overall_score:.2f} iteration={iteration} → {route}"
-        ),
         route=route,
         output=forward,
         state={
@@ -190,8 +197,13 @@ def route_on_procurement_threshold(node_input: dict, ctx: Context) -> Event:
         route = AUTO_APPROVE
         rationale = f"Cost ${cost:,} under threshold and no blockers — OCC planner self-approval"
 
+    logger.info(
+        "Routing on procurement: cost=$%s blockers=%d → %s",
+        f"{cost:,}",
+        len(blockers),
+        route,
+    )
     return Event(
-        message=(f"Routing on procurement: cost=${cost:,} blockers={len(blockers)} → {route}"),
         route=route,
         output=node_input,
         state=_router_state(ctx, "route_on_procurement_threshold", route, rationale),

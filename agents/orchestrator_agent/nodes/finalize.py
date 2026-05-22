@@ -6,6 +6,7 @@ Last node before END. Pure-Python compute over the structured plan that
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from google.adk import Context, Event
@@ -22,6 +23,8 @@ from agents.utils.skill_imports import estimate_transit
 
 from ..events.canvas_events import WorkflowCompletedEvent
 from ..events.emit import emit
+
+logger = logging.getLogger(__name__)
 
 # Long-haul fallback hubs by region — the "what the planner would have done
 # without the agent" baselines. Hard-coded for the demo's hero scenario;
@@ -132,8 +135,8 @@ def finalize_sourcing_plan(node_input: dict, ctx: Context) -> Event:  # noqa: PL
             final_output={"request": request.model_dump(mode="json"), "plan": None},
             duration_ms=duration_ms,
         )
+        logger.warning("finalize_sourcing_plan: no plan to finalize")
         return Event(
-            message="finalize_sourcing_plan: no plan to finalize",
             output={"request": request.model_dump(mode="json"), "plan": None},
             state=emit(ctx, completed),
         )
@@ -210,11 +213,17 @@ def finalize_sourcing_plan(node_input: dict, ctx: Context) -> Event:  # noqa: PL
         )
         state_delta = {**state_delta, **emit_a2ui(ctx, cost_msgs)}
 
+    # Log the narrative for traces/audit; stream the FINAL JSON (with
+    # avoided_cost_usd populated) as the message so downstream consumers
+    # — :streamQuery callers, evals, canvas — see the corrected plan,
+    # not the stale pre-finalize SourcingPlan from sourcing_logistics_agent.
+    logger.info(
+        "Final SourcingPlan: primary=$%s avoided=$%s",
+        f"{final.primary_option.estimated_cost_usd:,}",
+        f"{final.avoided_cost_usd:,}",
+    )
     return Event(
-        message=(
-            f"Final SourcingPlan: primary=${final.primary_option.estimated_cost_usd:,} "
-            f"avoided=${final.avoided_cost_usd:,}"
-        ),
+        message=final.model_dump_json(),
         output=final_output,
         state=state_delta,
     )

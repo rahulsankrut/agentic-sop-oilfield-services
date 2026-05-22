@@ -8,6 +8,8 @@ the initial shape comes from deterministic data joins.
 
 from __future__ import annotations
 
+import logging
+
 from google.adk import Context, Event
 
 from agents.schemas import (
@@ -24,6 +26,8 @@ from agents.utils.skill_imports import (
     query_maximo_availability,
     resolve_canonical_asset,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _instance_to_geopoint(instance: dict) -> GeoPoint:
@@ -126,8 +130,8 @@ def build_direct_plan(node_input: dict) -> Event:
     )
 
     plan_dict = plan.model_dump(mode="json")
+    logger.info("Direct plan built — primary cost $%s", f"{option.estimated_cost_usd:,}")
     return Event(
-        message=f"Direct plan built — primary cost ${option.estimated_cost_usd:,}",
         output={
             "request": request.model_dump(mode="json"),
             "results": results.model_dump(mode="json"),
@@ -212,11 +216,11 @@ def build_equivalent_plan(node_input: dict, ctx: Context) -> Event:
     if instance is None:
         # No deployable instance — emit a degraded plan that the Plan Evaluator
         # will catch (rather than hard-crashing the workflow).
+        logger.info(
+            "No deployable instance found for equivalence candidate %r",
+            substitute_canonical_id,
+        )
         return Event(
-            message=(
-                "No deployable instance found for equivalence candidate "
-                f"{substitute_canonical_id!r}"
-            ),
             output={
                 "request": request.model_dump(mode="json"),
                 "results": results.model_dump(mode="json"),
@@ -244,11 +248,12 @@ def build_equivalent_plan(node_input: dict, ctx: Context) -> Event:
     )
 
     plan_dict = plan.model_dump(mode="json")
+    logger.info(
+        "Equivalence plan built — substitute %s primary cost $%s",
+        substitute_canonical_id,
+        f"{option.estimated_cost_usd:,}",
+    )
     return Event(
-        message=(
-            f"Equivalence plan built — substitute {substitute_canonical_id} "
-            f"primary cost ${option.estimated_cost_usd:,}"
-        ),
         output={
             "request": request.model_dump(mode="json"),
             "results": results.model_dump(mode="json"),

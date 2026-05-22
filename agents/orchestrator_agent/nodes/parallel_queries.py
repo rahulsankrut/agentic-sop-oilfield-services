@@ -507,8 +507,8 @@ async def parallel_system_queries(node_input: dict, ctx: Context) -> Event:
 
     if not request.canonical_asset_id:
         # Should never happen — resolve_canonical_asset_node ran upstream.
+        logger.warning("parallel_system_queries: missing canonical_asset_id")
         return Event(
-            message="parallel_system_queries: missing canonical_asset_id",
             output=SystemQueryResults().model_dump(mode="json"),
             state=emitter.state_delta(),
         )
@@ -565,12 +565,13 @@ async def parallel_system_queries(node_input: dict, ctx: Context) -> Event:
         )
     )
 
+    logger.info(
+        "Parallel system queries complete via %s: maximo=%d instances, intouch=%d specs",
+        path_label,
+        aggregated.maximo["count"],
+        aggregated.intouch["count"],
+    )
     return Event(
-        message=(
-            f"Parallel system queries complete via {path_label}: "
-            f"maximo={aggregated.maximo['count']} instances, "
-            f"intouch={aggregated.intouch['count']} specs"
-        ),
         # Pass the original request alongside the results so downstream
         # nodes don't have to re-thread it through every payload.
         output={

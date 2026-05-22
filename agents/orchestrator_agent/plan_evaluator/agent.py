@@ -121,6 +121,12 @@ root_agent = Agent(
     input_schema=SourcingPlan,
     output_schema=PlanEvaluation,
     generate_content_config=GenerateContentConfig(
+        # temperature=0 for deterministic scoring — the demo's canonical
+        # cargo-plane scenario must score consistently >= 0.85 to PROCEED
+        # rather than randomly routing to REVISE between runs. Stochastic
+        # scoring was the cause of intermittent live-eval failures
+        # (rounds 4-6 saw 0.77 / 0.91 / 0.86 on the same input).
+        temperature=0.0,
         max_output_tokens=4096,
         thinking_config=ThinkingConfig(thinking_budget=1024),
     ),
