@@ -87,29 +87,72 @@ def stream_query_text(
     prompt: str,
     user_id: str = "eval-runner",
 ) -> str:
-    """Call the deployed Reasoning Engine via ``stream_query``, return concatenated text.
+    """Drive the deployed Reasoning Engine's :streamQuery endpoint via REST,
+    return concatenated text.
 
-    Imports the Vertex SDK lazily so the helper module can be imported in
-    lint-only environments without ``google-cloud-aiplatform`` present.
+    Bypasses ``vertexai.agent_engines.get(...).stream_query()`` because the
+    SDK's method registration intermittently fails on AdkApp-wrapped engines
+    ("Failed to register API methods... 'NoneType' object has no attribute
+    '__name__'"), leaving the AgentEngine wrapper without ``stream_query``.
+    The REST endpoint always works and is the same path the canvas uses
+    (canvas/src/app/api/orchestrator/stream/route.ts).
     """
-    import vertexai
-    from vertexai import agent_engines
+    import google.auth
+    import google.auth.transport.requests
+    import requests
 
     resource = os.environ.get(resource_name_env)
     if not resource:
         raise RuntimeError(
             f"{resource_name_env} not set; live eval cannot run. Source the project .env first."
         )
-    project = os.environ.get("GOOGLE_CLOUD_PROJECT")
     location = os.environ.get("AGENT_ENGINE_LOCATION") or os.environ.get(
         "GOOGLE_CLOUD_LOCATION", "us-central1"
     )
-    vertexai.init(project=project, location=location)
-    agent = agent_engines.get(resource)
+    url = (
+        f"https://{location}-aiplatform.googleapis.com/v1beta1/"
+        f"{resource}:streamQuery?alt=sse"
+    )
+
+    creds, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+    creds.refresh(google.auth.transport.requests.Request())
+
+    body = {
+        "class_method": "async_stream_query",
+        "input": {
+            "message": {"role": "user", "parts": [{"text": prompt}]},
+            "user_id": user_id,
+        },
+    }
+    resp = requests.post(
+        url,
+        headers={
+            "Authorization": f"Bearer {creds.token}",
+            "Content-Type": "application/json",
+        },
+        json=body,
+        stream=True,
+        timeout=600,
+    )
+    if not resp.ok:
+        raise RuntimeError(
+            f"streamQuery HTTP {resp.status_code}: {resp.text[:500]}"
+        )
 
     buf: list[str] = []
-    for event in agent.stream_query(message=prompt, user_id=user_id):
-        for part in event.get("content", {}).get("parts", []):
+    for raw_line in resp.iter_lines(decode_unicode=True):
+        if not raw_line:
+            continue
+        # SSE frames are "data: <json>"; the deployed surface sometimes
+        # sends bare JSON lines too. Strip the prefix when present.
+        line = raw_line[6:] if raw_line.startswith("data: ") else raw_line
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        for part in (event.get("content") or {}).get("parts") or []:
             text = part.get("text")
             if text:
                 buf.append(text)
