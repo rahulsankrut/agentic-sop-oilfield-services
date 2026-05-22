@@ -159,25 +159,46 @@ def stream_query_text(
     return "".join(buf)
 
 
-def extract_first_json_object(text: str) -> dict[str, Any]:
+def extract_first_json_object(
+    text: str,
+    must_contain: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
     """Pull the first complete JSON object out of a free-form string.
 
-    The Capacity Orchestrator's :streamQuery response is a concatenation
-    of (a) the final-node JSON output (e.g. ``SourcingPlan``) and (b)
-    routing-decision narratives from the Workflow router nodes
-    ("Routing on evaluation: score=0.86 iteration=2 → PROCEED" etc.).
-    Pure ``json.loads(text)`` fails on the trailing narrative. We use
-    ``raw_decode`` to extract the leading JSON object and discard the
-    rest.
+    The Capacity Orchestrator's :streamQuery response interleaves node-
+    narration prefixes ("Parsed capacity-gap request: ...", "Resolved
+    'Tool X' → TX-001 ...", "Routing on evaluation: score=0.86 ...") with
+    the final-node JSON output (a ``SourcingPlan``) and nested sub-objects
+    (asset cards, route legs). We scan every ``{`` position, ``raw_decode``
+    each one, and return the first match.
+
+    ``must_contain`` filters to only return an object that has *all* the
+    given top-level keys — required because raw_decode happily parses
+    nested ``{canonical_id: ...}`` asset cards before the outer
+    SourcingPlan. Pass e.g. ``("requested_asset", "primary_option")`` to
+    pin to the SourcingPlan wrapper.
+
+    Raises ValueError if no matching JSON object is found.
     """
-    text = text.lstrip()
-    if not text or not text.startswith("{"):
-        raise ValueError(
-            f"Response does not start with a JSON object: {text[:120]!r}"
-        )
     decoder = json.JSONDecoder()
-    obj, _end = decoder.raw_decode(text)
-    return obj
+    pos = 0
+    while True:
+        brace = text.find("{", pos)
+        if brace < 0:
+            break
+        try:
+            obj, _end = decoder.raw_decode(text[brace:])
+        except json.JSONDecodeError:
+            pos = brace + 1
+            continue
+        if isinstance(obj, dict):
+            if must_contain is None or all(k in obj for k in must_contain):
+                return obj
+        pos = brace + 1
+    raise ValueError(
+        f"No JSON object matching {must_contain} found in response "
+        f"(len={len(text)}): {text[:200]!r}"
+    )
 
 
 def extract_expected_text(eval_case: dict[str, Any]) -> str | None:

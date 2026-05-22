@@ -205,5 +205,7 @@ def test_live_plan_evaluator_passes_good_plan_via_orchestrator():
     # the plan (the workflow router's PROCEED branch is gated on it).
     # The Orchestrator appends routing narratives after the JSON;
     # extract just the leading SourcingPlan object.
-    plan = SourcingPlan.model_validate(extract_first_json_object(text))
+    plan = SourcingPlan.model_validate(
+        extract_first_json_object(text, must_contain=("requested_asset", "primary_option"))
+    )
     assert plan.primary_option.estimated_cost_usd > 0

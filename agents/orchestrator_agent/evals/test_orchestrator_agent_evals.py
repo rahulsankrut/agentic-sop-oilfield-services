@@ -80,7 +80,8 @@ def test_evalset_revise_loop_trajectory_calls_evaluator_twice():
     """
     evalset = load_evalset(EVALSET_PATH)
     case = next(
-        c for c in evalset["eval_cases"]
+        c
+        for c in evalset["eval_cases"]
         if c["eval_id"] == "revise_loop_low_score_triggers_iteration"
     )
     tools = [t["name"] for t in case["conversation"][0]["intermediate_data"]["tool_uses"]]
@@ -88,9 +89,7 @@ def test_evalset_revise_loop_trajectory_calls_evaluator_twice():
         f"Expected exactly 2 plan_evaluator_tool invocations, "
         f"got {tools.count('plan_evaluator_tool')}"
     )
-    assert "revise_plan_agent" in tools, (
-        "revise_plan_agent missing from revise-loop trajectory"
-    )
+    assert "revise_plan_agent" in tools, "revise_plan_agent missing from revise-loop trajectory"
 
 
 def test_a2ui_demo_envelopes_are_wired_into_nodes():
@@ -140,13 +139,10 @@ def test_evalset_memory_preload_appears_before_parse():
     """
     evalset = load_evalset(EVALSET_PATH)
     case = next(
-        c for c in evalset["eval_cases"]
-        if c["eval_id"] == "memory_preload_maria_west_africa"
+        c for c in evalset["eval_cases"] if c["eval_id"] == "memory_preload_maria_west_africa"
     )
     tools = [t["name"] for t in case["conversation"][0]["intermediate_data"]["tool_uses"]]
-    assert tools[0] == "preload_memory", (
-        f"Expected preload_memory first, got {tools[0]!r}"
-    )
+    assert tools[0] == "preload_memory", f"Expected preload_memory first, got {tools[0]!r}"
     assert tools.index("preload_memory") < tools.index("parse_capacity_gap_request")
 
 
@@ -246,10 +242,8 @@ def cargo_plane_response() -> str:
     evalset = load_evalset(EVALSET_PATH)
     case = next(c for c in evalset["eval_cases"] if c["eval_id"] == "happy_path_cargo_plane")
     prompt = extract_user_query(case)
-    raw = stream_query_text(
-        "ORCHESTRATOR_AGENT_RESOURCE_NAME", prompt, user_id="eval-maria"
-    )
-    plan_obj = extract_first_json_object(raw)
+    raw = stream_query_text("ORCHESTRATOR_AGENT_RESOURCE_NAME", prompt, user_id="eval-maria")
+    plan_obj = extract_first_json_object(raw, must_contain=("requested_asset", "primary_option"))
     return _json.dumps(plan_obj)
 
 
@@ -322,7 +316,9 @@ def test_live_edge_unknown_customer_degrades_gracefully():
     # Either valid SourcingPlan (with low/zero customer_compatibility) or
     # an error message is acceptable.
     try:
-        plan_obj = extract_first_json_object(text)
+        plan_obj = extract_first_json_object(
+            text, must_contain=("requested_asset", "primary_option")
+        )
         SourcingPlan.model_validate(plan_obj)
     except Exception:
         # Non-JSON or partial — that's fine, just don't crash silently.
@@ -346,14 +342,13 @@ def test_live_restriction_penalty_lowers_compatibility():
     """
     evalset = load_evalset(EVALSET_PATH)
     case = next(
-        c for c in evalset["eval_cases"]
-        if c["eval_id"] == "restriction_penalty_north_atlantic"
+        c for c in evalset["eval_cases"] if c["eval_id"] == "restriction_penalty_north_atlantic"
     )
     prompt = extract_user_query(case)
-    text = stream_query_text(
-        "ORCHESTRATOR_AGENT_RESOURCE_NAME", prompt, user_id="eval-restriction"
+    text = stream_query_text("ORCHESTRATOR_AGENT_RESOURCE_NAME", prompt, user_id="eval-restriction")
+    plan = SourcingPlan.model_validate(
+        extract_first_json_object(text, must_contain=("requested_asset", "primary_option"))
     )
-    plan = SourcingPlan.model_validate(extract_first_json_object(text))
     blocker_text = " ".join(plan.blockers or []).lower()
     incompatible = plan.primary_option.customer_compatibility is False
     mentions_restriction = any(
@@ -382,10 +377,10 @@ def test_live_multi_skin_halliburton_returns_valid_plan():
     evalset = load_evalset(EVALSET_PATH)
     case = next(c for c in evalset["eval_cases"] if c["eval_id"] == "multi_skin_halliburton")
     prompt = extract_user_query(case)
-    text = stream_query_text(
-        "ORCHESTRATOR_AGENT_RESOURCE_NAME", prompt, user_id="eval-halliburton"
+    text = stream_query_text("ORCHESTRATOR_AGENT_RESOURCE_NAME", prompt, user_id="eval-halliburton")
+    plan = SourcingPlan.model_validate(
+        extract_first_json_object(text, must_contain=("requested_asset", "primary_option"))
     )
-    plan = SourcingPlan.model_validate(extract_first_json_object(text))
     # Don't assert TX-007 here — different skins can route to different
     # source locations. The contract is "valid SourcingPlan returned".
     assert plan.primary_option.estimated_cost_usd > 0
