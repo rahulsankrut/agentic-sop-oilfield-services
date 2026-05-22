@@ -37,6 +37,31 @@ def test_evalset_file_exists_and_parses():
     assert "happy_path_q4_west_africa_override" in eval_ids
     assert "edge_empty_rationale" in eval_ids
     assert "edge_missing_override_id" in eval_ids
+    # Persona 1 demo prompt + significance boundary (2026-05-21 expansion).
+    assert "persona1_david_permian_q4_completions" in eval_ids
+    assert "override_significance_high_magnitude" in eval_ids
+
+
+def test_persona1_demo_prompt_extracts_demo_critical_tags():
+    """Persona 1's exact demo line — 'rig count decline + three operators
+    delaying' — must lift to rig_count_decline + operator_delay tags.
+
+    These are the literal tags the demo narration ties back to (see
+    docs/planning/agentic_sop_oilfield_services_brief.md §Persona 1).
+    """
+    evalset = load_evalset(EVALSET_PATH)
+    case = next(
+        c for c in evalset["eval_cases"]
+        if c["eval_id"] == "persona1_david_permian_q4_completions"
+    )
+    text = case["conversation"][0]["final_response"]["parts"][0]["text"]
+    rationale = ForecastRationale.model_validate_json(text)
+    assert "rig_count_decline" in rationale.rationale_tags, (
+        f"Persona 1 demo must extract rig_count_decline; got {rationale.rationale_tags}"
+    )
+    assert "operator_delay" in rationale.rationale_tags, (
+        f"Persona 1 demo must extract operator_delay; got {rationale.rationale_tags}"
+    )
 
 
 def test_happy_path_expected_response_has_rationale_tags():
@@ -121,6 +146,35 @@ def test_live_empty_rationale_doesnt_fabricate_tags():
     # confidence "instinct" or similar, but we draw the line at "many tags").
     assert len(rationale.rationale_tags) <= 1, (
         f"Empty-rationale case shouldn't extract multiple tags; got {rationale.rationale_tags!r}"
+    )
+
+
+@pytest.mark.evals_live
+@pytest.mark.skipif(
+    not os.environ.get("FORECAST_REVIEW_AGENT_RESOURCE_NAME"),
+    reason="FORECAST_REVIEW_AGENT_RESOURCE_NAME not set",
+)
+def test_live_persona1_demo_extracts_demo_critical_tags():
+    """Persona 1's exact demo line must extract the tags the narration
+    relies on. If either rig_count_decline or operator_delay drops out,
+    the demo's 'model improving' moment loses its punch.
+    """
+    evalset = load_evalset(EVALSET_PATH)
+    case = next(
+        c for c in evalset["eval_cases"]
+        if c["eval_id"] == "persona1_david_permian_q4_completions"
+    )
+    prompt = extract_user_query(case)
+    text = stream_query_text(
+        "FORECAST_REVIEW_AGENT_RESOURCE_NAME", prompt, user_id="eval-persona1-david"
+    )
+    rationale = ForecastRationale.model_validate_json(text)
+    tags_lower = {t.lower() for t in rationale.rationale_tags}
+    has_rig = any("rig" in t for t in tags_lower)
+    has_operator = any("operator" in t or "delay" in t for t in tags_lower)
+    assert has_rig and has_operator, (
+        f"Persona 1 demo prompt must extract rig + operator/delay tags; "
+        f"got {rationale.rationale_tags!r}"
     )
 
 

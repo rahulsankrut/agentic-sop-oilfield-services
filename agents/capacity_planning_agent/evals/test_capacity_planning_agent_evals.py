@@ -35,6 +35,41 @@ def test_evalset_file_exists_and_parses():
     assert "happy_path_west_africa_risk_05" in eval_ids
     assert "happy_path_permian_strict_risk" in eval_ids
     assert "edge_basin_without_wo_history" in eval_ids
+    # Persona 2 demo prompt + risk-tolerance boundary (2026-05-21 expansion).
+    assert "persona2_tomas_west_texas_q3" in eval_ids
+    assert "risk_tolerance_loose_smaller_buffer" in eval_ids
+
+
+def test_risk_tolerance_monotonicity_loose_to_strict():
+    """A monotonicity property over three risk-tolerance points: as
+    tolerance goes 0.25 → 0.65 → 0.85, recommended_buffer_days must be
+    non-decreasing.
+
+    Same basin (permian) across all three to isolate the risk-tolerance
+    knob. Violations indicate the agent is reasoning incorrectly about
+    the safety-vs-utilization tradeoff — a demo-critical bug.
+    """
+    evalset = load_evalset(EVALSET_PATH)
+    by_id = {c["eval_id"]: c for c in evalset["eval_cases"]}
+    expected_pairs = [
+        ("risk_tolerance_loose_smaller_buffer", 0.25),
+        ("persona2_tomas_west_texas_q3", 0.65),
+        ("happy_path_permian_strict_risk", 0.85),
+    ]
+    buffers: list[tuple[float, float]] = []
+    for eval_id, expected_tolerance in expected_pairs:
+        text = by_id[eval_id]["conversation"][0]["final_response"]["parts"][0]["text"]
+        buf = BufferOptimization.model_validate_json(text)
+        assert abs(buf.risk_tolerance - expected_tolerance) < 1e-6, (
+            f"{eval_id}: risk_tolerance fixture drift "
+            f"({buf.risk_tolerance} != {expected_tolerance})"
+        )
+        buffers.append((buf.risk_tolerance, buf.recommended_buffer_days))
+    days = [b[1] for b in buffers]
+    assert days == sorted(days), (
+        f"Buffer-days not monotone non-decreasing across risk tolerances: "
+        f"{[(round(t, 2), d) for t, d in buffers]}"
+    )
 
 
 def test_all_expected_responses_satisfy_buffer_constraints():

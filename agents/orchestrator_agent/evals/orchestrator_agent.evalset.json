@@ -1,7 +1,7 @@
 {
   "eval_set_id": "orchestrator_agent_evalset_v1",
   "name": "Capacity Orchestrator — eval set",
-  "description": "Eval set for the Capacity Orchestrator Workflow. Covers the cargo-plane happy path (Persona 3 / Maria), an unknown-customer edge case, and a missing-FDP-entry degradation case. Live evals run against ORCHESTRATOR_AGENT_RESOURCE_NAME via :streamQuery. Trajectory expectations encode the Workflow path the graph should take.",
+  "description": "Eval set for the Capacity Orchestrator Workflow. Covers the cargo-plane centerpiece (Persona 3 / Maria) and the full demo-scenario surface: restriction-penalty (FDP-rejected substitute), multi-skin (halliburton-pattern), memory-preload trajectory (Memory Bank preload of Maria's West Africa context), revise loop (low-score triggers re-evaluation), unknown-customer and missing-history degradation cases. Live evals run against ORCHESTRATOR_AGENT_RESOURCE_NAME via :streamQuery. Trajectory expectations encode the Workflow path the graph should take.",
   "eval_cases": [
     {
       "eval_id": "happy_path_cargo_plane",
@@ -98,6 +98,157 @@
               {"name": "parse_capacity_gap_request", "args": {}},
               {"name": "resolve_canonical_asset_node", "args": {}},
               {"name": "parallel_system_queries", "args": {}},
+              {"name": "finalize_sourcing_plan", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "restriction_penalty_north_atlantic",
+      "conversation": [
+        {
+          "invocation_id": "restriction_penalty_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "I need a Tool X variant in Stavanger, Norway by Friday. Customer: North Atlantic Resources. Authorization tier: standard."
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"requested_asset\": \"Tool X\", \"primary_option\": {\"asset\": {\"canonical_id\": \"TX-007\"}, \"customer_compatibility\": false}, \"blockers\": [\"Customer north-atlantic-resources has rejected substitute TX-007 in FDP — equivalence confidence penalty applied (score ~0.62, below 0.85 threshold).\"]}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "parse_capacity_gap_request", "args": {}},
+              {"name": "resolve_canonical_asset_node", "args": {}},
+              {"name": "parallel_system_queries", "args": {}},
+              {"name": "evaluate_direct_availability", "args": {}},
+              {"name": "equivalence_lookup_agent", "args": {}},
+              {"name": "build_equivalent_plan", "args": {}},
+              {"name": "sourcing_logistics_agent", "args": {}},
+              {"name": "plan_evaluator_tool", "args": {}},
+              {"name": "finalize_sourcing_plan", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "multi_skin_halliburton",
+      "conversation": [
+        {
+          "invocation_id": "multi_skin_halliburton_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "I need a Tool X variant in Luanda, Angola by Friday. Customer: Reference Major. Authorization tier: standard. What are my options?"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"requested_asset\": \"Tool X\", \"primary_option\": {\"asset\": {\"canonical_id\": \"TX-007\"}, \"source_location\": {\"label\": \"Lagos, Nigeria\"}, \"customer_compatibility\": true}, \"avoided_cost_usd\": 380000}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "parse_capacity_gap_request", "args": {}},
+              {"name": "resolve_canonical_asset_node", "args": {}},
+              {"name": "parallel_system_queries", "args": {}},
+              {"name": "evaluate_direct_availability", "args": {}},
+              {"name": "equivalence_lookup_agent", "args": {}},
+              {"name": "build_equivalent_plan", "args": {}},
+              {"name": "sourcing_logistics_agent", "args": {}},
+              {"name": "plan_evaluator_tool", "args": {}},
+              {"name": "finalize_sourcing_plan", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "memory_preload_maria_west_africa",
+      "conversation": [
+        {
+          "invocation_id": "memory_preload_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "I need a Tool X variant by Friday — what are my options?"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"requested_asset\": \"Tool X\", \"target_location\": {\"label\": \"Luanda, Angola\"}, \"primary_option\": {\"asset\": {\"canonical_id\": \"TX-007\"}}}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "preload_memory", "args": {}},
+              {"name": "parse_capacity_gap_request", "args": {}},
+              {"name": "resolve_canonical_asset_node", "args": {}},
+              {"name": "parallel_system_queries", "args": {}},
+              {"name": "evaluate_direct_availability", "args": {}},
+              {"name": "equivalence_lookup_agent", "args": {}},
+              {"name": "build_equivalent_plan", "args": {}},
+              {"name": "sourcing_logistics_agent", "args": {}},
+              {"name": "plan_evaluator_tool", "args": {}},
+              {"name": "finalize_sourcing_plan", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "revise_loop_low_score_triggers_iteration",
+      "conversation": [
+        {
+          "invocation_id": "revise_loop_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "I need any rotary drill in Luanda by tomorrow morning — anything that fits. Customer: Gulf Petroleum. Authorization tier: junior."
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"requested_asset\": \"rotary drill\", \"primary_option\": {\"asset\": {\"canonical_id\": \"TX-007\"}}, \"evaluation_iterations\": 2}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "parse_capacity_gap_request", "args": {}},
+              {"name": "resolve_canonical_asset_node", "args": {}},
+              {"name": "parallel_system_queries", "args": {}},
+              {"name": "evaluate_direct_availability", "args": {}},
+              {"name": "equivalence_lookup_agent", "args": {}},
+              {"name": "build_equivalent_plan", "args": {}},
+              {"name": "sourcing_logistics_agent", "args": {}},
+              {"name": "plan_evaluator_tool", "args": {}},
+              {"name": "revise_plan_agent", "args": {}},
+              {"name": "plan_evaluator_tool", "args": {}},
               {"name": "finalize_sourcing_plan", "args": {}}
             ]
           }

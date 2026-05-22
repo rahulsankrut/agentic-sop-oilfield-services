@@ -1,7 +1,7 @@
 {
   "eval_set_id": "procurement_approval_agent_evalset_v1",
   "name": "Procurement Approval — eval set",
-  "description": "Eval set for the Procurement Approval Agent. Covers an under-threshold plan ($162K — should auto-approve), an over-threshold plan ($600K — should reject with a budget blocker), and a malformed/missing-field plan (degradation case). Live evals run against PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME via :streamQuery.",
+  "description": "Eval set for the Procurement Approval Agent. Covers the full prerequisite-blocker matrix from procurement-prerequisites/scripts/tools.py: budget threshold (under/over), certification chain (missing InTouch refs, excess cert hours), regulatory clearance (export-control deny list), and graceful degradation on malformed plans. Live evals run against PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME via :streamQuery.",
   "eval_cases": [
     {
       "eval_id": "under_threshold_auto_approves",
@@ -58,6 +58,97 @@
           "intermediate_data": {
             "tool_uses": [
               {"name": "check_budget_threshold", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "cert_chain_missing_intouch_refs",
+      "conversation": [
+        {
+          "invocation_id": "cert_chain_missing_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Please review this SourcingPlan for procurement approval. Authorization tier: standard.\n\n{\"request_id\": \"plan-cert-missing-001\", \"requested_asset\": \"Tool X\", \"target_location\": {\"latitude\": -8.83, \"longitude\": 13.23, \"label\": \"Luanda, Angola\"}, \"deadline\": \"2026-05-25T00:00:00Z\", \"primary_option\": {\"asset\": {\"canonical_id\": \"TX-007\", \"canonical_label\": \"Tool X-V7\", \"intouch_spec_refs\": []}, \"source_location\": {\"latitude\": 6.5, \"longitude\": 3.4, \"label\": \"Lagos, Nigeria\"}, \"destination\": {\"latitude\": -8.83, \"longitude\": 13.23, \"label\": \"Luanda, Angola\"}, \"transit_mode\": \"sea_freight\", \"estimated_cost_usd\": 162000, \"transit_hours\": 72.0, \"certification_hours\": 4, \"customer_compatibility\": true, \"workforce_available\": true, \"blockers\": []}, \"avoided_cost_usd\": 380000}"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"request_id\": \"plan-cert-missing-001\", \"approved\": false, \"blockers\": [\"Primary option lacks InTouch spec citations — certification chain cannot be verified.\"]}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "check_budget_threshold", "args": {}},
+              {"name": "check_certification_chain", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "cert_chain_excess_hours",
+      "conversation": [
+        {
+          "invocation_id": "cert_chain_excess_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Please review this SourcingPlan for procurement approval. Authorization tier: standard.\n\n{\"request_id\": \"plan-cert-excess-001\", \"requested_asset\": \"Tool X\", \"target_location\": {\"latitude\": -8.83, \"longitude\": 13.23, \"label\": \"Luanda, Angola\"}, \"deadline\": \"2026-05-25T00:00:00Z\", \"primary_option\": {\"asset\": {\"canonical_id\": \"TX-007\", \"canonical_label\": \"Tool X-V7\", \"intouch_spec_refs\": [\"gs://oilfield-services-unstructured/intouch_specs/uspto-10006249-B2.pdf\"]}, \"source_location\": {\"latitude\": 6.5, \"longitude\": 3.4, \"label\": \"Lagos, Nigeria\"}, \"destination\": {\"latitude\": -8.83, \"longitude\": 13.23, \"label\": \"Luanda, Angola\"}, \"transit_mode\": \"sea_freight\", \"estimated_cost_usd\": 162000, \"transit_hours\": 72.0, \"certification_hours\": 72, \"customer_compatibility\": true, \"workforce_available\": true, \"blockers\": []}, \"avoided_cost_usd\": 380000}"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"request_id\": \"plan-cert-excess-001\", \"approved\": false, \"blockers\": [\"Certification requires 72h — exceeds 48h policy cap; cannot auto-approve.\"]}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "check_budget_threshold", "args": {}},
+              {"name": "check_certification_chain", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "regulatory_export_control_block",
+      "conversation": [
+        {
+          "invocation_id": "regulatory_export_control_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Please review this SourcingPlan for procurement approval. Authorization tier: standard.\n\n{\"request_id\": \"plan-export-001\", \"requested_asset\": \"Tool X\", \"target_location\": {\"latitude\": 32.43, \"longitude\": 53.69, \"label\": \"Tehran, Iran\"}, \"deadline\": \"2026-05-25T00:00:00Z\", \"primary_option\": {\"asset\": {\"canonical_id\": \"TX-007\", \"canonical_label\": \"Tool X-V7\", \"intouch_spec_refs\": [\"gs://oilfield-services-unstructured/intouch_specs/uspto-10006249-B2.pdf\"]}, \"source_location\": {\"latitude\": 29.76, \"longitude\": -95.36, \"label\": \"Houston, US\"}, \"destination\": {\"latitude\": 32.43, \"longitude\": 53.69, \"label\": \"Tehran, Iran\"}, \"transit_mode\": \"sea_freight\", \"estimated_cost_usd\": 162000, \"transit_hours\": 600.0, \"certification_hours\": 4, \"customer_compatibility\": true, \"workforce_available\": true, \"blockers\": []}, \"avoided_cost_usd\": 380000}"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"request_id\": \"plan-export-001\", \"approved\": false, \"blockers\": [\"Export control: us → iran route is on the regulatory deny list; cannot auto-approve.\"]}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "check_budget_threshold", "args": {}},
+              {"name": "check_certification_chain", "args": {}},
+              {"name": "check_regulatory_clearance", "args": {}}
             ]
           }
         }

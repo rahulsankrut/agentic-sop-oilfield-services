@@ -62,6 +62,45 @@ def test_evalset_file_exists_and_parses():
     assert "edge_weak_plan_triggers_revision" in eval_ids
 
 
+def test_expected_overall_scores_match_weighted_sum():
+    """For every fixture, overall_score must equal Σ wᵢ·sᵢ within tolerance.
+
+    The weight scheme is what makes overall_score "weighted-1" rather than
+    a free-floating LLM guess. A fixture that violates this either has a
+    typo in the criterion scores or drifts the weight scheme silently —
+    both bugs the demo can't tolerate.
+    """
+    evalset = load_evalset(EVALSET_PATH)
+    for case in evalset["eval_cases"]:
+        text = case["conversation"][0]["final_response"]["parts"][0]["text"]
+        ev = PlanEvaluation.model_validate_json(text)
+        expected = sum(
+            c.score * CRITERION_WEIGHTS[c.criterion] for c in ev.criterion_scores
+        )
+        assert math.isclose(ev.overall_score, expected, abs_tol=0.02), (
+            f"{case['eval_id']}: overall_score={ev.overall_score} but weighted sum is "
+            f"{expected:.4f}. Fixture inconsistent with CRITERION_WEIGHTS."
+        )
+
+
+def test_weak_plan_fixture_actually_recommends_revision():
+    """The weak-plan fixture has overall_score < threshold and
+    revision_recommended=True. If either flips, the fixture stops
+    exercising the revise-loop path.
+    """
+    evalset = load_evalset(EVALSET_PATH)
+    case = next(
+        c for c in evalset["eval_cases"] if c["eval_id"] == "edge_weak_plan_triggers_revision"
+    )
+    text = case["conversation"][0]["final_response"]["parts"][0]["text"]
+    ev = PlanEvaluation.model_validate_json(text)
+    assert ev.overall_score < ACCEPT_THRESHOLD, (
+        f"Weak-plan fixture scored {ev.overall_score} but threshold is {ACCEPT_THRESHOLD}; "
+        "fixture no longer triggers the revise router."
+    )
+    assert ev.revision_recommended is True
+
+
 def test_all_expected_evaluations_satisfy_constraints():
     """Every expected PlanEvaluation must obey the score range + criterion shape."""
     evalset = load_evalset(EVALSET_PATH)

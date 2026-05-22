@@ -38,6 +38,37 @@ def test_evalset_file_exists_and_parses():
     assert "under_threshold_auto_approves" in eval_ids
     assert "over_threshold_rejects" in eval_ids
     assert "edge_malformed_plan_degrades_gracefully" in eval_ids
+    # Full prerequisite-blocker matrix (2026-05-21 expansion).
+    assert "cert_chain_missing_intouch_refs" in eval_ids
+    assert "cert_chain_excess_hours" in eval_ids
+    assert "regulatory_export_control_block" in eval_ids
+
+
+def test_cert_chain_blocker_cases_validate():
+    """Both cert-chain cases must encode approved=false with a cert blocker."""
+    evalset = load_evalset(EVALSET_PATH)
+    for eval_id in ("cert_chain_missing_intouch_refs", "cert_chain_excess_hours"):
+        case = next(c for c in evalset["eval_cases"] if c["eval_id"] == eval_id)
+        text = case["conversation"][0]["final_response"]["parts"][0]["text"]
+        approval = ProcurementApproval.model_validate_json(text)
+        assert approval.approved is False, f"{eval_id} expected rejection"
+        blocker_text = " ".join(approval.blockers).lower()
+        assert "cert" in blocker_text or "intouch" in blocker_text, (
+            f"{eval_id} blocker text doesn't mention certification: {approval.blockers}"
+        )
+
+
+def test_regulatory_blocker_case_validates():
+    evalset = load_evalset(EVALSET_PATH)
+    case = next(
+        c for c in evalset["eval_cases"] if c["eval_id"] == "regulatory_export_control_block"
+    )
+    text = case["conversation"][0]["final_response"]["parts"][0]["text"]
+    approval = ProcurementApproval.model_validate_json(text)
+    assert approval.approved is False
+    assert any(
+        "export" in b.lower() or "regulatory" in b.lower() for b in approval.blockers
+    ), f"Regulatory case must surface an export/regulatory blocker: {approval.blockers}"
 
 
 def test_under_threshold_expected_response_validates():
@@ -139,6 +170,42 @@ def test_live_over_threshold_rejects():
         f"(blockers={approval.blockers!r})"
     )
     assert approval.blockers, "Rejection must surface at least one blocker"
+
+
+@pytest.mark.evals_live
+@pytest.mark.skipif(
+    not os.environ.get("PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME"),
+    reason="PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME not set",
+)
+@pytest.mark.parametrize(
+    "eval_id,expected_blocker_keyword",
+    [
+        ("cert_chain_missing_intouch_refs", "intouch"),
+        ("cert_chain_excess_hours", "48"),
+        ("regulatory_export_control_block", "export"),
+    ],
+)
+def test_live_blocker_matrix_rejects(eval_id: str, expected_blocker_keyword: str):
+    """Each blocker class — cert chain (missing refs / excess hours) and
+    regulatory clearance — must reject the plan and surface a relevant
+    blocker. Demo-defensibility: the platform doesn't just say "no",
+    it says *why*.
+    """
+    evalset = load_evalset(EVALSET_PATH)
+    case = next(c for c in evalset["eval_cases"] if c["eval_id"] == eval_id)
+    prompt = extract_user_query(case)
+    text = stream_query_text(
+        "PROCUREMENT_APPROVAL_AGENT_RESOURCE_NAME", prompt, user_id=f"eval-{eval_id}"
+    )
+    approval = ProcurementApproval.model_validate_json(text)
+    assert approval.approved is False, (
+        f"{eval_id}: expected rejection, got approved=True"
+    )
+    blocker_text = " ".join(approval.blockers).lower()
+    assert expected_blocker_keyword.lower() in blocker_text, (
+        f"{eval_id}: blocker did not mention {expected_blocker_keyword!r}; "
+        f"got {approval.blockers!r}"
+    )
 
 
 @pytest.mark.evals_live

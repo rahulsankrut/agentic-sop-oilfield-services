@@ -1,7 +1,7 @@
 {
   "eval_set_id": "capacity_planning_agent_evalset_v1",
   "name": "Capacity Planning — eval set",
-  "description": "Eval set for the Capacity Planning Agent (Persona 2 / Tomas). The agent reads probabilistic start-date distributions for a basin and returns a risk-calibrated buffer recommendation. Returns a BufferOptimization with recommended_buffer_days >= 0 and projected_on_time_rate ∈ [0, 1]. Live evals run against CAPACITY_PLANNING_AGENT_RESOURCE_NAME via :streamQuery.",
+  "description": "Eval set for the Capacity Planning Agent (Persona 2 / Tomas, West Texas Fleet Scheduler). The agent reads probabilistic start-date distributions for a basin and returns a risk-calibrated buffer recommendation. Returns a BufferOptimization with recommended_buffer_days >= 0 and projected_on_time_rate ∈ [0, 1]. Covers: Tomas's exact demo prompt (West Texas Q3 buffer exposure with rig-count context), risk-tolerance monotonicity (strict tolerance → larger buffer), the basin-without-history degradation case, and the original happy-path cases. Live evals run against CAPACITY_PLANNING_AGENT_RESOURCE_NAME via :streamQuery.",
   "eval_cases": [
     {
       "eval_id": "happy_path_west_africa_risk_05",
@@ -51,6 +51,68 @@
             "parts": [
               {
                 "text": "{\"request_id\": \"buf-pm-001\", \"basin\": \"permian\", \"risk_tolerance\": 0.85, \"current_buffer_days\": 14.0, \"recommended_buffer_days\": 17.0, \"projected_on_time_rate\": 0.93, \"fleet_utilization_uplift_pct\": -2.5, \"deferred_capex_usd\": 0}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "get_start_date_distribution", "args": {"basin": "permian"}},
+              {"name": "compute_optimal_buffer", "args": {}},
+              {"name": "compute_fleet_utilization_impact", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "persona2_tomas_west_texas_q3",
+      "conversation": [
+        {
+          "invocation_id": "persona2_tomas_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "What's my buffer exposure on the permian basin (West Texas fleet) for Q3, given the rig count signals we're seeing? Risk tolerance: 0.65."
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"request_id\": \"buf-tomas-q3-001\", \"basin\": \"permian\", \"risk_tolerance\": 0.65, \"current_buffer_days\": 14.0, \"recommended_buffer_days\": 11.0, \"projected_on_time_rate\": 0.83, \"fleet_utilization_uplift_pct\": 4.1, \"deferred_capex_usd\": 850000}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "get_start_date_distribution", "args": {"basin": "permian"}},
+              {"name": "compute_optimal_buffer", "args": {}},
+              {"name": "compute_fleet_utilization_impact", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "risk_tolerance_loose_smaller_buffer",
+      "conversation": [
+        {
+          "invocation_id": "risk_tolerance_loose_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "What buffer do I need for the permian basin with risk tolerance 0.25 (loose — utilization-first)?"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"request_id\": \"buf-pm-loose-001\", \"basin\": \"permian\", \"risk_tolerance\": 0.25, \"current_buffer_days\": 14.0, \"recommended_buffer_days\": 6.0, \"projected_on_time_rate\": 0.62, \"fleet_utilization_uplift_pct\": 11.4, \"deferred_capex_usd\": 1750000}"
               }
             ],
             "role": "model"

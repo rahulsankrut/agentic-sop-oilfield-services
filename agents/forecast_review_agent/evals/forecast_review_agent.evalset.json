@@ -1,7 +1,7 @@
 {
   "eval_set_id": "forecast_review_agent_evalset_v1",
   "name": "Forecast Review — eval set",
-  "description": "Eval set for the Forecast Review Agent (Persona 1 / David). The agent extracts structured rationale tags from a basin leader's freeform explanation of a forecast override. Returns a ForecastRationale with rationale_tags, freeform_text, and a confidence/significance score. Live evals run against FORECAST_REVIEW_AGENT_RESOURCE_NAME via :streamQuery.",
+  "description": "Eval set for the Forecast Review Agent (Persona 1 / David, Permian Basin Director). The agent extracts structured rationale tags from a basin leader's freeform explanation of a forecast override. Returns a ForecastRationale with rationale_tags, freeform_text, and a confidence/significance score. Covers: the exact demo prompt (David — Permian Q4 completions revenue down 22% with three operators delaying), high-significance override boundary, and the original happy/edge cases. Live evals run against FORECAST_REVIEW_AGENT_RESOURCE_NAME via :streamQuery.",
   "eval_cases": [
     {
       "eval_id": "happy_path_q4_west_africa_override",
@@ -50,6 +50,66 @@
             "parts": [
               {
                 "text": "{\"override_id\": \"ovr-pm-q4-002\", \"rationale_tags\": [], \"freeform_text\": \"gut feeling, no specific signal.\", \"confidence\": 0.4}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "extract_rationale_tags", "args": {}},
+              {"name": "compute_override_significance", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "persona1_david_permian_q4_completions",
+      "conversation": [
+        {
+          "invocation_id": "persona1_david_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Q4 forecast review for the permian basin. override_id: ovr-pm-q4-david-001. The ML model projected Q4 completions revenue of $72M; I'm overriding to $56M (down 22%). Reason: rig count decline expected, three operators delaying programs into Q1."
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"override_id\": \"ovr-pm-q4-david-001\", \"rationale_tags\": [\"rig_count_decline\", \"operator_delay\"], \"freeform_text\": \"rig count decline expected, three operators delaying programs into Q1.\", \"confidence\": 0.9}"
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "extract_rationale_tags", "args": {}},
+              {"name": "compute_override_significance", "args": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "override_significance_high_magnitude",
+      "conversation": [
+        {
+          "invocation_id": "override_significance_high_inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Q4 forecast review for the west_africa basin. override_id: ovr-wa-q4-high-001. The ML model projected $60M; I'm overriding to $20M (down 67%). Reason: major operator pulled out of the basin entirely; permitting environment hostile through end of year; recession concerns across the segment."
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "{\"override_id\": \"ovr-wa-q4-high-001\", \"rationale_tags\": [\"operator_delay\", \"regulatory\", \"macro\"], \"freeform_text\": \"major operator pulled out of the basin entirely; permitting environment hostile through end of year; recession concerns across the segment.\", \"confidence\": 0.85}"
               }
             ],
             "role": "model"
