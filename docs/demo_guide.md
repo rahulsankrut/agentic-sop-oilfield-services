@@ -1,5 +1,11 @@
 # Demo guide — Agentic S&OP for Oilfield Services
 
+> **Likely superseded.** `docs/demo_walkthrough.md` (2026-05-22) consolidates this
+> doc + `demo-handbook.md` + `demo_storyboard.md` into one walkthrough that
+> reflects the *current* live/static state per persona — including the new
+> Option-C wiring for Personas 1 and 2. This older guide is preserved for
+> reference until you've confirmed the new walkthrough covers what you need.
+
 Quick-start for running the live demo. Pairs with:
 - `docs/demo-handbook.md` — full 18-minute presenter playbook (recovery scripts, customer Q&A)
 - `docs/demo_storyboard.md` — per-node narration cues for the cargo-plane centerpiece

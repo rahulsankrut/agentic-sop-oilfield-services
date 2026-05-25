@@ -1,5 +1,11 @@
 # Demo Storyboard — Cargo-Plane Scenario (Persona 3, Maria)
 
+> **Likely superseded.** `docs/demo_walkthrough.md` (2026-05-22) is the single
+> doc for all six personas; its §5 reproduces the cargo-plane beat-by-beat with
+> the same code refs but as bullet cues rather than verbatim quotes (the cues
+> are easier to improvise from). This doc kept for reference until you've
+> validated the walkthrough's coverage.
+
 Single source of demo narration for the Agentic S&OP for Oilfield Services live demo. Every beat below is anchored to a `# DEMO NARRATION` cue in the orchestrator codebase. Read this top-to-bottom while rehearsing; the lines in quotes are exactly what the presenter says.
 
 ---

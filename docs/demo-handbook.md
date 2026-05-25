@@ -1,5 +1,10 @@
 # Demo handbook — Agentic S&OP for Oilfield Services
 
+> **Likely superseded.** `docs/demo_walkthrough.md` (2026-05-22) folds this
+> handbook + `demo_guide.md` + `demo_storyboard.md` into one per-beat doc that
+> honestly labels live vs. static per persona. The full 18-min playbook below
+> still works but doesn't yet reflect the live wiring for Personas 1 and 2.
+
 The demoer's playbook. If you have to give this demo cold tomorrow, this is
 the only doc you need open on the second monitor.
 
