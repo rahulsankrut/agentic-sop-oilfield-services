@@ -28,6 +28,8 @@ interface ResearchNotebookProps {
   synthesisMarkdown: string;
   recommendation: Recommendation | null;
   saveToast: string | null;
+  /** Callback when an exec clicks a citation chip to drill into the source. */
+  onCitationOpen?: (citation: Citation) => void;
 }
 
 export function ResearchNotebook({
@@ -36,6 +38,7 @@ export function ResearchNotebook({
   synthesisMarkdown,
   recommendation,
   saveToast,
+  onCitationOpen,
 }: ResearchNotebookProps) {
   return (
     <div className="relative flex h-full flex-col overflow-y-auto px-10 py-8">
@@ -47,7 +50,7 @@ export function ResearchNotebook({
       ) : (
         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
           {citations.map((c) => (
-            <CitationChip key={c.id} citation={c} />
+            <CitationChip key={c.id} citation={c} onOpen={onCitationOpen} />
           ))}
         </div>
       )}

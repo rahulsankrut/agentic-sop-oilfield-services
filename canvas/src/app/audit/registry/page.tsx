@@ -107,6 +107,7 @@ export default function AuditRegistryPage() {
             title="Model Armor — recent blocks"
             subtitle="INSPECT_AND_BLOCK at MEDIUM+ confidence across prompt-injection, sensitive-data, dangerous-content, and malicious-URI filter categories. Blocks fire at the MCP boundary, before any agent reasons over the payload."
           >
+            {/* DEMO NARRATION (Persona 6, Ayesha — closing): "Here's what was blocked. Real attacks land in production constantly; this view is what an auditor opens to see they were caught. The most recent one was [point at top row] — prompt injection at HIGH confidence, blocked at the MCP boundary before any agent reasoned over it." Ayesha narrates over what's on screen; she doesn't trigger anything. */}
             <A2UIPanel
               messages={AUDIT_MODEL_ARMOR_BLOCKS}
               surfaceId={AUDIT_MODEL_ARMOR_SURFACE_ID}

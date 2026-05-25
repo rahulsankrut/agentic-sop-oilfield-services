@@ -3,8 +3,15 @@
 /**
  * Persona 2 (Tomas, West Texas Fleet Scheduler) — buffer-planning scenario.
  *
- * Static demo mode: beat-by-beat scenario state from
- * ``bufferPlanningBeats`` (src/data/scenarios/bufferPlanning.ts).
+ * Tri-state mode (P2 wiring, 2026-05-22):
+ *  - "static" — beat-by-beat scenario state from `bufferPlanningBeats`.
+ *  - "live"   — same scripted beats, but two real calls to the deployed
+ *               Capacity Planning Agent replace the static stat-tile and
+ *               timeline numbers at the moments the agent is genuinely
+ *               doing optimization work:
+ *                 Beat 2 (initial 14→8 drop, risk_tolerance=0.5)
+ *                 Beat 3 (counter-proposal, risk_tolerance=0.7)
+ *               Press `L` to toggle Static ↔ Live.
  *
  * Choreography (6 beats, ~3 min):
  *   Space → Beat 0..5. Shift+Space steps back, R resets, P pauses,
@@ -33,17 +40,58 @@ import { FleetDailyTimelineChart } from "@/components/canvas/FleetTimelineChart"
 import { RiskToleranceSliderContinuous } from "@/components/canvas/RiskToleranceSlider";
 import { BufferCommitBanner } from "@/components/canvas/BufferCostReconciliation";
 import { DemoTimer } from "@/components/demo/DemoTimer";
-import { bufferPlanningBeats } from "@/data/scenarios/bufferPlanning";
+import {
+  bufferPlanningBeats,
+  buildTimeline,
+} from "@/data/scenarios/bufferPlanning";
 import { personaForPathname } from "@/data/personas";
 import { publishDemoState } from "@/hooks/useDemoContext";
 import { useScenario } from "@/hooks/useScenario";
 import { useRehearsalControls } from "@/hooks/useRehearsalControls";
+import { useAgentCall } from "@/hooks/useAgentCall";
 import { preWarmSession } from "@/lib/preWarmSession";
 import { getPersona } from "@/lib/skin";
 
+// Mirror of `agents.schemas.BufferOptimization`. Inlined rather than added
+// to a shared types module — it's the only TS consumer today.
+interface BufferOptimization {
+  request_id: string;
+  basin: string;
+  risk_tolerance: number;
+  current_buffer_days: number;
+  recommended_buffer_days: number;
+  projected_on_time_rate: number; // 0.0..1.0
+  fleet_utilization_uplift_pct: number;
+  deferred_capex_usd: number;
+}
+
+type Mode = "static" | "live";
+
 const TOMAS_PERSONA = getPersona("tomas");
+const TOMAS_USER_ID = TOMAS_PERSONA.memory_profile_user_id;
 const TOMAS_OPENING_PROMPT =
   'Show me Permian fleet utilization and the buffer trade-off — I want to drop the buffer from 14 to 8 days and see what the on-time rate does.';
+
+// Two prompts — one per live-call moment. Match the eval-tested format in
+// agents/capacity_planning_agent/evals/capacity_planning_agent.evalset.json
+// (`persona2_tomas_west_texas_q3`), parameterized on risk_tolerance for the
+// initial drop (0.5) vs. the counter-proposal (0.7). The agent's instruction
+// in agents/capacity_planning_agent/prompts.py parses basin + risk_tolerance
+// from this single-sentence form.
+const BUFFER_DROP_PROMPT =
+  "What's my buffer exposure on the permian basin (West Texas fleet) for Q3, " +
+  "given the rig count signals we're seeing? Risk tolerance: 0.5.";
+
+const BUFFER_COUNTER_PROMPT =
+  "What's my buffer exposure on the permian basin (West Texas fleet) for Q3, " +
+  "given the rig count signals we're seeing? Risk tolerance: 0.7.";
+
+const CAPACITY_STREAM_URL =
+  process.env.NEXT_PUBLIC_CAPACITY_PLANNING_STREAM_URL ?? "";
+
+// Per-beat auto-advance durations in live mode (ms). Beats 2 and 3 are 0
+// because their advance is gated on their live-call resolutions.
+const LIVE_BEAT_DURATIONS_MS = [1500, 2200, 0, 0, 2200, 2500];
 
 export default function BufferPlanningScenarioPage() {
   const pathname = usePathname();
@@ -57,6 +105,9 @@ export default function BufferPlanningScenarioPage() {
 
   const [paused, setPaused] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [mode, setMode] = useState<Mode>(
+    CAPACITY_STREAM_URL ? "live" : "static",
+  );
   const markStarted = useCallback(() => {
     setStartedAt((prev) => prev ?? Date.now());
   }, []);
@@ -66,6 +117,17 @@ export default function BufferPlanningScenarioPage() {
   // Space press (which clears it).
   const [manualRisk, setManualRisk] = useState<number | null>(null);
   const activeRisk = manualRisk ?? state.riskTolerance ?? 0.5;
+
+  // Two live calls — one per "agent doing optimization work" beat. Each is
+  // its own hook instance so the call results don't trample each other.
+  const dropCall = useAgentCall<BufferOptimization>({
+    streamUrl: CAPACITY_STREAM_URL,
+    userId: TOMAS_USER_ID,
+  });
+  const counterCall = useAgentCall<BufferOptimization>({
+    streamUrl: CAPACITY_STREAM_URL,
+    userId: TOMAS_USER_ID,
+  });
 
   // Pre-warm on mount.
   useEffect(() => {
@@ -77,15 +139,21 @@ export default function BufferPlanningScenarioPage() {
     setManualRisk(null);
     setPaused(false);
     setStartedAt(null);
+    dropCall.reset();
+    counterCall.reset();
     scenario.reset();
     if (persona) void preWarmSession(persona);
-  }, [persona, scenario]);
+  }, [persona, scenario, dropCall, counterCall]);
 
   const skipToEnd = useCallback(() => {
     setManualRisk(null);
     const stepsLeft = scenario.totalBeats - 1 - scenario.currentBeatIndex;
     for (let i = 0; i < stepsLeft; i++) scenario.advance();
   }, [scenario]);
+
+  const toggleMode = useCallback(() => {
+    setMode((m) => (m === "live" ? "static" : "live"));
+  }, []);
 
   // DEMO NARRATION: "Same keyboard wiring as the cargo-plane view — Space
   // advances Tomas's beats. Between beats he can nudge the risk slider
@@ -102,10 +170,91 @@ export default function BufferPlanningScenarioPage() {
       scenario.stepBack();
     },
     onReset: hardReset,
-    // Buffer planning is static-only for v1 — L is a no-op.
-    onToggleMode: undefined,
+    onToggleMode: toggleMode,
     onPause: () => setPaused((p) => !p),
   });
+
+  // Fire live calls as the beats land — one per moment-of-optimization.
+  useEffect(() => {
+    if (mode !== "live") return;
+    if (!CAPACITY_STREAM_URL) return;
+    if (currentBeatIndex >= 2 && dropCall.status === "idle") {
+      dropCall.run(BUFFER_DROP_PROMPT);
+    }
+    if (currentBeatIndex >= 3 && counterCall.status === "idle") {
+      counterCall.run(BUFFER_COUNTER_PROMPT);
+    }
+  }, [mode, currentBeatIndex, dropCall, counterCall]);
+
+  // In live mode the page auto-advances so the experience mirrors the real
+  // product — Tomas opens the chat, the agent answers, he nudges the
+  // slider, the agent re-runs. Beats fire on per-beat timers EXCEPT beats
+  // 2 and 3 which gate on their live calls resolving (so stat tiles update
+  // before the next beat reads them).
+  useEffect(() => {
+    if (mode !== "live") return;
+    if (paused) return;
+    if (currentBeatIndex >= totalBeats - 1) return;
+    if (currentBeatIndex === 2 && dropCall.status === "loading") return;
+    if (currentBeatIndex === 3 && counterCall.status === "loading") return;
+    const dur = LIVE_BEAT_DURATIONS_MS[currentBeatIndex] ?? 2000;
+    const delay =
+      currentBeatIndex === 2 || currentBeatIndex === 3
+        ? Math.max(dur, 1800)
+        : dur;
+    const timer = setTimeout(() => {
+      setManualRisk(null);
+      scenario.advance();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [
+    mode,
+    paused,
+    currentBeatIndex,
+    totalBeats,
+    dropCall.status,
+    counterCall.status,
+    scenario,
+  ]);
+
+  // Live mode is auto-play — mark started on mount so the demo timer rolls.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (mode === "live") markStarted();
+  }, [mode, markStarted]);
+
+  // Pick the most-relevant live result for the current beat. Beats 3+ prefer
+  // the counter-proposal call; beats 2..2 use the initial drop call. If the
+  // preferred call hasn't landed yet (or errored), we fall back to the other
+  // / to static state, in that order.
+  const activeLiveResult = useMemo<BufferOptimization | null>(() => {
+    if (mode !== "live") return null;
+    if (currentBeatIndex >= 3) {
+      if (counterCall.status === "ok" && counterCall.data) return counterCall.data;
+      if (dropCall.status === "ok" && dropCall.data) return dropCall.data;
+      return null;
+    }
+    if (currentBeatIndex >= 2) {
+      if (dropCall.status === "ok" && dropCall.data) return dropCall.data;
+      return null;
+    }
+    return null;
+  }, [mode, currentBeatIndex, dropCall.status, dropCall.data, counterCall.status, counterCall.data]);
+
+  // Combined load/error indicator for the LiveStatusPill + chat surface.
+  const liveStatus = useMemo<"idle" | "loading" | "ok" | "error">(() => {
+    if (mode !== "live") return "idle";
+    const relevant = currentBeatIndex >= 3 ? counterCall : currentBeatIndex >= 2 ? dropCall : null;
+    if (!relevant) return "idle";
+    return relevant.status;
+  }, [mode, currentBeatIndex, dropCall, counterCall]);
+
+  const liveError = useMemo<string | null>(() => {
+    if (mode !== "live") return null;
+    if (currentBeatIndex >= 3 && counterCall.error) return counterCall.error;
+    if (currentBeatIndex >= 2 && dropCall.error) return dropCall.error;
+    return null;
+  }, [mode, currentBeatIndex, dropCall.error, counterCall.error]);
 
   // Publish into the global demo context (Backstage / 1..6 hotkeys / timer).
   useEffect(() => {
@@ -115,6 +264,14 @@ export default function BufferPlanningScenarioPage() {
       currentBeatIndex < bufferPlanningBeats.length - 1
         ? bufferPlanningBeats[currentBeatIndex + 1]
         : null;
+    const connectionState =
+      liveStatus === "loading"
+        ? "connecting"
+        : liveStatus === "ok"
+          ? "open"
+          : liveStatus === "error"
+            ? "error"
+            : "idle";
     const cleanup = publishDemoState({
       persona,
       currentBeatIndex,
@@ -123,12 +280,12 @@ export default function BufferPlanningScenarioPage() {
       narrationCue: beat.narration,
       nextBeatId: nextBeat?.id ?? null,
       nextNarrationCue: nextBeat?.narration ?? null,
-      mode: "static",
-      connectionState: "idle",
-      lastError: null,
+      mode,
+      connectionState: mode === "live" ? connectionState : "idle",
+      lastError: liveError,
       startedAt,
       onReset: hardReset,
-      onToggleMode: null,
+      onToggleMode: toggleMode,
       onPause: () => setPaused((p) => !p),
       onSkipToEnd: skipToEnd,
     });
@@ -141,13 +298,37 @@ export default function BufferPlanningScenarioPage() {
     startedAt,
     hardReset,
     skipToEnd,
+    mode,
+    liveStatus,
+    liveError,
+    toggleMode,
   ]);
 
-  const bufferDays = state.bufferDays ?? 14;
-  const onTimeRatePct = state.onTimeRatePct ?? 0;
-  const utilizationPct = state.utilizationPct ?? 0;
-  const capexDeferredUsd = state.capexDeferredUsd ?? 0;
-  const fleetTimelineData = state.fleetTimelineData ?? [];
+  // Static beat values come from the scenario file. Live values, when
+  // present, override them with the deployed agent's recommendation.
+  // `fleet_utilization_uplift_pct` is added to the basin's 68% baseline.
+  const PERMIAN_BASELINE_UTIL_PCT = 68;
+  const staticBufferDays = state.bufferDays ?? 14;
+  const staticOnTime = state.onTimeRatePct ?? 0;
+  const staticUtil = state.utilizationPct ?? 0;
+  const staticCapex = state.capexDeferredUsd ?? 0;
+  const staticTimeline = state.fleetTimelineData ?? [];
+
+  const bufferDays = activeLiveResult
+    ? Math.round(activeLiveResult.recommended_buffer_days)
+    : staticBufferDays;
+  const onTimeRatePct = activeLiveResult
+    ? Math.round(activeLiveResult.projected_on_time_rate * 100)
+    : staticOnTime;
+  const utilizationPct = activeLiveResult
+    ? PERMIAN_BASELINE_UTIL_PCT + Math.round(activeLiveResult.fleet_utilization_uplift_pct)
+    : staticUtil;
+  const capexDeferredUsd = activeLiveResult
+    ? activeLiveResult.deferred_capex_usd
+    : staticCapex;
+  const fleetTimelineData = activeLiveResult
+    ? buildTimeline(activeLiveResult.recommended_buffer_days)
+    : staticTimeline;
 
   return (
     <CanvasShell
@@ -160,6 +341,10 @@ export default function BufferPlanningScenarioPage() {
           total={totalBeats}
           paused={paused}
           showOpeningPrompt={currentBeatIndex === 0}
+          mode={mode}
+          liveStatus={liveStatus}
+          liveError={liveError}
+          liveResult={activeLiveResult}
         />
       }
       canvas={
@@ -176,7 +361,11 @@ export default function BufferPlanningScenarioPage() {
                 Q4 fleet buffer planning
               </h1>
             </div>
-            <BeatIndicator index={currentBeatIndex} total={totalBeats} />
+            <BeatIndicator
+              index={currentBeatIndex}
+              total={totalBeats}
+              mode={mode}
+            />
           </header>
 
           <StatTiles
@@ -213,6 +402,12 @@ export default function BufferPlanningScenarioPage() {
             bufferDays={bufferDays}
             onTimeRatePct={onTimeRatePct}
             capexDeferredUsd={capexDeferredUsd}
+          />
+
+          <LiveStatusPill
+            mode={mode}
+            status={liveStatus}
+            buffer={activeLiveResult?.recommended_buffer_days}
           />
 
           {persona && (
@@ -345,6 +540,10 @@ interface ChatPanelProps {
   total: number;
   paused: boolean;
   showOpeningPrompt: boolean;
+  mode: Mode;
+  liveStatus: "idle" | "loading" | "ok" | "error";
+  liveError: string | null;
+  liveResult: BufferOptimization | null;
 }
 
 function ChatPanel({
@@ -354,6 +553,10 @@ function ChatPanel({
   total,
   paused,
   showOpeningPrompt,
+  mode,
+  liveStatus,
+  liveError,
+  liveResult,
 }: ChatPanelProps) {
   const firstName = TOMAS_PERSONA.name.split(" ")[0];
   return (
@@ -376,6 +579,15 @@ function ChatPanel({
         </div>
       )}
 
+      {mode === "live" && index >= 2 && (
+        <LiveAgentBubble
+          status={liveStatus}
+          error={liveError}
+          result={liveResult}
+          beatIndex={index}
+        />
+      )}
+
       <div className="flex-1 overflow-y-auto rounded-lg border border-white/10 bg-white/[0.03] p-4">
         <div className="mb-2 text-[10px] uppercase tracking-wider text-white/40">
           Beat {index + 1} / {total} {paused ? "· paused" : ""}
@@ -386,8 +598,79 @@ function ChatPanel({
         <div className="text-sm leading-relaxed text-white/90">{narration}</div>
       </div>
       <div className="mt-4 text-[10px] uppercase tracking-wider text-white/40">
-        Space advance · Shift+Space back · R reset · P pause · \ backstage
+        Space advance · Shift+Space back · R reset · L mode · P pause · \
+        backstage
       </div>
+    </div>
+  );
+}
+
+// Chat-side surface for the live Capacity Planning Agent calls. Only renders
+// at beat 2+ when mode is "live" — that's where the agent is actually running
+// the BQ ML buffer optimization (vs. earlier beats which are just showing
+// status-quo fleet data).
+function LiveAgentBubble({
+  status,
+  error,
+  result,
+  beatIndex,
+}: {
+  status: "idle" | "loading" | "ok" | "error";
+  error: string | null;
+  result: BufferOptimization | null;
+  beatIndex: number;
+}) {
+  const dot =
+    status === "loading"
+      ? "bg-amber-400 animate-pulse"
+      : status === "ok"
+        ? "bg-emerald-400"
+        : status === "error"
+          ? "bg-rose-400"
+          : "bg-white/40";
+  const label =
+    beatIndex >= 3
+      ? "Capacity Planning Agent · counter-proposal @ risk 0.7"
+      : "Capacity Planning Agent · 14→8 day model @ risk 0.5";
+  return (
+    <div className="mb-4 rounded-xl border border-sky-400/20 bg-sky-400/[0.04] p-3">
+      <div className="mb-1 flex items-center gap-2">
+        <div className={`h-2 w-2 rounded-full ${dot}`} />
+        <div className="text-[10px] uppercase tracking-wider text-sky-300/80">
+          {label}
+        </div>
+      </div>
+      {status === "loading" && (
+        <div className="text-sm text-white/80">
+          Running BQ ML start-date distribution + optimal-buffer compute…
+        </div>
+      )}
+      {status === "ok" && result && (
+        <div className="text-sm text-white/90">
+          <span className="text-white/60">Buffer:</span>{" "}
+          <span className="font-mono">
+            {Math.round(result.recommended_buffer_days)}d
+          </span>
+          <span className="ml-2 text-white/60">on-time:</span>{" "}
+          <span className="font-mono">
+            {Math.round(result.projected_on_time_rate * 100)}%
+          </span>
+          <span className="ml-2 text-white/60">CapEx deferred:</span>{" "}
+          <span className="font-mono">
+            ${(result.deferred_capex_usd / 1_000_000).toFixed(1)}M
+          </span>
+        </div>
+      )}
+      {status === "error" && (
+        <div className="text-sm text-rose-200">
+          Live call failed — falling back to scripted numbers. ({error ?? "unknown"})
+        </div>
+      )}
+      {status === "idle" && (
+        <div className="text-sm text-white/60">
+          Awaiting trigger — advance to fire the agent call.
+        </div>
+      )}
     </div>
   );
 }
@@ -395,13 +678,14 @@ function ChatPanel({
 interface BeatIndicatorProps {
   index: number;
   total: number;
+  mode: Mode;
 }
 
-function BeatIndicator({ index, total }: BeatIndicatorProps) {
+function BeatIndicator({ index, total, mode }: BeatIndicatorProps) {
   return (
     <div className="flex items-center gap-3 self-end rounded-full border border-white/10 bg-black/40 px-4 py-2 backdrop-blur-md">
       <div className="text-[10px] uppercase tracking-[0.18em] text-white/50">
-        Static demo
+        {mode === "live" ? "Live demo" : "Static demo"}
       </div>
       <div className="flex gap-1">
         {Array.from({ length: total }).map((_, i) => (
@@ -417,6 +701,51 @@ function BeatIndicator({ index, total }: BeatIndicatorProps) {
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+// Top-left mode pill — mirrors the cargo-plane and forecast-review treatments.
+function LiveStatusPill({
+  mode,
+  status,
+  buffer,
+}: {
+  mode: Mode;
+  status: "idle" | "loading" | "ok" | "error";
+  buffer?: number;
+}) {
+  const dot =
+    mode !== "live"
+      ? "bg-white/40"
+      : status === "loading"
+        ? "bg-amber-400 animate-pulse"
+        : status === "ok"
+          ? "bg-emerald-400"
+          : status === "error"
+            ? "bg-rose-400"
+            : "bg-white/40";
+  const sub =
+    mode !== "live"
+      ? null
+      : status === "loading"
+        ? "optimizing…"
+        : status === "ok"
+          ? buffer != null
+            ? `ok · ${Math.round(buffer)}d buffer`
+            : "ok"
+          : status === "error"
+            ? "fallback → static"
+            : "idle";
+  return (
+    <div className="absolute top-6 left-6 z-10 flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-3 py-1.5 backdrop-blur-md">
+      <div className={`h-2 w-2 rounded-full ${dot}`} />
+      <div className="text-[10px] uppercase tracking-[0.18em] text-white/70">
+        {mode}
+      </div>
+      {sub && (
+        <div className="text-[10px] tracking-wider text-white/40">· {sub}</div>
+      )}
     </div>
   );
 }
